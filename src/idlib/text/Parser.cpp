@@ -2664,6 +2664,20 @@ int idParser::ReadToken( idToken *token ) {
 				continue;
 			}
 		}
+
+		// Handle obsolete retail vehicle script parameters removed in SDK
+		if ( token->type == TT_NAME && !token->Icmp( "jointOffset" ) ) {
+			idToken sub;
+			if ( ReadToken( &sub ) ) {
+				if ( sub == "(" ) {
+					while ( ReadToken( &sub ) && sub != ")" );
+				} else {
+					UnreadSourceToken( sub );
+				}
+			}
+			continue;
+		}
+
 		// found a token
 		return true;
 	}
@@ -3337,6 +3351,11 @@ int idParser::LoadMemory( const char *ptr, int length, const char *name, int sta
 	if ( loaded ) {
 		idLib::common->FatalError("idParser::LoadMemory: another source already loaded");
 		return false;
+	}
+	static const char emptyBuffer[] = "";
+	if ( ptr == NULL || length < 0 ) {
+		ptr = emptyBuffer;
+		length = 0;
 	}
 	script = new idLexer;
 	script->SetFlags( this->flags );

@@ -297,10 +297,13 @@ Returns 0 if there is no token left to be read.
 ================
 */
 bool idWLexer::SkipWhiteSpace( bool currentLine ) {
+	if ( !buffer || !script_p ) {
+		return false;
+	}
 	while ( true ) {
 		// skip white space
 		while ( *script_p <= L' ' ) {
-			if ( !*script_p ) {
+			if ( !*script_p || script_p >= end_p ) {
 				return 0;
 			}
 			if ( *script_p == L'\n' ) {
@@ -885,10 +888,14 @@ bool idWLexer::LoadMemory( const wchar_t* ptr, int length, const char* name, int
 		idLib::common->Error( "idWLexer::LoadMemory: another script already loaded" );
 		return false;
 	}
+	static const wchar_t emptyBuffer[] = L"";
+	if ( ptr == NULL || length < 0 ) {
+		ptr = emptyBuffer;
+		length = 0;
+	}
 	filename = name;
 	filename.CollapsePath();
 	buffer = ptr;
-	length = length;
 	// pointer in script buffer
 	script_p = buffer;
 	// pointer in script buffer before reading token
