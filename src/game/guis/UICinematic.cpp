@@ -44,7 +44,9 @@ sdUICinematic::sdUICinematic
 */
 sdUICinematic::~sdUICinematic() {
 	if ( soundEmitter != NULL ) {
-		soundEmitter->Free( true );
+		if ( soundSystem != NULL && soundSystem->GetPlayingSoundWorld() != NULL ) {
+			soundEmitter->Free( true );
+		}
 		soundEmitter = NULL;
 	}
 }

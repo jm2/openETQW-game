@@ -849,7 +849,10 @@ sdFunctionExpression::sdFunctionExpression( const char* functionName, sdUserInte
 	const sdUIFunction* functionInfo = _function->GetFunctionInfo();
 
 	if ( list.Num() != functionInfo->GetNumParms() ) {
-		gameLocal.Error( "Invalid Number of Parms for Function '%s' ( expected %i but received %i )", functionName, functionInfo->GetNumParms(), list.Num() );
+		gameLocal.Warning( "Invalid Number of Parms for Function '%s' ( expected %i but received %i )", functionName, functionInfo->GetNumParms(), list.Num() );
+		while ( list.Num() < functionInfo->GetNumParms() ) {
+			list.Append( "0" );
+		}
 	}
 
 	function = _function;

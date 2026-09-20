@@ -171,7 +171,8 @@ void sdUIObject::EnumerateEvents( const char* name, const idList<unsigned short>
 
 	if( !idStr::Icmp( name, "onPropertyChanged" ) ) {
 		if( flags.Empty() ) {
-			gameLocal.Error( "Event 'onPropertyChanged' no property specified" );
+			gameLocal.Warning( "Event 'onPropertyChanged' no property specified" );
+			return;
 		}
 		int i;
 		for( i = 0; i < flags.Num(); i++ ) {
@@ -190,8 +191,8 @@ void sdUIObject::EnumerateEvents( const char* name, const idList<unsigned short>
 			sdProperty* prop = propertyScope->GetProperty( token );
 
 			if( !prop ) {
-				gameLocal.Error( "Event 'onPropertyChanged' could not find property '%s'", name.c_str() );
-				return;
+				gameLocal.Warning( "Event 'onPropertyChanged' could not find property '%s'", name.c_str() );
+				continue;
 			}
 
 			int eventHandle = NamedEventHandleForString( name.c_str() );

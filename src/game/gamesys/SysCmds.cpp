@@ -713,6 +713,20 @@ void Cmd_Kill_f( const idCmdArgs &args ) {
 	}
 }
 
+void Cmd_ToggleLimbo_f( const idCmdArgs &args ) {
+	sdLimboMenu* limboMenu = gameLocal.localPlayerProperties.GetLimboMenu();
+	if ( limboMenu ) {
+		limboMenu->Enable( !limboMenu->Enabled() );
+	}
+}
+
+void Cmd_CloseLimbo_f( const idCmdArgs &args ) {
+	sdLimboMenu* limboMenu = gameLocal.localPlayerProperties.GetLimboMenu();
+	if ( limboMenu ) {
+		limboMenu->Enable( false );
+	}
+}
+
 /*
 ============
 Cmd_Say
@@ -3052,6 +3066,8 @@ void idGameLocal::InitConsoleCommands( void ) {
 	cmdSystem->AddCommand( "notarget",				Cmd_Notarget_f,				CMD_FL_GAME|CMD_FL_CHEAT,	"disables the player as a target" );
 	cmdSystem->AddCommand( "noclip",				Cmd_Noclip_f,				CMD_FL_GAME|CMD_FL_CHEAT,	"disables collision detection for the player" );
 	cmdSystem->AddCommand( "kill",					Cmd_Kill_f,					CMD_FL_GAME,				"kills the player" );
+	cmdSystem->AddCommand( "toggleLimbo",			Cmd_ToggleLimbo_f,			CMD_FL_GAME,				"toggle limbo menu" );
+	cmdSystem->AddCommand( "closeLimbo",			Cmd_CloseLimbo_f,			CMD_FL_GAME,				"close limbo menu" );
 #ifdef SD_PRIVATE_BETA_BUILD
 	cmdSystem->AddCommand( "where",					Cmd_GetViewpos_f,			CMD_FL_GAME,				"prints the current view position (x y z) yaw pitch roll" );
 	cmdSystem->AddCommand( "getviewpos",			Cmd_GetViewpos_f,			CMD_FL_GAME,				"prints the current view position (x y z) yaw pitch roll" );
