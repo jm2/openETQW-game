@@ -1,4 +1,3 @@
-
 // Copyright (C) 2007 Id Software, Inc.
 //
 
@@ -15,7 +14,6 @@
 
 #include "RendererEnums.h"
 #include "../framework/declManager.h"
-#include "../decllib/declRenderProgram.h"
 
 using namespace sdUtility;
 
@@ -23,9 +21,8 @@ class idImage;
 class sdUserInterface;
 class idMegaTexture;
 class sdDeclRenderBinding;
-class idJointMat;
+class sdDeclRenderProgram;
 class idSoundEmitter;
-
 
 typedef struct decalInfo_s {
 	int		stayTime;		// msec for no change
@@ -786,5 +783,3 @@ public:
 typedef idList<const idMaterial *> idMatList;
 
 #endif /* !__MATERIAL_H__ */
-
-

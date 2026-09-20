@@ -465,9 +465,9 @@ extern idGameEdit *				gameEdit;
 */
 
 #ifdef SD_PUBLIC_TOOLS
-	const int GAME_API_VERSION		= 1009;
+	const int GAME_API_VERSION		= 1008;
 #else
-	const int GAME_API_VERSION		= 9;
+	const int GAME_API_VERSION		= 8;
 #endif
 
 
@@ -477,12 +477,13 @@ class sdDeviceContext;
 class idSoundSystem;
 class idRenderModelManager;
 class idDeclManager;
+//class idAASFileManager;
 class idCollisionModelManager;
 class idCmdSystem;
 class sdNetService;
 class sdAdManager;
 class sdKeyInputManager;
-class idNavigationSystem;
+class idAASFileManager;
 class sdNotificationSystem;
 class sdGraphManager;
 
@@ -504,7 +505,7 @@ struct gameImport_t {
 	idRenderModelManager*		renderModelManager;		// render model manager
 	idDeclManager*				declManager;			// declaration manager
 	idCollisionModelManager*	collisionModelManager;	// collision model manager
-	idNavigationSystem*			navigationSystem;
+	idAASFileManager*			AASFileManager;
 	rvBSEManager*				bse;					// effects system
 #ifndef _XENON
 	sdNetService*				networkService;			// online services

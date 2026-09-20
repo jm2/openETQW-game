@@ -458,6 +458,14 @@ ID_INLINE float idCurve<type>::TimeForIndex( const int index ) const {
 template< class type >
 class idCurve_Bezier : public idCurve<type> {
 public:
+	using idCurve<type>::times;
+	using idCurve<type>::values;
+	using idCurve<type>::currentIndex;
+	using idCurve<type>::changed;
+	using idCurve<type>::IndexForTime;
+	using idCurve<type>::TimeForIndex;
+	using idCurve<type>::ValueForIndex;
+	using idCurve<type>::RombergIntegral;
 						idCurve_Bezier( void );
 
 	virtual type		GetCurrentValue( const float time ) const;
@@ -645,6 +653,13 @@ ID_INLINE void idCurve_Bezier<type>::BasisSecondDerivative( const int order, con
 template< class type >
 class idCurve_QuadraticBezier : public idCurve<type> {
 public:
+	using idCurve<type>::times;
+	using idCurve<type>::values;
+	using idCurve<type>::currentIndex;
+	using idCurve<type>::changed;
+	using idCurve<type>::IndexForTime;
+	using idCurve<type>::TimeForIndex;
+	using idCurve<type>::ValueForIndex;
 						idCurve_QuadraticBezier( void );
 
 	virtual type		GetCurrentValue( const float time ) const;
@@ -773,6 +788,13 @@ ID_INLINE void idCurve_QuadraticBezier<type>::BasisSecondDerivative( const float
 template< class type >
 class idCurve_CubicBezier : public idCurve<type> {
 public:
+	using idCurve<type>::times;
+	using idCurve<type>::values;
+	using idCurve<type>::currentIndex;
+	using idCurve<type>::changed;
+	using idCurve<type>::IndexForTime;
+	using idCurve<type>::TimeForIndex;
+	using idCurve<type>::ValueForIndex;
 						idCurve_CubicBezier( void );
 
 	virtual type		GetCurrentValue( const float time ) const;
@@ -905,6 +927,15 @@ ID_INLINE void idCurve_CubicBezier<type>::BasisSecondDerivative( const float t, 
 template< class type >
 class idCurve_Spline : public idCurve<type> {
 public:
+	using idCurve<type>::times;
+	using idCurve<type>::values;
+	using idCurve<type>::currentIndex;
+	using idCurve<type>::changed;
+	using idCurve<type>::IndexForTime;
+	using idCurve<type>::TimeForIndex;
+	using idCurve<type>::ValueForIndex;
+	using idCurve<type>::GetSpeed;
+	using idCurve<type>::RombergIntegral;
 	enum				boundary_t { BT_FREE, BT_CLAMPED, BT_CLOSED };
 
 						idCurve_Spline( void );
@@ -1040,6 +1071,14 @@ ID_INLINE bool idCurve_Spline<type>::IsDone( const float time ) const {
 template< class type >
 class idCurve_NaturalCubicSpline : public idCurve_Spline<type> {
 public:
+	using idCurve_Spline<type>::times;
+	using idCurve_Spline<type>::values;
+	using idCurve_Spline<type>::currentIndex;
+	using idCurve_Spline<type>::changed;
+	using idCurve_Spline<type>::IndexForTime;
+	using idCurve_Spline<type>::TimeForIndex;
+	using idCurve_Spline<type>::ValueForIndex;
+	using idCurve_Spline<type>::ClampedTime;
 						idCurve_NaturalCubicSpline( void );
 
 	virtual void		Clear( void ) { this->Clear(); this->values.Clear(); b.Clear(); c.Clear(); d.Clear(); }
@@ -1077,9 +1116,9 @@ idCurve_NaturalCubicSpline::GetCurrentValue
 */
 template< class type >
 ID_INLINE type idCurve_NaturalCubicSpline<type>::GetCurrentValue( const float time ) const {
-	float clampedTime = ClampedTime( time );
-	int i = IndexForTime( clampedTime );
-	float s = time - TimeForIndex( i );
+	float clampedTime = idCurve_Spline<type>::ClampedTime( time );
+	int i = idCurve<type>::IndexForTime( clampedTime );
+	float s = time - idCurve_Spline<type>::TimeForIndex( i );
 	Setup();
 	return ( this->values[i] + s * ( b[i] + s * ( c[i] + s * d[i] ) ) );
 }
@@ -1093,9 +1132,9 @@ idCurve_NaturalCubicSpline::GetCurrentFirstDerivative
 */
 template< class type >
 ID_INLINE type idCurve_NaturalCubicSpline<type>::GetCurrentFirstDerivative( const float time ) const {
-	float clampedTime = ClampedTime( time );
-	int i = IndexForTime( clampedTime );
-	float s = time - TimeForIndex( i );
+	float clampedTime = idCurve_Spline<type>::ClampedTime( time );
+	int i = idCurve<type>::IndexForTime( clampedTime );
+	float s = time - idCurve_Spline<type>::TimeForIndex( i );
 	Setup();
 	return ( b[i] + s * ( 2.0f * c[i] + 3.0f * s * d[i] ) );
 }
@@ -1109,9 +1148,9 @@ idCurve_NaturalCubicSpline::GetCurrentSecondDerivative
 */
 template< class type >
 ID_INLINE type idCurve_NaturalCubicSpline<type>::GetCurrentSecondDerivative( const float time ) const {
-	float clampedTime = ClampedTime( time );
-	int i = IndexForTime( clampedTime );
-	float s = time - TimeForIndex( i );
+	float clampedTime = idCurve_Spline<type>::ClampedTime( time );
+	int i = idCurve<type>::IndexForTime( clampedTime );
+	float s = time - idCurve_Spline<type>::TimeForIndex( i );
 	Setup();
 	return ( 2.0f * c[i] + 6.0f * s * d[i] );
 }
@@ -1341,6 +1380,14 @@ ID_INLINE void idCurve_NaturalCubicSpline<type>::SetupClosed( void ) const {
 template< class type >
 class idCurve_CatmullRomSpline : public idCurve_Spline<type> {
 public:
+	using idCurve_Spline<type>::times;
+	using idCurve_Spline<type>::values;
+	using idCurve_Spline<type>::currentIndex;
+	using idCurve_Spline<type>::changed;
+	using idCurve_Spline<type>::IndexForTime;
+	using idCurve_Spline<type>::TimeForIndex;
+	using idCurve_Spline<type>::ValueForIndex;
+	using idCurve_Spline<type>::ClampedTime;
 						idCurve_CatmullRomSpline( void );
 
 	virtual type		GetCurrentValue( const float time ) const;
@@ -1511,6 +1558,14 @@ ID_INLINE void idCurve_CatmullRomSpline<type>::BasisSecondDerivative( const int 
 template< class type >
 class idCurve_KochanekBartelsSpline : public idCurve_Spline<type> {
 public:
+	using idCurve_Spline<type>::times;
+	using idCurve_Spline<type>::values;
+	using idCurve_Spline<type>::currentIndex;
+	using idCurve_Spline<type>::changed;
+	using idCurve_Spline<type>::IndexForTime;
+	using idCurve_Spline<type>::TimeForIndex;
+	using idCurve_Spline<type>::ValueForIndex;
+	using idCurve_Spline<type>::ClampedTime;
 						idCurve_KochanekBartelsSpline( void );
 
 	virtual int			AddValue( const float time, const type &value );
@@ -1770,6 +1825,14 @@ ID_INLINE void idCurve_KochanekBartelsSpline<type>::BasisSecondDerivative( const
 template< class type >
 class idCurve_BSpline : public idCurve_Spline<type> {
 public:
+	using idCurve_Spline<type>::times;
+	using idCurve_Spline<type>::values;
+	using idCurve_Spline<type>::currentIndex;
+	using idCurve_Spline<type>::changed;
+	using idCurve_Spline<type>::IndexForTime;
+	using idCurve_Spline<type>::TimeForIndex;
+	using idCurve_Spline<type>::ValueForIndex;
+	using idCurve_Spline<type>::ClampedTime;
 						idCurve_BSpline( void );
 
 	virtual int			GetOrder( void ) const { return order; }
@@ -1946,6 +2009,14 @@ ID_INLINE float idCurve_BSpline<type>::BasisSecondDerivative( const int index, c
 template< class type >
 class idCurve_UniformCubicBSpline : public idCurve_BSpline<type> {
 public:
+	using idCurve_BSpline<type>::times;
+	using idCurve_BSpline<type>::values;
+	using idCurve_BSpline<type>::currentIndex;
+	using idCurve_BSpline<type>::changed;
+	using idCurve_BSpline<type>::IndexForTime;
+	using idCurve_BSpline<type>::TimeForIndex;
+	using idCurve_BSpline<type>::ValueForIndex;
+	using idCurve_BSpline<type>::ClampedTime;
 						idCurve_UniformCubicBSpline( void );
 
 	virtual type		GetCurrentValue( const float time ) const;
@@ -2114,6 +2185,14 @@ ID_INLINE void idCurve_UniformCubicBSpline<type>::BasisSecondDerivative( const i
 template< class type >
 class idCurve_NonUniformBSpline : public idCurve_BSpline<type> {
 public:
+	using idCurve_BSpline<type>::times;
+	using idCurve_BSpline<type>::values;
+	using idCurve_BSpline<type>::currentIndex;
+	using idCurve_BSpline<type>::changed;
+	using idCurve_BSpline<type>::IndexForTime;
+	using idCurve_BSpline<type>::TimeForIndex;
+	using idCurve_BSpline<type>::ValueForIndex;
+	using idCurve_BSpline<type>::ClampedTime;
 						idCurve_NonUniformBSpline( void );
 
 	virtual type		GetCurrentValue( const float time ) const;
@@ -2299,6 +2378,17 @@ ID_INLINE void idCurve_NonUniformBSpline<type>::BasisSecondDerivative( const int
 template< class type >
 class idCurve_NURBS : public idCurve_NonUniformBSpline<type> {
 public:
+	using idCurve_NonUniformBSpline<type>::times;
+	using idCurve_NonUniformBSpline<type>::values;
+	using idCurve_NonUniformBSpline<type>::currentIndex;
+	using idCurve_NonUniformBSpline<type>::changed;
+	using idCurve_NonUniformBSpline<type>::IndexForTime;
+	using idCurve_NonUniformBSpline<type>::TimeForIndex;
+	using idCurve_NonUniformBSpline<type>::ValueForIndex;
+	using idCurve_NonUniformBSpline<type>::ClampedTime;
+	using idCurve_NonUniformBSpline<type>::Basis;
+	using idCurve_NonUniformBSpline<type>::BasisFirstDerivative;
+	using idCurve_NonUniformBSpline<type>::BasisSecondDerivative;
 						idCurve_NURBS( void );
 
 	virtual int			AddValue( const float time, const type &value );

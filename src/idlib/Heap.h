@@ -740,7 +740,8 @@ idDynamicBlock<type> *idDynamicBlockAlloc<type, baseBlockSize, minBlockSize, thr
 	if ( block != NULL ) {
 		UnlinkFreeInternal( block );
 	} else if ( allowAllocs ) {
-		int allocSize = Max( baseBlockSize, alignedBytes + static_cast< int >( sizeof( idDynamicBlock<type> ) ) );
+		int needed = alignedBytes + static_cast< int >( sizeof( idDynamicBlock<type> ) );
+		int allocSize = ( baseBlockSize > needed ) ? baseBlockSize : needed;
 		block = ( idDynamicBlock<type> * ) Mem_AllocAligned( allocSize, ALIGN_16 );
 #ifdef DYNAMIC_BLOCK_ALLOC_CHECK
 		memcpy( block->id, blockId, sizeof( block->id ) );
@@ -808,7 +809,9 @@ idDynamicBlock<type> *idDynamicBlockAlloc<type, baseBlockSize, minBlockSize, thr
 	}
 
 	// if the unused space at the end of this block is large enough to hold a block with at least one element
-	if ( block->GetSize() - alignedBytes - static_cast< int >( sizeof( idDynamicBlock<type> ) ) < Max( minBlockSize, static_cast< int >( sizeof( type ) ) ) ) {
+	int neededMin = static_cast< int >( sizeof( type ) );
+	int minThreshold = ( minBlockSize > neededMin ) ? minBlockSize : neededMin;
+	if ( block->GetSize() - alignedBytes - static_cast< int >( sizeof( idDynamicBlock<type> ) ) < minThreshold ) {
 		return block;
 	}
 

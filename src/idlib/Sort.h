@@ -5,6 +5,8 @@
 #ifndef __IDLIB_SORT_H__
 #define __IDLIB_SORT_H__
 
+template< class type > void idSwap( type &a, type &b );
+
 // a version from Microsoft's CRT that supports a functor
 
 template< class T >

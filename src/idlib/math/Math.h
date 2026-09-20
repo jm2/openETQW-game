@@ -8,7 +8,9 @@
 
 #ifdef MACOS_X
 // for square root estimate instruction
+#ifdef __ppc__
 #include <ppc_intrinsics.h>
+#endif
 // for FLT_MIN
 #include <float.h>
 #endif

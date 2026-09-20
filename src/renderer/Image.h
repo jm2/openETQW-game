@@ -489,10 +489,10 @@ struct imageParams_t {
 	float			minLod;
 	float			maxLod;
 
-	imageParams_t::imageParams_t() {
+	imageParams_t() {
 		Clear();
 	}
-	imageParams_t::imageParams_t( textureFilter_t _filter, bool _allowDownSize, int _picmipofs, float _anisotropy,
+	imageParams_t( textureFilter_t _filter, bool _allowDownSize, int _picmipofs, float _anisotropy,
 		textureRepeat_t _repeat, textureDepth_t _depth, cubeFiles_t _cubeMap = CF_2D, mipmapState_t _mipmapState = defaultMipmapState ) {
 		Clear();
 

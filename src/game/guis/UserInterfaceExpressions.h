@@ -917,7 +917,7 @@ UI_EVALUATOR_TYPE_DECLARATION( WString,		idWStr,	sdProperties::PT_WSTRING)
 class sdUIEvaluator : public sdUIExpression {
 public:
 																		sdUIEvaluator( sdUIEvaluatorTypeBase* type, sdUserInterfaceScope* _scope, idLexer* src );
-	virtual																sdUIEvaluator::~sdUIEvaluator( void );
+	virtual																~sdUIEvaluator( void );
 
 	virtual sdProperties::ePropertyType									GetType( void ) const { return type->GetReturnType(); }
 	virtual void														SetProperty( sdProperties::sdProperty* output ) { assert( false ); }

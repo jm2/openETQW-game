@@ -315,8 +315,8 @@ idBotAI::Bot_ClearAIStack
 ================
 */
 void idBotAI::Bot_ClearAIStack() {
-	AIStack.STACK_AI_NODE = false;
-	AIStack.VEHICLE_STACK_AI_NODE = false;
+	AIStack.STACK_AI_NODE = NULL;
+	AIStack.VEHICLE_STACK_AI_NODE = NULL;
 	AIStack.stackClientNum = -1;
 	AIStack.stackClientSpawnID = -1;
 	AIStack.stackEntNum = -1;
@@ -378,7 +378,7 @@ idBotAI::PopAINodeOffStack
 */
 bool idBotAI::PopAINodeOffStack() {
 
-	if ( AIStack.STACK_AI_NODE == false ) {
+	if ( AIStack.STACK_AI_NODE == NULL ) {
 		return false;
 	}
 

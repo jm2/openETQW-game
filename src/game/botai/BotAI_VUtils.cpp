@@ -2126,7 +2126,7 @@ idBotAI::Bot_CheckFriendlyEngineerIsNearbyOurVehicle
 bool idBotAI::Bot_CheckFriendlyEngineerIsNearbyOurVehicle() {
 	bool friendNearby = false;
 
-	if ( botVehicleInfo == false ) {
+	if ( botVehicleInfo == NULL ) {
 		return false;
 	}
 

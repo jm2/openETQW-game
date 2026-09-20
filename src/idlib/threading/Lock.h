@@ -13,7 +13,7 @@ public:
 	void				Release();
 
 #ifndef _WIN32
-	lockHandle_t*		GetHandle() const { return &handle; }
+	lockHandle_t*		GetHandle() const { return const_cast<lockHandle_t*>( &handle ); }
 #endif
 
 protected:

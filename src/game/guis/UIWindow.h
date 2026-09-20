@@ -204,6 +204,8 @@ public:
 
 	virtual	const idVec4&					GetWorldRect() const	{ return cachedClientRect; }	
 
+	template< class UIEditClass, class StrClass, typename CharType > friend class sdUIEditHelper;
+
 protected:
 	unsigned int							GetDrawTextFlags() const;
 	virtual void							DrawText( const wchar_t* text, const idVec4& color );

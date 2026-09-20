@@ -228,7 +228,8 @@ template< class StrType, class CharAllocator >
 ID_INLINE void sdStringBuilder< StrType, CharAllocator >::Append( const CharType* rhs, int numToCopy ) {
 	assert( numToCopy > 0 );
 	if ( rhs != NULL && numToCopy > 0) {
-		numToCopy = Min( StrType::Length( rhs ), numToCopy );
+		int rhsLen = StrType::Length( rhs );
+		numToCopy = ( rhsLen < numToCopy ) ? rhsLen : numToCopy;
 		int newLen = len + numToCopy;
 		EnsureAlloced( newLen + 1 );
 		for ( int i = 0; i < numToCopy; i++ ) {

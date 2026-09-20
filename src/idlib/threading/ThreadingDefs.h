@@ -16,6 +16,7 @@
 
 	#define lockHandle_t	CRITICAL_SECTION
 #else
+	#include <pthread.h>
 	typedef void* (*threadProc_t)( void* );
 	#define threadHandle_t	pthread_t
 	struct signalHandle_t {
