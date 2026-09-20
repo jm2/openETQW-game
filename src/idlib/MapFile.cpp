@@ -722,12 +722,12 @@ idMapEntity *idMapEntity::ParseActions( idLexer &src ) {
 	idMapEntity *mapEnt;
 
 	if ( !src.ReadToken( &token ) ) {
-		return false;
+		return NULL;
 	}
 
 	if ( token != "{" ) {
 		src.Error( "idMapEntity::ParseActions: { not found, found %s", token.c_str() );
-		return false;
+		return NULL;
 	}
 
 	mapEnt = new idMapEntity();

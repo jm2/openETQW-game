@@ -104,6 +104,16 @@ public:
 	#define BUILD_OS_ID					1
 	#define	CPUSTRING					"x86"
 	#define CPU_EASYARGS				1
+#elif defined(__x86_64__)
+	#define BUILD_STRING				"MacOSX-x64"
+	#define BUILD_OS_ID					1
+	#define	CPUSTRING					"x64"
+	#define CPU_EASYARGS				1
+#elif defined(__arm64__) || defined(__aarch64__)
+	#define BUILD_STRING				"MacOSX-arm64"
+	#define BUILD_OS_ID					1
+	#define	CPUSTRING					"arm64"
+	#define CPU_EASYARGS				1
 #endif
 
 #if defined(__i386__)
@@ -119,10 +129,11 @@ public:
 #define PACKED							__attribute__((packed))
 #endif
 
-#define UINT_PTR						unsigned long
+#include <stdint.h>
+#define UINT_PTR						uintptr_t
 
 #define _alloca							alloca
-#define _alloca16( x )					((void *)((((int)_alloca( (x)+15 )) + 15) & ~15))
+#define _alloca16( x )					((void *)((((intptr_t)_alloca( (x)+15 )) + 15) & ~15))
 
 #define PATHSEPARATOR_STR				"/"
 #define PATHSEPARATOR_CHAR				'/'
@@ -158,13 +169,12 @@ public:
 	#define CPU_EASYARGS				0
 #endif
 
-#include <stddef.h>						// needed for offsetof
-
-#define UINT_PTR						unsigned long
+#include <stdint.h>
+#define UINT_PTR						uintptr_t
 
 #include <alloca.h>
 #define _alloca							alloca
-#define _alloca16( x )					((void *)((((int)_alloca( (x)+15 )) + 15) & ~15))
+#define _alloca16( x )					((void *)((((intptr_t)_alloca( (x)+15 )) + 15) & ~15))
 
 #define ALIGN16( x )					x __attribute__ ((aligned (16)))
 #define PACKED							__attribute__((packed))

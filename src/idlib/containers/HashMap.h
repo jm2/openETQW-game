@@ -73,7 +73,7 @@ idHashMap<Type>::idHashMap
 template< class Type >
 ID_INLINE idHashMap<Type>::idHashMap( const idHashMap<Type> &map ) {
 	list = map.list;
-	index = map.index;
+	hashIndex = map.hashIndex;
 	keyList = map.keyList;
 }
 

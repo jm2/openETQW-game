@@ -23,8 +23,8 @@ http://www.gnu.org/software/libc/manual/html_node/Low_002dLevel-I_002fO.html#Low
 class sdFile64 {
 public:
 #ifndef _WIN32
-#ifdef MACOS_X
-	typedef int fSize_t;
+#if defined(MACOS_X) || defined(__APPLE__)
+	typedef off_t fSize_t;
 #else
 	typedef off64_t fSize_t;
 #endif
@@ -67,7 +67,7 @@ public:
 	void			Seek( fSize_t offset, fsOrigin_t origin ) {
 						if ( fh != -1 ) {
 #ifndef _WIN32
-#ifdef MACOS_X
+#if defined(MACOS_X) || defined(__APPLE__)
 							lseek( fh, offset, origin );
 #else
 							lseek64( fh, offset, origin );

@@ -24,9 +24,8 @@ ID_INLINE bool sdAtomic::CompareAndSwap( volatile int* dest, int comperand, int 
 		: "memory" );
 
 	return old == comperand;
-#elif defined( MACOS_X )
-	// can likely use the linux version above for osx-x86
-	#error TODO: implement sdAtomic::CompareAndSwap
+#elif defined( MACOS_X ) || defined( __APPLE__ )
+	return __sync_bool_compare_and_swap( dest, comperand, exchange );
 #endif
 }
 

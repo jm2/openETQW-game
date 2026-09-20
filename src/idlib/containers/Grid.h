@@ -428,7 +428,7 @@ ID_INLINE void idGrid3D<objType>::Test() {
 	idGridObject<int> *obj1, *obj2;
 	idGridNearbyObjectList<int> list;
 
-	grid.Init( idBounds( idVec3( -8 ), idVec3( 8 ) ), 4.0f );
+	grid.Init( idBounds( idVec3( -8.0f, -8.0f, -8.0f ), idVec3( 8.0f, 8.0f, 8.0f ) ), 4.0f );
 
 	for ( i = 0; i < grid.GetNumObjects(); i++ ) {
 		obj1 = grid.GetObject( i );

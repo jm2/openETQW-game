@@ -1,0 +1,3 @@
+# Exported symbol list for macOS game module (-Wl,-exported_symbols_list).
+# Only the module entry point _GetGameAPI is exported.
+_GetGameAPI

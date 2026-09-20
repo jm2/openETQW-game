@@ -256,7 +256,7 @@ sdAnimFrameCommand* idAnim::ReadFrameCommand( idParser& src ) {
 	idToken token;
 	if( !src.ReadTokenOnLine( &token ) ) {
 		src.Error( "idAnim::AddFrameCommand Unexpected end of line" );
-		return false;
+		return NULL;
 	}
 
 	sdAnimFrameCommand* fc = sdAnimFrameCommand::Alloc( token );	

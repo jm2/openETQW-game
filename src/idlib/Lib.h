@@ -219,7 +219,7 @@ assert_sizeof( float,	4 );
 assert_sizeof( byte,	1 );
 assert_sizeof( word,	2 );
 assert_sizeof( dword,	4 );
-#ifdef __STDC_ISO_10646__
+#if defined( __STDC_ISO_10646__ ) || defined( MACOS_X ) || defined( __APPLE__ )
 // starting with glibc 2.2, Linux uses a 32bit wchar_t conformant to ISO 10646
 // let's assume other platforms do as well
 assert_sizeof( wchar_t, 4 );

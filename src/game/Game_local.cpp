@@ -117,7 +117,7 @@ idSoundSystem *				soundSystem = NULL;
 idRenderModelManager *		renderModelManager = NULL;
 idDeclManager *				declManager = NULL;
 idCollisionModelManager *	collisionModelManager = NULL;
-idNavigationSystem*			navigationSystem = NULL;
+idAASFileManager*			AASFileManager = NULL;
 sdNetService*				networkService = NULL;
 sdAdManager*				adManager = NULL;
 sdKeyInputManager*			keyInputManager = NULL;
@@ -200,7 +200,7 @@ extern "C" gameExport_t *GetGameAPI( gameImport_t *import ) {
 #endif
 		adManager					= import->adManager;
 		keyInputManager				= import->keyInputManager;
-		navigationSystem			= import->navigationSystem;
+		AASFileManager				= import->AASFileManager;
 		notificationSystem			= import->notificationSystem;
 		graphManager				= import->graphManager;
 
@@ -3649,7 +3649,7 @@ void idGameLocal::GetShakeSounds( const idDict& dict ) {
 	idStr					soundName;
 
 	soundShaderName = dict.GetString( "s_shader" );
-	if ( soundShaderName != '\0' && dict.GetFloat( "s_shakes" ) != 0.0f ) {
+	if ( *soundShaderName != '\0' && dict.GetFloat( "s_shakes" ) != 0.0f ) {
 		soundShader = declHolder.declSoundShaderType.LocalFind( soundShaderName );
 
 		for ( int i = 0; i < soundShader->GetNumSounds(); i++ ) {

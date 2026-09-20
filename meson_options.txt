@@ -1,0 +1,13 @@
+option(
+  'use_pch',
+  type: 'boolean',
+  value: false,
+  description: 'Compile precompiled.h as precompiled header.',
+)
+
+option(
+  'macos_deployment_target',
+  type: 'string',
+  value: '11.0',
+  description: 'macOS minimum deployment target.',
+)

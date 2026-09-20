@@ -96,7 +96,7 @@ bool idBotAI::Run_NBG_Node() {
 		return false;
 	}
 
-	if ( NBG_AI_SUB_NODE == false ) { //mal: if we have no NBG sub node, we're done here and need to reset and find a LTG next frame
+	if ( NBG_AI_SUB_NODE == NULL ) { //mal: if we have no NBG sub node, we're done here and need to reset and find a LTG next frame
 		Bot_ResetState( false, false ); 
 		return false;
 	}

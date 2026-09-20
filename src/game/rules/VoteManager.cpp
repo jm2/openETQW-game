@@ -487,7 +487,7 @@ public:
 
 class sdCallVoteMapChange : public sdCallVote {
 public:
-	static const idDict* sdCallVoteMapChange::GetMapData( const char* name ) {
+	static const idDict* GetMapData( const char* name ) {
 		const metaDataContext_t* metaData = gameLocal.mapMetaDataList->FindMetaDataContext( name );
 		if ( metaData == NULL ) {
 			return NULL;
@@ -500,7 +500,7 @@ public:
 		return metaData->meta;
 	}
 
-	static const idDict* sdCallVoteMapChange::GetMapData( int index ) {
+	static const idDict* GetMapData( int index ) {
 		if( index < 0 || index > gameLocal.mapMetaDataList->GetNumMetaData() ) {
 			return NULL;
 		}
@@ -512,7 +512,7 @@ public:
 		return metaData.meta;
 	}
 
-	static const sdDeclMapInfo* sdCallVoteMapChange::GetMapInfo( const char* name ) {
+	static const sdDeclMapInfo* GetMapInfo( const char* name ) {
 		const idDict* mapData = GetMapData( name );
 		if ( mapData == NULL ) {
 			return NULL;
@@ -526,7 +526,7 @@ public:
 		return gameLocal.declMapInfoType[ mapInfoName ];
 	}
 
-	static const sdDeclMapInfo* sdCallVoteMapChange::GetMapInfo( int index ) {
+	static const sdDeclMapInfo* GetMapInfo( int index ) {
 		const idDict* mapData = GetMapData( index );
 		if ( mapData == NULL ) {
 			return NULL;
@@ -564,7 +564,7 @@ public:
 		const char* mode;
 	};
 
-	virtual void sdCallVoteMapChange::EnumerateOptions( sdUIList* list ) const {
+	virtual void EnumerateOptions( sdUIList* list ) const {
 		for ( int i = 0; i < gameLocal.mapMetaDataList->GetNumMetaData(); i++ ) {
 			const idDict* mapInfo = GetMapData( i );
 			if ( mapInfo == NULL ) {
@@ -576,7 +576,7 @@ public:
 		}
 	}
 
-	virtual void sdCallVoteMapChange::Execute( int dataKey ) const {
+	virtual void Execute( int dataKey ) const {
 		idCmdArgs args;
 		CreateCmdArgs( args );
 
@@ -586,7 +586,7 @@ public:
 		sdVoteManagerLocal::Callvote_f( args );
 	}
 
-	virtual sdPlayerVote* sdCallVoteMapChange::Execute( const idCmdArgs& args, idPlayer* player ) const {
+	virtual sdPlayerVote* Execute( const idCmdArgs& args, idPlayer* player ) const {
 		if ( args.Argc() < 3 ) {
 			return NULL;
 		}

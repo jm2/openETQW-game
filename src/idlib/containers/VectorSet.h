@@ -79,9 +79,9 @@ public:
 									hashKey += (int) ( ( v[i] - mins[i] ) * boxInvSize[i] );
 								}
 
-								hash.Add( hashKey, Num() );
-								Append( v );
-								return Num()-1;
+								hash.Add( hashKey, this->Num() );
+								this->Append( v );
+								return this->Num()-1;
 							}
 
 private:
