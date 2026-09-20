@@ -8791,7 +8791,7 @@ bool idPlayer::IsFPSUnlock( void ) {
 		}
 	}
 
-	if ( ( viewPlayer == localPlayer ) && gameLocal.localPlayerProperties.GetDeployMenu()->Active() ) {
+	if ( ( viewPlayer == localPlayer ) && gameLocal.localPlayerProperties.GetDeployMenu() && gameLocal.localPlayerProperties.GetDeployMenu()->Active() ) {
 		return false;
 	}
 	
@@ -8854,7 +8854,7 @@ void idPlayer::CalculateRenderView( void ) {
 	}
 
 	sdTeleporter* teleportEnt = teleportEntity;
-	if ( teleportEnt != NULL || gameLocal.rules->IsEndGame() ) {
+	if ( teleportEnt != NULL || ( gameLocal.rules != NULL && gameLocal.rules->IsEndGame() ) ) {
 		renderView.vieworg	= viewPlayer->firstPersonViewOrigin;
 		renderView.viewaxis = viewPlayer->firstPersonViewAxis;
 
@@ -8902,7 +8902,7 @@ void idPlayer::CalculateRenderView( void ) {
 		}
 	}
 
-	if ( ( ( viewPlayer == gameLocal.GetLocalPlayer() ) && gameLocal.localPlayerProperties.GetDeployMenu()->Active() ) ) {
+	if ( ( ( viewPlayer == gameLocal.GetLocalPlayer() ) && gameLocal.localPlayerProperties.GetDeployMenu() != NULL && gameLocal.localPlayerProperties.GetDeployMenu()->Active() ) ) {
 		viewPlayer->SetupDeploymentView( renderView );
 		return;
 	}
@@ -9305,7 +9305,9 @@ void idPlayer::EnterDeploymentMode( void ) {
 		return;
 	}
 
-	gameLocal.localPlayerProperties.GetDeployMenu()->Enable( true );
+	if ( gameLocal.localPlayerProperties.GetDeployMenu() != NULL ) {
+		gameLocal.localPlayerProperties.GetDeployMenu()->Enable( true );
+	}
 }
 
 /*
@@ -9318,7 +9320,9 @@ void idPlayer::ExitDeploymentMode( void ) {
 		return;
 	}
 
-	gameLocal.localPlayerProperties.GetDeployMenu()->Enable( false );
+	if ( gameLocal.localPlayerProperties.GetDeployMenu() != NULL ) {
+		gameLocal.localPlayerProperties.GetDeployMenu()->Enable( false );
+	}
 }
 
 /*
@@ -10263,7 +10267,8 @@ void idPlayer::Event_GetDeploymentActive( void ) {
 		return;
 	}
 
-	sdProgram::ReturnBoolean( gameLocal.localPlayerProperties.GetDeployMenu()->Active() );
+	sdDeployMenu* menu = gameLocal.localPlayerProperties.GetDeployMenu();
+	sdProgram::ReturnBoolean( menu != NULL ? menu->Active() : false );
 }
 
 /*
