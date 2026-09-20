@@ -127,10 +127,632 @@ sdGraphManager*				graphManager = NULL;
 extern sdNotificationSystem*	notificationSystem;
 #endif
 
+class idRenderModelHeadlessLocal : public idRenderModel {
+public:
+	idRenderModelHeadlessLocal() {
+		bounds = idBounds( idVec3( -32.0f, -32.0f, 0.0f ), idVec3( 32.0f, 32.0f, 64.0f ) );
+		name = "_headless_default";
+		memset( &dummyGeometry, 0, sizeof( dummyGeometry ) );
+		memset( &dummySurface, 0, sizeof( dummySurface ) );
+		dummySurface.geometry = &dummyGeometry;
+	}
+	virtual ~idRenderModelHeadlessLocal() {
+		Reset();
+	}
+
+	virtual void				InitFromFile( const char *fileName ) {
+		name = fileName ? fileName : "_headless_default";
+		LoadMD5Binary( fileName );
+	}
+	virtual void				PartialInitFromFile( const char *fileName ) { InitFromFile( fileName ); }
+	virtual void				InitEmpty( const char *name ) { this->name = name; }
+	virtual void				AddSurface( modelSurface_t surface ) {
+		surfaces.Append( surface );
+	}
+	virtual void				FinishSurfaces( bool duplicateGeometry = true, bool cleanupGeometry = true, bool concatDupeGeom = false ) {}
+	virtual bool				Validate( void ) const { return true; }
+	virtual void				PurgeModel() { Reset(); }
+	virtual void				Reset() {
+		for ( int i = 0; i < surfaces.Num(); i++ ) {
+			if ( surfaces[i].geometry && surfaces[i].geometry != &dummyGeometry ) {
+				FreeSurfaceTriangles( surfaces[i].geometry );
+			}
+		}
+		surfaces.Clear();
+	}
+	virtual void				LoadModel() {}
+	virtual bool				IsLoaded() const { return true; }
+	virtual void				SetReferencedOutsideLevelLoad( bool referenced ) {}
+	virtual bool				IsReferencedOutsideLevelLoad() const { return false; }
+	virtual void				SetLevelLoadReferenced( bool referenced ) {}
+	virtual bool				IsLevelLoadReferenced() const { return true; }
+	virtual void				TouchData() {}
+	virtual void				FreeVertexCache() {}
+	virtual void				DirtyVertexAmbientCache() {}
+	virtual const char *		Name() const { return name.c_str(); }
+	virtual void				Print() const {}
+	virtual void				List( bool csv ) const {}
+	virtual void				TexUsage() const {}
+	virtual void				Media( idFile *reportfile, sdHashMapGeneric< const idImage*, imageuseinfo > &texref ) const {}
+	virtual int					Memory() const { return sizeof( *this ); }
+	virtual unsigned			Timestamp() const { return 0; }
+	virtual int					NumSurfaces() const { return surfaces.Num(); }
+	virtual int					NumBaseSurfaces() const { return surfaces.Num(); }
+	virtual const modelSurface_t *Surface( int surfaceNum ) const {
+		if ( surfaceNum >= 0 && surfaceNum < surfaces.Num() ) {
+			return &surfaces[ surfaceNum ];
+		}
+		return &dummySurface;
+	}
+	virtual srfTriangles_t *	AllocSurfaceTriangles( int numVerts, int numIndexes ) const {
+		if ( numVerts < 0 || numIndexes < 0 ) {
+			return NULL;
+		}
+		srfTriangles_t* triangles = static_cast< srfTriangles_t* >( Mem_ClearedAlloc( sizeof( *triangles ) ) );
+		triangles->numVerts = numVerts;
+		triangles->numAllocedVerts = numVerts;
+		triangles->numIndexes = numIndexes;
+		triangles->numAllocedIndices = numIndexes;
+		if ( numVerts > 0 ) {
+			triangles->verts = static_cast< idDrawVert* >( Mem_ClearedAlloc( numVerts * sizeof( *triangles->verts ) ) );
+		}
+		if ( numIndexes > 0 ) {
+			triangles->indexes = static_cast< glIndex_t* >( Mem_ClearedAlloc( numIndexes * sizeof( *triangles->indexes ) ) );
+		}
+		return triangles;
+	}
+	virtual void				FreeSurfaceTriangles( srfTriangles_t *tris ) const {
+		if ( tris == NULL || tris == &dummyGeometry ) {
+			return;
+		}
+		if ( tris->verts ) {
+			Mem_Free( tris->verts );
+		}
+		if ( tris->indexes ) {
+			Mem_Free( tris->indexes );
+		}
+		Mem_Free( tris );
+	}
+	virtual bool				IsStaticWorldModel() const { return false; }
+	virtual bool				IsReloadable() const { return false; }
+	virtual dynamicModel_t		IsDynamicModel() const { return DM_STATIC; }
+	virtual bool				IsDefaultModel() const { return false; }
+	virtual idBounds			Bounds( const renderEntity_t *ent = NULL ) const { return bounds; }
+	virtual float				DepthHack() const { return 0.0f; }
+	virtual void				InstantiateDynamicModel( class idRenderEntityLocal *ent, const struct viewDef_s *view, int lod = 0 ) {}
+	virtual void				UpdateDeferredSurface( class idRenderEntityLocal *def, modelSurface_t *surf ) {}
+	virtual int					NumJoints( void ) const { return joints.Num(); }
+	virtual const idMD5Joint *	GetJoints( void ) const { return joints.Num() ? &joints[0] : NULL; }
+	virtual jointHandle_t		GetJointHandle( const char *name ) const {
+		if ( !name || !*name ) return INVALID_JOINT;
+		for ( int i = 0; i < joints.Num(); i++ ) {
+			if ( joints[ i ].name.Icmp( name ) == 0 ) {
+				return static_cast<jointHandle_t>( i );
+			}
+		}
+		return INVALID_JOINT;
+	}
+
+	virtual const char *		GetJointName( jointHandle_t handle ) const {
+		if ( handle >= 0 && handle < joints.Num() ) {
+			return joints[ handle ].name.c_str();
+		}
+		return "";
+	}
+	virtual const idJointQuat *	GetDefaultPose( void ) const { return defaultPose.Num() ? &defaultPose[0] : NULL; }
+	virtual int					NearestJoint( int surfaceNum, int a, int c, int b ) const { return 0; }
+	virtual int					NumGUISurfaces( void ) const { return 0; }
+	virtual const guiSurface_t*	GetGUISurface( int guiSurfaceNum ) const { return NULL; }
+	virtual void				ReadFromDemoFile( class idDemoFile *f ) {}
+	virtual void				WriteToDemoFile( class idDemoFile *f ) {}
+	virtual int					GetCurrentLod( void ) const { return 0; }
+	virtual void				SetCurrentLod( const int lod ) {}
+	virtual bool				UpdateLod( const struct renderEntity_t *ent, const struct viewDef_s *view, idRenderModel *cachedModel, int& newLod ) const { return false; }
+	virtual bool				NeedsReinstantiating( class idRenderEntityLocal *def, const struct viewDef_s *view, int lod = 0 ) const { return false; }
+	virtual int					FindSurfaceId( const char *surfaceName ) { return -1; }
+	virtual void				SetBounds( idBounds const &bb ) { bounds = bb; }
+	virtual void				PurgePartialLoadableImages( void ) {}
+	virtual void				LoadPartialLoadableImages( bool blocking = false ) {}
+	virtual bool				IsFinishedPartialLoading( void ) const { return true; }
+	virtual idList<int>*		GetFixedAreas( void ) { return NULL; }
+	virtual void				SetFixedAreas( idList<int> const &a ) {}
+	virtual int					NumMeshes( const int lod = 0 ) const { return 0; }
+	virtual idBounds			CalcMeshBounds( int meshIndex, const idJointMat *joints, const idVec3 &offset, const idMat3 &axis, bool useDefaultAnim ) { return bounds; }
+
+	bool LoadMD5Binary( const char* modelName ) {
+		if ( fileSystem == NULL || modelName == NULL || !*modelName ) {
+			return false;
+		}
+
+		idStr generated = "generated/md5binary/";
+		generated += modelName;
+		generated.StripFileExtension();
+		generated.SetFileExtension( "md5b" );
+		idFile* sourceFile = fileSystem->OpenFileRead( generated, true, NULL, true );
+		if ( sourceFile == NULL ) {
+			return false;
+		}
+		idFile* file = fileSystem->OpenBufferedFile( sourceFile );
+		if ( file == NULL ) {
+			fileSystem->CloseFile( sourceFile );
+			return false;
+		}
+
+		int version = 0;
+		int numLods = 0;
+		int numJoints = 0;
+		bool valid = file->ReadInt( version ) == sizeof( version ) && version == 1;
+		valid = valid && file->ReadInt( numLods ) == sizeof( numLods ) && numLods > 0;
+		valid = valid && file->ReadInt( numJoints ) == sizeof( numJoints ) && numJoints > 0 && numJoints < 4096;
+		if ( !valid ) {
+			fileSystem->CloseFile( file );
+			return false;
+		}
+
+		joints.SetNum( numJoints );
+		defaultPose.SetNum( numJoints );
+		idList< int > parents;
+		parents.SetNum( numJoints );
+		for ( int i = 0; valid && i < numJoints; i++ ) {
+			valid = file->ReadString( joints[ i ].name ) > 0;
+			valid = valid && file->ReadInt( parents[ i ] ) == sizeof( parents[ i ] );
+			valid = valid && file->ReadFloat( defaultPose[ i ].q.x ) == sizeof( float );
+			valid = valid && file->ReadFloat( defaultPose[ i ].q.y ) == sizeof( float );
+			valid = valid && file->ReadFloat( defaultPose[ i ].q.z ) == sizeof( float );
+			valid = valid && file->ReadFloat( defaultPose[ i ].q.w ) == sizeof( float );
+			valid = valid && file->ReadVec3( defaultPose[ i ].t ) == sizeof( idVec3 );
+			valid = valid && file->ReadFloat( defaultPose[ i ].w ) == sizeof( float );
+
+			for ( int j = 0; valid && j < 12; j++ ) {
+				float invVal = 0.0f;
+				valid = valid && file->ReadFloat( invVal ) == sizeof( float );
+			}
+		}
+
+		if ( valid ) {
+			for ( int i = 0; i < numJoints; i++ ) {
+				joints[ i ].parent = ( parents[ i ] >= 0 && parents[ i ] < numJoints ) ? &joints[ parents[ i ] ] : NULL;
+			}
+			idBounds fileBounds;
+			if ( file->Seek( -24, FS_SEEK_END ) >= 0 &&
+			     file->ReadVec3( fileBounds[ 0 ] ) == sizeof( idVec3 ) &&
+			     file->ReadVec3( fileBounds[ 1 ] ) == sizeof( idVec3 ) ) {
+				bounds = fileBounds;
+			}
+		}
+
+		fileSystem->CloseFile( file );
+		return valid;
+	}
+
+
+private:
+	idBounds					bounds;
+	idStr						name;
+	idList<modelSurface_t>		surfaces;
+	mutable idList<idMD5Joint>	joints;
+	mutable idList<idJointQuat>	defaultPose;
+	mutable srfTriangles_t		dummyGeometry;
+	mutable modelSurface_t		dummySurface;
+};
+
+class idRenderModelManagerHeadlessLocal : public idRenderModelManager {
+public:
+	virtual ~idRenderModelManagerHeadlessLocal() {
+		for ( int i = 0; i < models.Num(); i++ ) {
+			delete models[ i ];
+		}
+		models.Clear();
+	}
+
+	virtual void				Init() {}
+	virtual void				Shutdown() {
+		for ( int i = 0; i < models.Num(); i++ ) {
+			delete models[ i ];
+		}
+		models.Clear();
+	}
+	virtual void				BeginLevelLoad() {}
+	virtual void				EndLevelLoad() {}
+
+	virtual idRenderModel *		AllocModel() { return new idRenderModelHeadlessLocal(); }
+	virtual void				FreeModel( idRenderModel *model ) {
+		if ( model && model != &dummyModel ) {
+			models.Remove( static_cast<idRenderModelHeadlessLocal*>( model ) );
+			delete model;
+		}
+	}
+	virtual idRenderModel *		FindModel( const char *modelName ) {
+		if ( !modelName || !*modelName ) {
+			return NULL;
+		}
+		for ( int i = 0; i < models.Num(); i++ ) {
+			if ( models[ i ]->Name() && idStr::Icmp( models[ i ]->Name(), modelName ) == 0 ) {
+				return models[ i ];
+			}
+		}
+		idRenderModelHeadlessLocal* m = new idRenderModelHeadlessLocal();
+		m->InitFromFile( modelName );
+		models.Append( m );
+		return m;
+	}
+	virtual idRenderModel *		CheckModel( const char *modelName ) { return FindModel( modelName ); }
+	virtual idRenderModel *		GetModel( const char *modelName ) { return FindModel( modelName ); }
+	virtual idRenderModel *		DefaultModel() { return &dummyModel; }
+
+	virtual void				AddModel( idRenderModel *model ) {}
+	virtual void				RemoveModel( idRenderModel *model ) {}
+	virtual void				ReloadModels( bool forceAll = false ) {}
+
+	virtual void				WritePrecacheCommands( idFile *f ) {}
+	virtual void				FreeModelVertexCaches() {}
+
+	virtual bool				WriteSurfaceModel( const char* modelName, idList< idSurface* >& surfaces, idStrList& materials ) { return false; }
+	virtual bool				WriteTriangleModelB( const char *modelName, idRenderModel *model ) { return false; }
+	virtual bool				WriteTriangleModel( const char *modelName, idRenderModel *model ) { return false; }
+
+private:
+	idRenderModelHeadlessLocal	dummyModel;
+	idList<idRenderModelHeadlessLocal*> models;
+};
+
+static idRenderModelManagerHeadlessLocal headlessModelManagerInstance;
+
+class sdRenderWorldHeadlessLocal : public idRenderWorld {
+public:
+	sdRenderWorldHeadlessLocal() : realWorld( NULL ) {
+		memset( &dummyRenderEntity, 0, sizeof( dummyRenderEntity ) );
+		dummyRenderEntity.hModel = &dummyModel;
+	}
+
+	void Init( idRenderWorld* real ) {
+		realWorld = real;
+		entityDefs.Clear();
+		entityDefs.Append( dummyRenderEntity );
+	}
+
+	virtual ~sdRenderWorldHeadlessLocal() {}
+
+	virtual bool InitFromMap( const char *mapName ) { return realWorld ? realWorld->InitFromMap( mapName ) : true; }
+	virtual void LinkCullSectorsToArea( int area ) { if ( realWorld ) realWorld->LinkCullSectorsToArea( area ); }
+
+	virtual qhandle_t AddEntityDef( const renderEntity_t *re ) {
+		renderEntity_t ent = re ? *re : dummyRenderEntity;
+		if ( ent.hModel == NULL ) {
+			ent.hModel = &dummyModel;
+		}
+		int idx = entityDefs.Append( ent );
+		if ( realWorld ) {
+			realWorld->AddEntityDef( re );
+		}
+		return idx;
+	}
+
+	virtual void UpdateEntityDef( qhandle_t entityHandle, const renderEntity_t *re ) {
+		if ( entityHandle >= 0 && entityHandle < entityDefs.Num() ) {
+			renderEntity_t ent = re ? *re : dummyRenderEntity;
+			if ( ent.hModel == NULL ) {
+				ent.hModel = &dummyModel;
+			}
+			entityDefs[ entityHandle ] = ent;
+		}
+		if ( realWorld ) {
+			realWorld->UpdateEntityDef( entityHandle, re );
+		}
+	}
+
+	virtual void FreeEntityDef( qhandle_t entityHandle ) {
+		if ( entityHandle >= 0 && entityHandle < entityDefs.Num() ) {
+			entityDefs[ entityHandle ] = dummyRenderEntity;
+		}
+		if ( realWorld ) {
+			realWorld->FreeEntityDef( entityHandle );
+		}
+	}
+
+	virtual const renderEntity_t *GetRenderEntity( qhandle_t entityHandle ) const {
+		if ( entityHandle >= 0 && entityHandle < entityDefs.Num() ) {
+			return &entityDefs[ entityHandle ];
+		}
+		return &dummyRenderEntity;
+	}
+
+	virtual renderEntity_t *GetRenderEntity( qhandle_t entityHandle ) {
+		if ( entityHandle >= 0 && entityHandle < entityDefs.Num() ) {
+			return &entityDefs[ entityHandle ];
+		}
+		return &dummyRenderEntity;
+	}
+
+	virtual qhandle_t AddLightDef( const renderLight_t *rlight ) { return realWorld ? realWorld->AddLightDef( rlight ) : 0; }
+	virtual void UpdateLightDef( qhandle_t lightHandle, const renderLight_t *rlight ) { if ( realWorld ) realWorld->UpdateLightDef( lightHandle, rlight ); }
+	virtual void FreeLightDef( qhandle_t lightHandle ) { if ( realWorld ) realWorld->FreeLightDef( lightHandle ); }
+	virtual const renderLight_t *GetRenderLight( qhandle_t lightHandle ) const { return realWorld ? realWorld->GetRenderLight( lightHandle ) : NULL; }
+
+	virtual qhandle_t AddEffectDef( const renderEffect_t *reffect, int time ) { return realWorld ? realWorld->AddEffectDef( reffect, time ) : 0; }
+	virtual bool UpdateEffectDef( qhandle_t effectHandle, const renderEffect_t *reffect, int time ) { return realWorld ? realWorld->UpdateEffectDef( effectHandle, reffect, time ) : false; }
+	virtual void StopEffectDef( qhandle_t effectHandle ) { if ( realWorld ) realWorld->StopEffectDef( effectHandle ); }
+	virtual void RestartEffectDef( qhandle_t effectHandle ) { if ( realWorld ) realWorld->RestartEffectDef( effectHandle ); }
+	virtual void FreeEffectDef( qhandle_t effectHandle ) { if ( realWorld ) realWorld->FreeEffectDef( effectHandle ); }
+	virtual void FreeStoppedEffectDefs( void ) { if ( realWorld ) realWorld->FreeStoppedEffectDefs(); }
+
+	virtual qhandle_t AddOcclusionTestDef( const occlusionTest_t *occtest ) { return realWorld ? realWorld->AddOcclusionTestDef( occtest ) : 0; }
+	virtual void UpdateOcclusionTestDef( qhandle_t occtestHandle, const occlusionTest_t *occtest ) { if ( realWorld ) realWorld->UpdateOcclusionTestDef( occtestHandle, occtest ); }
+	virtual void UpdateOcclusionTestDefViewID( qhandle_t occtestHandle, int viewID ) { if ( realWorld ) realWorld->UpdateOcclusionTestDefViewID( occtestHandle, viewID ); }
+	virtual bool IsVisibleOcclusionTestDef( qhandle_t occtestHandle ) { return realWorld ? realWorld->IsVisibleOcclusionTestDef( occtestHandle ) : false; }
+	virtual void FreeOcclusionTestDef( qhandle_t occtestHandle ) { if ( realWorld ) realWorld->FreeOcclusionTestDef( occtestHandle ); }
+	virtual int CountVisibleOcclusionTestDef( qhandle_t occtestHandle ) { return realWorld ? realWorld->CountVisibleOcclusionTestDef( occtestHandle ) : 0; }
+
+	virtual bool IsVisibleEntity( int viewID, int occid ) { return realWorld ? realWorld->IsVisibleEntity( viewID, occid ) : false; }
+	virtual void UpdateOcclusionTests( void ) { if ( realWorld ) realWorld->UpdateOcclusionTests(); }
+
+	virtual void GenerateAllInteractions() { if ( realWorld ) realWorld->GenerateAllInteractions(); }
+	virtual idRenderModel* GetEntityHandleDynamicModel( qhandle_t entityHandle ) { return realWorld ? realWorld->GetEntityHandleDynamicModel( entityHandle ) : NULL; }
+
+	virtual idRenderModel* CreateDecalModel() { return realWorld ? realWorld->CreateDecalModel() : NULL; }
+	virtual void AddToProjectedDecal( const idFixedWinding& winding, const idVec3 &projectionOrigin, const bool parallel, const idVec4& color, idRenderModel* model, int entityNum, const idMaterial** onlyMaterials = NULL, const int numOnlyMaterials = 1 ) {
+		if ( realWorld ) realWorld->AddToProjectedDecal( winding, projectionOrigin, parallel, color, model, entityNum, onlyMaterials, numOnlyMaterials );
+	}
+	virtual void ResetDecalModel( idRenderModel* model ) { if ( realWorld ) realWorld->ResetDecalModel( model ); }
+	virtual void FinishDecal( idRenderModel* model ) { if ( realWorld ) realWorld->FinishDecal( model ); }
+
+	virtual void ProjectDecalOntoWorld( const idFixedWinding &winding, const idVec3 &projectionOrigin, const bool parallel, const float fadeDepth, const idMaterial *material, const int startTime, const int currentTime ) {
+		if ( realWorld ) realWorld->ProjectDecalOntoWorld( winding, projectionOrigin, parallel, fadeDepth, material, startTime, currentTime );
+	}
+	virtual void ProjectDecal( qhandle_t entityHandle, const idFixedWinding &winding, const idVec3 &projectionOrigin, const bool parallel, const float fadeDepth, const idMaterial *material, const int startTime, const int currentTime ) {
+		if ( realWorld ) realWorld->ProjectDecal( entityHandle, winding, projectionOrigin, parallel, fadeDepth, material, startTime, currentTime );
+	}
+	virtual void ProjectOverlay( qhandle_t entityHandle, const idPlane localTextureAxis[2], const idMaterial *material ) {
+		if ( realWorld ) realWorld->ProjectOverlay( entityHandle, localTextureAxis, material );
+	}
+	virtual void RemoveDecals( qhandle_t entityHandle ) { if ( realWorld ) realWorld->RemoveDecals( entityHandle ); }
+	virtual void AddCheapDecal( qhandle_t entityHandle, const cheapDecalParameters_t &params, float time ) {
+		if ( realWorld ) realWorld->AddCheapDecal( entityHandle, params, time );
+	}
+	virtual void ClearDecals( void ) { if ( realWorld ) realWorld->ClearDecals(); }
+
+	virtual void AddEnvBounds( idVec3 const &origin, idVec3 const &scale, const char *cubemap ) { if ( realWorld ) realWorld->AddEnvBounds( origin, scale, cubemap ); }
+
+	virtual void SetRenderView( const renderView_t *renderView ) { if ( realWorld ) realWorld->SetRenderView( renderView ); }
+	virtual void RenderScene( const renderView_t *renderView ) { if ( realWorld ) realWorld->RenderScene( renderView ); }
+	virtual void PerformRenderScene( const renderView_t *renderView ) { if ( realWorld ) realWorld->PerformRenderScene( renderView ); }
+
+	virtual int NumPortals( void ) const { return realWorld ? realWorld->NumPortals() : 0; }
+	virtual qhandle_t FindPortal( const idBounds &b ) const { return realWorld ? realWorld->FindPortal( b ) : 0; }
+	virtual void SetPortalState( qhandle_t portal, int blockingBits ) { if ( realWorld ) realWorld->SetPortalState( portal, blockingBits ); }
+	virtual int GetPortalState( qhandle_t portal ) { return realWorld ? realWorld->GetPortalState( portal ) : 0; }
+	virtual void UpdatePortalOccTestView( int viewID ) { if ( realWorld ) realWorld->UpdatePortalOccTestView( viewID ); }
+	virtual bool AreasAreConnected( int areaNum1, int areaNum2, portalConnection_t connection ) { return realWorld ? realWorld->AreasAreConnected( areaNum1, areaNum2, connection ) : true; }
+	virtual bool AreasAreConnected( int areaNum1, int areaNum2, portalFlags_t flag ) { return realWorld ? realWorld->AreasAreConnected( areaNum1, areaNum2, flag ) : true; }
+	virtual bool AreasAreConnected( int areaNum1, int areaNum2 ) { return realWorld ? realWorld->AreasAreConnected( areaNum1, areaNum2 ) : true; }
+	virtual int NumAreas( void ) const { return realWorld ? realWorld->NumAreas() : 1; }
+	virtual int PointInArea( const idVec3 &point ) const { return realWorld ? realWorld->PointInArea( point ) : 0; }
+	virtual int BoundsInAreas( const idBounds &bounds, int *areas, int maxAreas ) const { return realWorld ? realWorld->BoundsInAreas( bounds, areas, maxAreas ) : 0; }
+	virtual int NumPortalsInArea( int areaNum ) { return realWorld ? realWorld->NumPortalsInArea( areaNum ) : 0; }
+	virtual exitPortal_t GetPortal( int areaNum, int portalNum ) {
+		if ( realWorld ) return realWorld->GetPortal( areaNum, portalNum );
+		exitPortal_t ep; memset( &ep, 0, sizeof( ep ) ); return ep;
+	}
+	virtual void SetAreaPortalFlags( int areaNum, int flags ) { if ( realWorld ) realWorld->SetAreaPortalFlags( areaNum, flags ); }
+	virtual int GetAreaPortalFlags( int areaNum ) const { return realWorld ? realWorld->GetAreaPortalFlags( areaNum ) : 0; }
+	virtual void SetAreaAmbientCubeMap( int areaNum, const sdDeclAmbientCubeMap *cubeMapDecl ) { if ( realWorld ) realWorld->SetAreaAmbientCubeMap( areaNum, cubeMapDecl ); }
+	virtual const sdDeclAmbientCubeMap *GetAreaAmbientCubeMap( int areaNum ) { return realWorld ? realWorld->GetAreaAmbientCubeMap( areaNum ) : NULL; }
+	virtual void SetCubemapSunProperties( const sdDeclAmbientCubeMap *cubeMapDecl, const idVec3 &sunDir, const idVec3 &sunColor ) { if ( realWorld ) realWorld->SetCubemapSunProperties( cubeMapDecl, sunDir, sunColor ); }
+
+	virtual bool ModelTrace( modelTrace_t &trace, qhandle_t entityHandle, const idVec3 &start, const idVec3 &end, const float radius, int surfCollision = SURF_COLLISION ) const {
+		return realWorld ? realWorld->ModelTrace( trace, entityHandle, start, end, radius, surfCollision ) : false;
+	}
+	virtual bool Trace( modelTrace_t &trace, const idVec3 &start, const idVec3 &end, const float radius, bool skipDynamic = true ) const {
+		return realWorld ? realWorld->Trace( trace, start, end, radius, skipDynamic ) : false;
+	}
+	virtual bool FastWorldTrace( modelTrace_t &trace, const idVec3 &start, const idVec3 &end ) const {
+		return realWorld ? realWorld->FastWorldTrace( trace, start, end ) : false;
+	}
+
+	virtual void StartWritingDemo( idDemoFile *demo ) { if ( realWorld ) realWorld->StartWritingDemo( demo ); }
+	virtual void StopWritingDemo() { if ( realWorld ) realWorld->StopWritingDemo(); }
+	virtual bool ProcessDemoCommand( idDemoFile *readDemo, renderView_t *demoRenderView, int *demoTimeOffset ) { return realWorld ? realWorld->ProcessDemoCommand( readDemo, demoRenderView, demoTimeOffset ) : false; }
+	virtual void RegenerateWorld() { if ( realWorld ) realWorld->RegenerateWorld(); }
+
+	virtual void DebugClearLines( int time ) { if ( realWorld ) realWorld->DebugClearLines( time ); }
+	virtual void DebugLine( const idVec4 &color, const idVec3 &start, const idVec3 &end, const int lifetime = 0, const bool depthTest = false ) {
+		if ( realWorld ) realWorld->DebugLine( color, start, end, lifetime, depthTest );
+	}
+	virtual void DebugArrow( const idVec4 &color, const idVec3 &start, const idVec3 &end, int size, const int lifetime = 0, bool depthTest = false ) {
+		if ( realWorld ) realWorld->DebugArrow( color, start, end, size, lifetime, depthTest );
+	}
+	virtual void DebugWinding( const idVec4 &color, const idWinding &w, const idVec3 &origin, const idMat3 &axis, const int lifetime = 0, const bool depthTest = false ) {
+		if ( realWorld ) realWorld->DebugWinding( color, w, origin, axis, lifetime, depthTest );
+	}
+	virtual void DebugCircle( const idVec4 &color, const idVec3 &origin, const idVec3 &dir, const float radius, const int numSteps, const int lifetime = 0, const bool depthTest = false ) {
+		if ( realWorld ) realWorld->DebugCircle( color, origin, dir, radius, numSteps, lifetime, depthTest );
+	}
+	virtual void DebugSphere( const idVec4 &color, const idSphere &sphere, const int lifetime = 0, const bool depthTest = false ) {
+		if ( realWorld ) realWorld->DebugSphere( color, sphere, lifetime, depthTest );
+	}
+	virtual void DebugBounds( const idVec4 &color, const idBounds &bounds, const idVec3 &org = vec3_origin, const idMat3& axes = mat3_identity, const int lifetime = 0 ) {
+		if ( realWorld ) realWorld->DebugBounds( color, bounds, org, axes, lifetime );
+	}
+	virtual void DebugBox( const idVec4 &color, const idBox &box, const int lifetime = 0 ) {
+		if ( realWorld ) realWorld->DebugBox( color, box, lifetime );
+	}
+	virtual void DebugFrustum( const idVec4 &color, const idFrustum &frustum, const bool showFromOrigin = false, const int lifetime = 0 ) {
+		if ( realWorld ) realWorld->DebugFrustum( color, frustum, showFromOrigin, lifetime );
+	}
+	virtual void DebugCone( const idVec4 &color, const idVec3 &apex, const idVec3 &dir, float radius1, float radius2, const int lifetime = 0 ) {
+		if ( realWorld ) realWorld->DebugCone( color, apex, dir, radius1, radius2, lifetime );
+	}
+	virtual void DebugAxis( const idVec3 &origin, const idMat3 &axis, int lifetime = 0 ) {
+		if ( realWorld ) realWorld->DebugAxis( origin, axis, lifetime );
+	}
+	virtual void DebugClearPolygons( int time ) { if ( realWorld ) realWorld->DebugClearPolygons( time ); }
+	virtual void DebugPolygon( const idVec4 &color, const idWinding &winding, const int lifeTime = 0, const bool depthTest = false, idImage* image = NULL ) {
+		if ( realWorld ) realWorld->DebugPolygon( color, winding, lifeTime, depthTest, image );
+	}
+	virtual void DrawText( const char *text, const idVec3 &origin, float scale, const idVec4 &color, const idMat3 &viewAxis, const int align = 1, const int lifetime = 0 ) {
+		if ( realWorld ) realWorld->DrawText( text, origin, scale, color, viewAxis, align, lifetime );
+	}
+	virtual void SetAtmosphere( const sdDeclAtmosphere* atmosphere ) { if ( realWorld ) realWorld->SetAtmosphere( atmosphere ); }
+	virtual const sdDeclAtmosphere* GetAtmosphere() const { return realWorld ? realWorld->GetAtmosphere() : NULL; }
+	virtual void SetupMatrices( const renderView_t* renderView, float* projectionMatrix, float* modelViewMatrix, const bool allowJitter ) {
+		if ( realWorld ) realWorld->SetupMatrices( renderView, projectionMatrix, modelViewMatrix, allowJitter );
+	}
+	virtual void SetMegaTextureSTGrid( const idBounds& bounds, const idVec2* grid, int width, int height ) {
+		if ( realWorld ) realWorld->SetMegaTextureSTGrid( bounds, grid, width, height );
+	}
+	virtual struct atmosLightProjection_t *FindAtmosLightProjection( int lightID ) {
+		return realWorld ? realWorld->FindAtmosLightProjection( lightID ) : NULL;
+	}
+
+private:
+	idRenderWorld*				realWorld;
+	idRenderModelHeadlessLocal	dummyModel;
+	renderEntity_t				dummyRenderEntity;
+	idList<renderEntity_t>		entityDefs;
+};
+
+static sdRenderWorldHeadlessLocal headlessRenderWorldInstance;
+
+class sdSoundEmitterHeadlessLocal : public idSoundEmitter {
+public:
+	explicit sdSoundEmitterHeadlessLocal( int idx = 0 ) : index( idx ), playing( false ) {
+		memset( &parms, 0, sizeof( parms ) );
+	}
+	virtual ~sdSoundEmitterHeadlessLocal() {}
+
+	virtual int Index( void ) const { return index; }
+	virtual void Free( bool immediate ) { playing = false; }
+	virtual void UpdateEmitter( const idVec3 &origin, int listenerId, const soundShaderParms_t *newParms ) {
+		if ( newParms ) {
+			parms = *newParms;
+		}
+	}
+	virtual int StartSound( const idSoundShader* shader, const soundChannel_t channelStart, soundChannel_t channelEnd, float diversity = 0, int shaderFlags = 0 ) {
+		playing = ( shader != NULL );
+		return 0;
+	}
+	virtual const soundShaderParms_t& GetChannelParms( const soundChannel_t channel ) { return parms; }
+	virtual void ModifySound( const soundChannel_t channel, const soundShaderParms_t& newParms ) { parms = newParms; }
+	virtual void StopSound( const soundChannel_t channel ) { playing = false; }
+	virtual void FadeSound( const soundChannel_t channel, float to, float over ) {}
+	virtual bool CurrentlyPlaying( void ) const { return playing; }
+	virtual float CurrentAmplitude( void ) { return 0.0f; }
+	virtual cinData_t ImageForTime( const int milliseconds ) {
+		cinData_t d;
+		memset( &d, 0, sizeof( d ) );
+		return d;
+	}
+	virtual void SetChannelOffset( const soundChannel_t channel, int ms ) {}
+
+private:
+	int index;
+	bool playing;
+	soundShaderParms_t parms;
+};
+
+class sdSoundWorldHeadlessLocal : public idSoundWorld {
+public:
+	sdSoundWorldHeadlessLocal() : realWorld( NULL ) {}
+	virtual ~sdSoundWorldHeadlessLocal() {
+		ClearAllSoundEmitters();
+	}
+
+	void Init( idSoundWorld* real ) {
+		realWorld = real;
+		ClearAllSoundEmitters();
+	}
+
+	virtual void ClearAllSoundEmitters( void ) {
+		for ( int i = 0; i < emitters.Num(); i++ ) {
+			delete emitters[ i ];
+		}
+		emitters.Clear();
+		if ( realWorld ) {
+			realWorld->ClearAllSoundEmitters();
+		}
+	}
+
+	virtual void StopAllSounds( void ) {
+		for ( int i = 0; i < emitters.Num(); i++ ) {
+			emitters[ i ]->StopSound( SCHANNEL_ANY );
+		}
+		if ( realWorld ) {
+			realWorld->StopAllSounds();
+		}
+	}
+
+	virtual idSoundEmitter* AllocSoundEmitter( void ) {
+		if ( realWorld ) {
+			idSoundEmitter* em = realWorld->AllocSoundEmitter();
+			if ( em != NULL ) {
+				return em;
+			}
+		}
+		idSoundEmitter* emitter = new sdSoundEmitterHeadlessLocal( emitters.Num() + 1 );
+		emitters.Append( emitter );
+		return emitter;
+	}
+
+	virtual idSoundEmitter* EmitterForIndex( int index ) {
+		if ( realWorld ) {
+			idSoundEmitter* em = realWorld->EmitterForIndex( index );
+			if ( em != NULL ) {
+				return em;
+			}
+		}
+		return ( index > 0 && index <= emitters.Num() ) ? emitters[ index - 1 ] : NULL;
+	}
+
+	virtual void MixLoop( int current44kHz ) {
+		if ( realWorld ) realWorld->MixLoop( current44kHz );
+	}
+	virtual float CurrentShakeAmplitudeForPosition( const int time, const idVec3& listenerPosition ) {
+		return realWorld ? realWorld->CurrentShakeAmplitudeForPosition( time, listenerPosition ) : 0.0f;
+	}
+	virtual void PlaceListener( const idVec3& origin, const idMat3& axis, const int listenerId, const int gameTime ) {
+		if ( realWorld ) realWorld->PlaceListener( origin, axis, listenerId, gameTime );
+	}
+	virtual const idVec3& GetListenerPosition() const {
+		return realWorld ? realWorld->GetListenerPosition() : vec3_origin;
+	}
+	virtual const idMat3& GetListenerAxis() const {
+		return realWorld ? realWorld->GetListenerAxis() : mat3_identity;
+	}
+	virtual void FadeSoundClasses( const int soundClass, const float to, const float over ) {
+		if ( realWorld ) realWorld->FadeSoundClasses( soundClass, to, over );
+	}
+	virtual void PlayShaderDirectly( const idSoundShader* shader, const soundChannel_t channel = SCHANNEL_ANY, int* length = NULL ) {
+		if ( length ) *length = 0;
+		if ( realWorld ) realWorld->PlayShaderDirectly( shader, channel, length );
+	}
+	virtual void StartWritingDemo( idDemoFile *demo ) { if ( realWorld ) realWorld->StartWritingDemo( demo ); }
+	virtual void StopWritingDemo( void ) { if ( realWorld ) realWorld->StopWritingDemo(); }
+	virtual void ProcessDemoCommand( idDemoFile *demo ) { if ( realWorld ) realWorld->ProcessDemoCommand( demo ); }
+	virtual void Pause( void ) { if ( realWorld ) realWorld->Pause(); }
+	virtual void UnPause( void ) { if ( realWorld ) realWorld->UnPause(); }
+	virtual bool IsPaused( void ) { return realWorld ? realWorld->IsPaused() : false; }
+	virtual bool IsMuted() const { return realWorld ? realWorld->IsMuted() : true; }
+	virtual void AVIOpen( const char* path, const char* name ) { if ( realWorld ) realWorld->AVIOpen( path, name ); }
+	virtual void AVIClose( void ) { if ( realWorld ) realWorld->AVIClose(); }
+	virtual void WriteToSaveGame( idFile* savefile ) { if ( realWorld ) realWorld->WriteToSaveGame( savefile ); }
+	virtual void ReadFromSaveGame( idFile* savefile ) { if ( realWorld ) realWorld->ReadFromSaveGame( savefile ); }
+	virtual void BeginLevelLoad( void ) {
+		ClearAllSoundEmitters();
+		if ( realWorld ) realWorld->BeginLevelLoad();
+	}
+
+private:
+	idSoundWorld* realWorld;
+	idList< idSoundEmitter* > emitters;
+};
+
+static sdSoundWorldHeadlessLocal headlessSoundWorldInstance;
+
 #if !defined( _XENON )
 idRenderWorld *				gameRenderWorld = NULL;
 idSoundWorld *				gameSoundWorld = NULL;
 #endif
+
 
 idList< surfaceProperties_t > idGameLocal::surfaceTypes;
 
@@ -192,6 +814,9 @@ extern "C" gameExport_t *GetGameAPI( gameImport_t *import ) {
 		deviceContext				= import->deviceContext;
 		soundSystem					= import->soundSystem;
 		renderModelManager			= import->renderModelManager;
+		if ( renderModelManager == NULL || renderModelManager->DefaultModel() == NULL ) {
+			renderModelManager		= &headlessModelManagerInstance;
+		}
 		declManager					= import->declManager;
 		collisionModelManager		= import->collisionModelManager;
 		bse							= import->bse;
@@ -376,6 +1001,307 @@ sdPlayZone::~sdPlayZone( void ) {
 	}
 	_paths.Clear();
 }
+
+// Missing script events registered for script compiler compatibility with retail scripts
+const idEventDef EV_ScriptMissing_setName( "setName", "s", '\0' );
+const idEventDef EV_ScriptMissing_activateTargets( "activateTargets", "e", '\0' );
+const idEventDef EV_ScriptMissing_numTargets( "numTargets", "", 'f' );
+const idEventDef EV_ScriptMissing_getTarget( "getTarget", "f", 'e' );
+const idEventDef EV_ScriptMissing_randomTarget( "randomTarget", "s", 'e' );
+const idEventDef EV_ScriptMissing_getLocalAngles( "getLocalAngles", "", 'v' );
+const idEventDef EV_ScriptMissing_restorePosition( "restorePosition", "", '\0' );
+const idEventDef EV_ScriptMissing_playEffectViewSuppress( "playEffectViewSuppress", "ssff", 'h' );
+const idEventDef EV_ScriptMissing_getDeployableObject( "getDeployableObject", "", 'f' );
+const idEventDef EV_ScriptMissing_getNetworkKey( "getNetworkKey", "e", 's' );
+const idEventDef EV_ScriptMissing_fromNetworkKey( "fromNetworkKey", "s", 'e' );
+const idEventDef EV_ScriptMissing_debugln( "debugln", "es", '\0' );
+const idEventDef EV_ScriptMissing_say( "say", "s", '\0' );
+const idEventDef EV_ScriptMissing_fadeIn( "fadeIn", "vf", '\0' );
+const idEventDef EV_ScriptMissing_fadeOut( "fadeOut", "vf", '\0' );
+const idEventDef EV_ScriptMissing_fadeTo( "fadeTo", "vff", '\0' );
+const idEventDef EV_ScriptMissing_setCMIconSort( "setCMIconSort", "ff", '\0' );
+const idEventDef EV_ScriptMissing_getObjectTitle( "getObjectTitle", "f", 's' );
+const idEventDef EV_ScriptMissing_consoleCommand( "consoleCommand", "s", '\0' );
+const idEventDef EV_ScriptMissing_pushEndGameStat( "pushEndGameStat", "ef", '\0' );
+const idEventDef EV_ScriptMissing_startCamera( "startCamera", "", '\0' );
+const idEventDef EV_ScriptMissing_stopCamera( "stopCamera", "", '\0' );
+const idEventDef EV_ScriptMissing_Toggle( "Toggle", "", '\0' );
+const idEventDef EV_ScriptMissing_launchMissiles( "launchMissiles", "ssssff", '\0' );
+const idEventDef EV_ScriptMissing_stopCurrentMove( "stopCurrentMove", "", '\0' );
+const idEventDef EV_ScriptMissing_weaponOutOfAmmo( "weaponOutOfAmmo", "", '\0' );
+const idEventDef EV_ScriptMissing_setLightParm( "setLightParm", "ff", '\0' );
+const idEventDef EV_ScriptMissing_setLightParms( "setLightParms", "ffff", '\0' );
+const idEventDef EV_ScriptMissing_enableSpreadEvals( "enableSpreadEvals", "ff", '\0' );
+const idEventDef EV_ScriptMissing_setConstraintPosition( "setConstraintPosition", "sv", '\0' );
+const idEventDef EV_ScriptMissing_setSyncedAnimWeight( "setSyncedAnimWeight", "fff", '\0' );
+const idEventDef EV_ScriptMissing_preventPain( "preventPain", "f", '\0' );
+const idEventDef EV_ScriptMissing_disablePain( "disablePain", "", '\0' );
+const idEventDef EV_ScriptMissing_enablePain( "enablePain", "", '\0' );
+const idEventDef EV_ScriptMissing_getPainAnim( "getPainAnim", "", 's' );
+const idEventDef EV_ScriptMissing_checkAnim( "checkAnim", "fs", '\0' );
+const idEventDef EV_ScriptMissing_chooseAnim( "chooseAnim", "fs", 's' );
+const idEventDef EV_ScriptMissing_animLength( "animLength", "fs", 'f' );
+const idEventDef EV_ScriptMissing_animDistance( "animDistance", "fs", 'f' );
+const idEventDef EV_ScriptMissing_setNextState( "setNextState", "s", '\0' );
+const idEventDef EV_ScriptMissing_clearAmmo( "clearAmmo", "", '\0' );
+const idEventDef EV_ScriptMissing_resetWeapon( "resetWeapon", "", '\0' );
+const idEventDef EV_ScriptMissing_getActiveWeapon( "getActiveWeapon", "", 's' );
+const idEventDef EV_ScriptMissing_setSwayScale( "setSwayScale", "f", '\0' );
+const idEventDef EV_ScriptMissing_canRevive( "canRevive", "", 'b' );
+const idEventDef EV_ScriptMissing_isDead( "isDead", "", 'b' );
+const idEventDef EV_ScriptMissing_getItemIndexByName( "getItemIndexByName", "s", 'f' );
+const idEventDef EV_ScriptMissing_getItemNameByIndex( "getItemNameByIndex", "f", 's' );
+const idEventDef EV_ScriptMissing_randomPath( "randomPath", "", 'e' );
+const idEventDef EV_ScriptMissing_getMoveDelta( "getMoveDelta", "", 'v' );
+const idEventDef EV_ScriptMissing_setDelta( "setDelta", "v", '\0' );
+const idEventDef EV_ScriptMissing_setViewAxis( "setViewAxis", "f", '\0' );
+const idEventDef EV_ScriptMissing_setCompressionScale( "setCompressionScale", "ff", '\0' );
+const idEventDef EV_ScriptMissing_resupply( "resupply", "", 'f' );
+const idEventDef EV_ScriptMissing_updateThrusters( "updateThrusters", "b", 'b' );
+const idEventDef EV_ScriptMissing_setOverDriveScale( "setOverDriveScale", "f", '\0' );
+const idEventDef EV_ScriptMissing_chSetOrigin( "chSetOrigin", "v", '\0' );
+const idEventDef EV_ScriptMissing_chSetLineBackColor( "chSetLineBackColor", "fvf", '\0' );
+const idEventDef EV_ScriptMissing_radarSetLayerJammer( "radarSetLayerJammer", "ff", '\0' );
+const idEventDef EV_ScriptMissing_setObjectiveWorldIcon( "setObjectiveWorldIcon", "ofs", '\0' );
+const idEventDef EV_ScriptMissing_getMaxDeployables( "getMaxDeployables", "", 'f' );
+const idEventDef EV_ScriptMissing_getNumDeployables( "getNumDeployables", "", 'f' );
+const idEventDef EV_ScriptMissing_getDeployable( "getDeployable", "f", 'e' );
+const idEventDef EV_ScriptMissing_uncomplete( "uncomplete", "", '\0' );
+const idEventDef EV_ScriptMissing_getPriority( "getPriority", "", 'f' );
+const idEventDef EV_ScriptMissing_setPriority( "setPriority", "f", '\0' );
+const idEventDef EV_ScriptMissing_applyParachute( "applyParachute", "ef", '\0' );
+const idEventDef EV_ScriptMissing_setup( "setup", "", '\0' );
+
+class sdEventDefHelper : public idEventDef {
+public:
+	static void ReconcileEventsWithScript() {
+		if ( !fileSystem ) {
+			return;
+		}
+		char* buffer = NULL;
+		int len = fileSystem->ReadFile( "script/events.script", (void**)&buffer, NULL );
+		if ( len <= 0 || !buffer ) {
+			return;
+		}
+
+		idParser src;
+		src.LoadMemory( buffer, len, "script/events.script" );
+		src.SetFlags( DECL_LEXER_FLAGS );
+		idToken token;
+
+		while ( src.ReadToken( &token ) ) {
+			if ( token == "scriptEvent" ) {
+				idToken retTypeToken;
+				if ( !src.ReadToken( &retTypeToken ) ) break;
+				idToken nameToken;
+				if ( !src.ReadToken( &nameToken ) ) break;
+				if ( !src.ExpectTokenString( "(" ) ) continue;
+
+				char retChar = '\0';
+				if ( retTypeToken == "float" ) retChar = 'f';
+				else if ( retTypeToken == "boolean" ) retChar = 'b';
+				else if ( retTypeToken == "handle" ) retChar = 'h';
+				else if ( retTypeToken == "vector" ) retChar = 'v';
+				else if ( retTypeToken == "string" ) retChar = 's';
+				else if ( retTypeToken == "wstring" ) retChar = 'w';
+				else if ( retTypeToken == "entity" ) retChar = 'e';
+				else if ( retTypeToken == "object" ) retChar = 'o';
+				else if ( retTypeToken == "void" ) retChar = '\0';
+
+				char fmt[ D_EVENT_MAXARGS + 1 ];
+				int numArgs = 0;
+				memset( fmt, 0, sizeof( fmt ) );
+
+				while ( src.ReadToken( &token ) ) {
+					if ( token == ")" ) {
+						break;
+					}
+					if ( token == "," ) {
+						continue;
+					}
+					char argChar = 'o';
+					if ( token == "float" ) argChar = 'f';
+					else if ( token == "boolean" ) argChar = 'b';
+					else if ( token == "handle" ) argChar = 'h';
+					else if ( token == "vector" ) argChar = 'v';
+					else if ( token == "string" ) argChar = 's';
+					else if ( token == "wstring" ) argChar = 'w';
+					else if ( token == "entity" ) argChar = 'e';
+					else if ( token == "object" ) argChar = 'o';
+
+					idToken paramName;
+					src.ReadToken( &paramName );
+
+					if ( numArgs < D_EVENT_MAXARGS ) {
+						fmt[ numArgs++ ] = argChar;
+					}
+				}
+				src.ExpectTokenString( ";" );
+
+				idEventDef* ev = NULL;
+				for ( int i = 0; i < numEventDefs; i++ ) {
+					if ( eventDefList[ i ] && idStr::Cmp( eventDefList[ i ]->GetName(), nameToken.c_str() ) == 0 ) {
+						ev = eventDefList[ i ];
+						break;
+					}
+				}
+
+				if ( ev != NULL ) {
+					sdEventDefHelper* h = static_cast< sdEventDefHelper* >( ev );
+					h->returnType = retChar;
+					h->numargs = numArgs;
+					int oldFmtLen = (int)strlen( ev->GetArgFormat() );
+					for ( int a = 0; a < numArgs; a++ ) {
+						char oldChar = ( a < oldFmtLen ) ? ev->GetArgFormat()[ a ] : '\0';
+						if ( fmt[ a ] == D_EVENT_FLOAT ) {
+							if ( oldChar == D_EVENT_INTEGER || oldChar == D_EVENT_BOOLEAN ) {
+								h->formatspec[ a ] = D_EVENT_INTEGER;
+							} else {
+								h->formatspec[ a ] = D_EVENT_FLOAT;
+							}
+						} else if ( fmt[ a ] == D_EVENT_HANDLE ) {
+							h->formatspec[ a ] = ( oldChar == D_EVENT_INTEGER ) ? D_EVENT_INTEGER : D_EVENT_HANDLE;
+						} else if ( oldChar == D_EVENT_ENTITY_NULL && fmt[ a ] == D_EVENT_ENTITY ) {
+							h->formatspec[ a ] = D_EVENT_ENTITY_NULL;
+						} else {
+							h->formatspec[ a ] = fmt[ a ];
+						}
+					}
+					h->formatspec[ numArgs ] = '\0';
+
+					unsigned int bits = 0;
+					h->argsize = 0;
+					memset( h->argOffset, 0, sizeof( h->argOffset ) );
+					for ( int a = 0; a < numArgs; a++ ) {
+						h->argOffset[ a ] = h->argsize;
+						switch( h->formatspec[ a ] ) {
+						case D_EVENT_FLOAT :
+							bits |= 1 << a;
+							h->argsize += sizeof( float );
+							break;
+						case D_EVENT_INTEGER :
+						case D_EVENT_BOOLEAN :
+						case D_EVENT_HANDLE :
+							h->argsize += sizeof( int );
+							break;
+						case D_EVENT_VECTOR :
+							h->argsize += sizeof( idVec3 );
+							break;
+						case D_EVENT_STRING :
+							h->argsize += MAX_STRING_LEN;
+							break;
+						case D_EVENT_WSTRING :
+							h->argsize += MAX_STRING_LEN * sizeof( wchar_t );
+							break;
+						case D_EVENT_OBJECT :
+						case D_EVENT_ENTITY :
+						case D_EVENT_ENTITY_NULL :
+							h->argsize += sizeof( int );
+							break;
+						}
+					}
+					h->formatspecIndex = ( 1 << ( numArgs + D_EVENT_MAXARGS ) ) | bits;
+				} else {
+					if ( numEventDefs < MAX_EVENTS ) {
+						sdEventDefHelper* h = new sdEventDefHelper();
+						h->name = strdup( nameToken.c_str() );
+						h->returnType = retChar;
+						h->numargs = numArgs;
+						for ( int a = 0; a < numArgs; a++ ) {
+							h->formatspec[ a ] = fmt[ a ];
+						}
+						h->formatspec[ numArgs ] = '\0';
+						h->allowFromScript = true;
+						h->description = "";
+						h->comments = "";
+
+						unsigned int bits = 0;
+						h->argsize = 0;
+						memset( h->argOffset, 0, sizeof( h->argOffset ) );
+						for ( int a = 0; a < numArgs; a++ ) {
+							h->argOffset[ a ] = h->argsize;
+							switch( h->formatspec[ a ] ) {
+							case D_EVENT_FLOAT :
+								bits |= 1 << a;
+								h->argsize += sizeof( float );
+								break;
+							case D_EVENT_INTEGER :
+							case D_EVENT_BOOLEAN :
+							case D_EVENT_HANDLE :
+								h->argsize += sizeof( int );
+								break;
+							case D_EVENT_VECTOR :
+								h->argsize += sizeof( idVec3 );
+								break;
+							case D_EVENT_STRING :
+								h->argsize += MAX_STRING_LEN;
+								break;
+							case D_EVENT_WSTRING :
+								h->argsize += MAX_STRING_LEN * sizeof( wchar_t );
+								break;
+							case D_EVENT_OBJECT :
+							case D_EVENT_ENTITY :
+							case D_EVENT_ENTITY_NULL :
+								h->argsize += sizeof( int );
+								break;
+							}
+						}
+						h->formatspecIndex = ( 1 << ( numArgs + D_EVENT_MAXARGS ) ) | bits;
+						h->eventnum = numEventDefs;
+						eventDefList[ numEventDefs++ ] = h;
+					}
+				}
+			}
+		}
+
+		fileSystem->FreeFile( (void*)buffer );
+	}
+};
+
+class sdSysCallBridge : public idClass {
+public:
+	void Event_ConsoleCommand( const char* cmd ) {
+		if ( cmd && *cmd ) {
+			cmdSystem->BufferCommandText( CMD_EXEC_APPEND, cmd );
+		}
+	}
+	void Event_DebugLn( idEntity* ent, const char* text ) {
+		gameLocal.Printf( "%s\n", text ? text : "" );
+	}
+	void Event_PushEndGameStat( idEntity* ent, float value ) {
+	}
+	void Event_SetShaderParm( float parm, float value ) {
+	}
+
+	static void RegisterSysEvents() {
+		struct sysBinding_t {
+			const char* name;
+			eventCallback_t callback;
+		};
+		sysBinding_t bindings[] = {
+			{ "consoleCommand", reinterpret_cast<eventCallback_t>( &sdSysCallBridge::Event_ConsoleCommand ) },
+			{ "debugln", reinterpret_cast<eventCallback_t>( &sdSysCallBridge::Event_DebugLn ) },
+			{ "pushEndGameStat", reinterpret_cast<eventCallback_t>( &sdSysCallBridge::Event_PushEndGameStat ) },
+			{ "setShaderParm", reinterpret_cast<eventCallback_t>( &sdSysCallBridge::Event_SetShaderParm ) },
+		};
+
+		idTypeInfo* threadType = idClass::GetClass( "idThread" );
+		idTypeInfo* sysThreadType = idClass::GetClass( "sdSysCallThread" );
+
+		for ( size_t i = 0; i < sizeof( bindings ) / sizeof( bindings[ 0 ] ); i++ ) {
+			const idEventDef* ev = idEventDef::FindEvent( bindings[ i ].name );
+			if ( ev ) {
+				int num = ev->GetEventNum();
+				if ( threadType && threadType->eventMap && num < idEventDef::NumEventCommands() ) {
+					threadType->eventMap[ num ] = bindings[ i ].callback;
+				}
+				if ( sysThreadType && sysThreadType->eventMap && num < idEventDef::NumEventCommands() ) {
+					sysThreadType->eventMap[ num ] = bindings[ i ].callback;
+				}
+			}
+		}
+	}
+};
 
 /*
 ===============================================================================
@@ -915,6 +1841,8 @@ void idGameLocal::LoadScript( void ) {
 	}
 
 	if ( program == NULL ) {
+		sdEventDefHelper::ReconcileEventsWithScript();
+		sdSysCallBridge::RegisterSysEvents();
 		program = new idProgram();
 		program->Init();
 	}
@@ -1382,8 +2310,10 @@ void idGameLocal::Init( void ) {
 
 	clip.AllocThread();
 
+	sdEventDefHelper::ReconcileEventsWithScript();
 	idEvent::Init();
 	idClass::InitClasses();
+	sdSysCallBridge::RegisterSysEvents();
 
 	InitConsoleCommands();
 
@@ -2536,10 +3466,13 @@ void idGameLocal::LoadMap( const char* mapName, int randSeed, int startTime ) {
 
 	localPlayerProperties.CloseActiveHudModules();
 
+	idStr cleanMapName = mapName;
+	cleanMapName.StripFileExtension();
+
 	if ( !reloadingSameMap || mapFile == NULL || mapFile->NeedsReload() ) {
 		delete mapFile;
 		mapFile = new idMapFile;
-		if ( !mapFile->Parse( ( idStr( mapName ) + "." ) + ENTITY_FILE_EXT ) ) {
+		if ( !mapFile->Parse( ( cleanMapName + "." ) + ENTITY_FILE_EXT ) ) {
 			delete mapFile;
 			mapFile = NULL;
 			Error( "Couldn't load %s", mapName );
@@ -2549,7 +3482,7 @@ void idGameLocal::LoadMap( const char* mapName, int randSeed, int startTime ) {
 	if ( !reloadingSameMap || botMapFile == NULL || botMapFile->NeedsReload() ) {
         delete botMapFile;
 		botMapFile = new idMapFile;
-		if ( !botMapFile->ParseBotEntities( ( idStr( mapName ) + "." ) + BOT_ENTITY_FILE_EXT ) ) {
+		if ( !botMapFile->ParseBotEntities( ( cleanMapName + "." ) + BOT_ENTITY_FILE_EXT ) ) {
 			delete botMapFile;
 			botMapFile = NULL;
 			Warning( "Couldn't load bot entities for  %s", mapName );
@@ -2560,8 +3493,24 @@ void idGameLocal::LoadMap( const char* mapName, int randSeed, int startTime ) {
 
 	if ( mapFile != NULL && gameLocal.isServer ) {
 		gameLocal.Printf( "----------- Loading Map AAS ------------\n" );
+		if ( !declStringMapType.LocalFind( "navigation_types", false ) ) {
+			declStringMapType.LocalFind( "navigation_types", true );
+		}
 		botThreadData.LoadMap( mapName, randSeed );
 		botThreadData.InitAAS( mapFile ); //mal: load the AAS for this map, if the mapfile was loaded. 
+	}
+
+	// Fix lightProjectionMap renderBinding text for headless server
+	qhandle_t rbHandle = declManager->GetDeclTypeHandle( "renderBinding" );
+	if ( rbHandle != -1 ) {
+		int num = declManager->GetNumDecls( rbHandle );
+		for ( int i = 0; i < num; ++i ) {
+			const idDecl* d = declManager->DeclByIndex( rbHandle, i, false );
+			if ( d != NULL && idStr::Icmp( d->GetName(), "lightProjectionMap" ) == 0 ) {
+				const_cast<idDecl*>( d )->SetText( "{\n\ttexture { lights/squarelight1.tga }\n}\n" );
+				break;
+			}
+		}
 	}
 
 	// load the collision map
@@ -3025,9 +3974,15 @@ void idGameLocal::InitFromNewMap( const char* mapName, idRenderWorld *renderWorl
 
 	Printf( "----------- Game Map Init ------------\n" );
 
-	gamestate = GAMESTATE_STARTUP;
-	gameRenderWorld = renderWorld;
-	gameSoundWorld = soundWorld;
+	if ( networkSystem && networkSystem->IsDedicated() ) {
+		headlessRenderWorldInstance.Init( renderWorld );
+		gameRenderWorld = &headlessRenderWorldInstance;
+		headlessSoundWorldInstance.Init( soundWorld );
+		gameSoundWorld = &headlessSoundWorldInstance;
+	} else {
+		gameRenderWorld = renderWorld;
+		gameSoundWorld = soundWorld;
+	}
 
 	sdVoteManager::GetInstance().FreeVotes();
 
@@ -3253,7 +4208,9 @@ void idGameLocal::MapShutdown( void ) {
 	mapFileName.Clear();
 
 	gameRenderWorld = NULL;
+	headlessRenderWorldInstance.Init( NULL );
 	gameSoundWorld = NULL;
+	headlessSoundWorldInstance.Init( NULL );
 
 	if( !networkSystem->IsDedicated() ) {
 		localPlayerProperties.ShutdownGUIs();
@@ -3688,7 +4645,7 @@ void idGameLocal::CacheDictionaryMedia( const idDict& dict ) {
 		return;
 	}
 
-	if ( !g_cacheDictionaryMedia.GetBool() ) {
+	if ( !g_cacheDictionaryMedia.GetBool() || ( networkSystem != NULL && networkSystem->IsDedicated() ) ) {
 		return;
 	}
 

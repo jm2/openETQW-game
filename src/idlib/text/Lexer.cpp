@@ -279,10 +279,13 @@ Returns 0 if there is no token left to be read.
 ================
 */
 int idLexer::SkipWhiteSpace( bool currentLine ) {
+	if ( !idLexer::script_p ) {
+		return 0;
+	}
 	while( 1 ) {
 		// skip white space
 		while( *idLexer::script_p <= ' ' ) {
-			if ( !*idLexer::script_p ) {
+			if ( !*idLexer::script_p || idLexer::script_p >= idLexer::end_p ) {
 				return 0;
 			}
 			if ( *idLexer::script_p == '\n' ) {
@@ -868,6 +871,9 @@ int idLexer::ReadToken( idToken *token ) {
 	// read from binary file if loaded
 	if ( binary.IsLoaded() ) {
 		return binary.ReadToken( token );
+	}
+	if ( !loaded || !script_p ) {
+		return 0;
 	}
 
 	// save script pointer
@@ -1843,6 +1849,11 @@ bool idLexer::LoadMemory( const char *ptr, int length, const char *name, int sta
 	if ( idLexer::loaded ) {
 		idLib::common->Error("idLexer::LoadMemory: another script already loaded");
 		return false;
+	}
+	static const char emptyBuffer[] = "";
+	if ( ptr == NULL || length < 0 ) {
+		ptr = emptyBuffer;
+		length = 0;
 	}
 	idLexer::filename = name;
 	idLexer::filename.CollapsePath();

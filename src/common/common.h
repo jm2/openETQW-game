@@ -108,13 +108,14 @@ public:
 	#define BUILD_STRING				"MacOSX-x64"
 	#define BUILD_OS_ID					1
 	#define	CPUSTRING					"x64"
-	#define CPU_EASYARGS				1
+	#define CPU_EASYARGS				0
 #elif defined(__arm64__) || defined(__aarch64__)
 	#define BUILD_STRING				"MacOSX-arm64"
 	#define BUILD_OS_ID					1
 	#define	CPUSTRING					"arm64"
-	#define CPU_EASYARGS				1
+	#define CPU_EASYARGS				0
 #endif
+
 
 #if defined(__i386__)
 #define ALIGN16( x )					x __attribute__ ((aligned (16))) 
