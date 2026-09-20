@@ -1566,9 +1566,12 @@ sdInventory::GetPlayerJoint
 */
 jointHandle_t sdInventory::GetPlayerJoint( const idDict& dict, const char* name ) {
 	const char* value = dict.GetString( name );
+	if ( value == NULL || value[ 0 ] == '\0' ) {
+		return INVALID_JOINT;
+	}
 	jointHandle_t handle = owner->GetAnimator()->GetJointHandle( value );
 	if ( handle == INVALID_JOINT ) {
-		gameLocal.Error( "sdInventory::GetPlayerJoint '%s' not found for '%s' on '%s'", value, name, owner->name.c_str() );
+		gameLocal.Warning( "sdInventory::GetPlayerJoint '%s' not found for '%s' on '%s'", value, name, owner->name.c_str() );
 	}
 	return handle;
 }

@@ -722,7 +722,9 @@ bool sdUserInterfaceLocal::Load( const char* name ) {
 		}
 	} catch ( idException& exception ) {
 		PrintStackTrace();
-		throw exception;
+		gameLocal.Warning( "sdUserInterfaceLocal::Load failed on '%s': %s", name, exception.error );
+		PopTrace();
+		return false;
 	}
 
 	PopTrace();
