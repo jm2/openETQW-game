@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 project(
   'openETQW-game',
   ['c', 'cpp'],
