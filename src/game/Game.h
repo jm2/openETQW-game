@@ -484,6 +484,7 @@ class sdNetService;
 class sdAdManager;
 class sdKeyInputManager;
 class idAASFileManager;
+class idNavigationSystem;
 class sdNotificationSystem;
 class sdGraphManager;
 
@@ -505,7 +506,10 @@ struct gameImport_t {
 	idRenderModelManager*		renderModelManager;		// render model manager
 	idDeclManager*				declManager;			// declaration manager
 	idCollisionModelManager*	collisionModelManager;	// collision model manager
-	idAASFileManager*			AASFileManager;
+	union {
+		idAASFileManager*		AASFileManager;
+		idNavigationSystem*		navigationSystem;
+	};
 	rvBSEManager*				bse;					// effects system
 #ifndef _XENON
 	sdNetService*				networkService;			// online services

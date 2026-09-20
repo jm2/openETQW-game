@@ -6,6 +6,10 @@
 #define _BSE_H_INC_
 
 #include "../sound/SoundEmitter.h"
+#include "BSEInterface.h"
+#include "BSE_Envelope.h"
+#include "BSE_SpawnDomains.h"
+#include "BSE_Particle.h"
 
 // BSE - Basic System for Effects
 

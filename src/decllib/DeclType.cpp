@@ -62,6 +62,7 @@ const char* declIdentifierList[] = {
 #include "DeclSurfaceType.h"
 #include "DeclSurfaceTypeMap.h"
 #include "declRenderBinding.h"
+#include "declRenderProgram.h"
 #include "declImposter.h"
 #include "declLocStr.h"
 #include "declTemplate.h"
