@@ -1,0 +1,53 @@
+# Raw SDK installer binary (CRITICAL: retail executables/installers must never be committed)
+ETQW-SDK-1.5.exe
+ETQW-SDK-*.exe
+*.exe
+*.pdb
+
+# Meson and Ninja build directories
+/build/
+/builddir*/
+/meson-private/
+/meson-logs/
+/meson-info/
+/.ninja_log
+/.ninja_deps
+/compile_commands.json
+
+# Staging and scratch directories
+/.tmp/
+
+# Compiled objects, binaries, and libraries
+*.o
+*.obj
+*.lo
+*.la
+*.dylib
+*.so
+*.so.*
+*.dll
+*.a
+*.lib
+
+# IDE and generated project files
+src/.vs/
+src/*.vcxproj
+src/*.vcxproj.filters
+src/*.vcxproj.user
+Win32/
+x64/
+
+# Local environment and OS artifacts
+.DS_Store
+.DS_Store?
+._*
+Thumbs.db
+
+# Python caches
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Diagnostic logs
+*.log
+*.log.*
