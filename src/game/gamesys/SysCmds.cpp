@@ -1089,8 +1089,12 @@ void Cmd_EnterVehicle_f( const idCmdArgs &args ) {
 		return;
 	}
 	vehicle->FindPositionForPlayer( player );
-	gameLocal.Printf( "ENTER_VEHICLE: client %d entered %s (seat %d)\n",
-		clientNum, vehicle->name.c_str(), player->GetProxyPositionId() );
+	if ( player->GetProxyEntity() == vehicle ) {
+		gameLocal.Printf( "ENTER_VEHICLE: client %d entered %s (seat %d)\n",
+			clientNum, vehicle->name.c_str(), player->GetProxyPositionId() );
+	} else {
+		gameLocal.Printf( "ENTER_VEHICLE: failed for client %d (vehicle full or inaccessible)\n", clientNum );
+	}
 }
 
 /*
@@ -1120,8 +1124,11 @@ void Cmd_ExitVehicle_f( const idCmdArgs &args ) {
 	}
 	sdTransport* vehicle = proxy->Cast< sdTransport >();
 	if ( vehicle && vehicle->GetUsableInterface() ) {
-		vehicle->GetUsableInterface()->OnExit( player, true );
-		gameLocal.Printf( "EXIT_VEHICLE: client %d exited %s\n", clientNum, proxy->name.c_str() );
+		if ( vehicle->GetUsableInterface()->OnExit( player, true ) ) {
+			gameLocal.Printf( "EXIT_VEHICLE: client %d exited %s\n", clientNum, proxy->name.c_str() );
+		} else {
+			gameLocal.Printf( "EXIT_VEHICLE: failed for client %d (egress obstructed)\n", clientNum );
+		}
 	} else {
 		gameLocal.Printf( "EXIT_VEHICLE: failed for client %d\n", clientNum );
 	}
