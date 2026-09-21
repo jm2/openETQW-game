@@ -218,6 +218,8 @@ bool sdDeployRequest::CallForDropOff( void ) {
 	helper.Push( rotation );
 	other->CallNonBlockingScriptEvent( other->scriptObject->GetFunction( "OnSetDeploymentParms" ), helper );
 
+	gameLocal.Printf( "[DEPLOY_DELIVER] Carrier spawned for %s at (%.2f, %.2f, %.2f)\n", object->GetName(), position.x, position.y, position.z );
+
 	return true;
 }
 

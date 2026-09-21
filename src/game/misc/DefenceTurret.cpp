@@ -379,6 +379,7 @@ void sdDefenceTurret::SetTargetEntity( idEntity* entity ) {
 
 	if ( entity != NULL ) {
 		turretFlags.hasTarget = true;
+		gameLocal.Printf( "[TURRET_TARGET] %s acquired target %s\n", name.c_str(), entity->name.c_str() );
 	} else {
 		turretFlags.hasTarget = false;
 		aimer.ClearTarget();
@@ -483,6 +484,13 @@ void sdDefenceTurret::BeginAttack( void ) {
 	}
 
 	turretFlags.attacking = true;
+
+	if ( target != NULL ) {
+		const idVec3& tPos = target->GetPhysics()->GetOrigin();
+		gameLocal.Printf( "[TURRET_ENGAGE] %s attacking target %s at (%.2f, %.2f, %.2f)\n", name.c_str(), target->name.c_str(), tPos.x, tPos.y, tPos.z );
+	} else {
+		gameLocal.Printf( "[TURRET_ENGAGE] %s attacking\n", name.c_str() );
+	}
 
 	scriptObject->CallEvent( "OnBeginAttack" );
 }

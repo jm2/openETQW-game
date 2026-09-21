@@ -227,10 +227,6 @@ sdGameRulesObjective::EndGame
 ================
 */
 void sdGameRulesObjective::EndGame( void ) {
-	if ( IsWarmup() ) {
-		return;
-	}
-
 	NextStateDelayed( GS_GAMEREVIEW, 1000 );
 
 	RecordWinningTeam( winningTeam, "maps", true );
