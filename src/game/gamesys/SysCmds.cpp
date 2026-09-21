@@ -844,13 +844,58 @@ void Cmd_GetViewpos_f( const idCmdArgs &args ) {
 		clipOutput = va( "%s %.2f %.2f %.2f\n", view->vieworg.ToString(), angles.yaw, angles.pitch, angles.roll );
 	} else {
 		player->GetViewPos( origin, axis );
-		idAngles angles = view->viewaxis[0].ToAngles();
+		idAngles angles = axis[0].ToAngles();
 		output = va( "(%s) %.2f %.2f %.2f", origin.ToString(), angles.yaw, angles.pitch, angles.roll );
 		clipOutput = va( "%s %.2f %.2f %.2f\n", origin.ToString(), angles.yaw, angles.pitch, angles.roll );
 	}
 
 	gameLocal.Printf( "Copying output to clipboard...\n(x y z) yaw pitch roll\n%s\n", output.c_str() );
 	sys->SetClipboardData( va( L"%hs", clipOutput.c_str() ) );
+}
+
+/*
+==================
+Cmd_PlayerPos_f
+==================
+*/
+void Cmd_PlayerPos_f( const idCmdArgs &args ) {
+	idPlayer *player = NULL;
+	if ( args.Argc() > 1 ) {
+		int clientNum = atoi( args.Argv( 1 ) );
+		if ( clientNum >= 0 && clientNum < MAX_CLIENTS && gameLocal.entities[ clientNum ] != NULL ) {
+			player = gameLocal.entities[ clientNum ]->Cast< idPlayer >();
+		}
+	}
+	if ( !player ) {
+		player = gameLocal.GetLocalPlayer();
+	}
+	if ( !player ) {
+		int clientNum = 0;
+		if ( clientNum >= 0 && clientNum < MAX_CLIENTS && gameLocal.entities[ clientNum ] != NULL ) {
+			player = gameLocal.entities[ clientNum ]->Cast< idPlayer >();
+		}
+	}
+	if ( !player ) {
+		gameLocal.Printf( "PLAYER_POS: no player\n" );
+		return;
+	}
+
+	const idPhysics_Player& phys = player->GetPlayerPhysics();
+	const idVec3& org = phys.GetOrigin();
+	const idVec3& vel = phys.GetLinearVelocity();
+	bool ground = phys.IsGrounded();
+	bool ducked = phys.IsCrouching();
+	bool prone = phys.IsProne();
+	bool jumped = phys.HasJumped();
+	bool attacking = ( player->GetWeapon() != NULL ) ? player->GetWeapon()->IsAttacking() : false;
+	const char* teamName = player->GetGameTeam() ? player->GetGameTeam()->GetName() : "none";
+
+	gameLocal.Printf( "PLAYER_POS: (%.2f, %.2f, %.2f) vel: (%.2f, %.2f, %.2f) ground: %d ducked: %d prone: %d jumped: %d (client: %d team: %s atk: %d cmd: fwd=%d side=%d up=%d atk_cmd=%d lagged=%d frozen=%d inh=%d)\n",
+		org.x, org.y, org.z, vel.x, vel.y, vel.z, ground ? 1 : 0, ducked ? 1 : 0, prone ? 1 : 0, jumped ? 1 : 0,
+		player->entityNumber, teamName, attacking ? 1 : 0,
+		(int)player->usercmd.forwardmove, (int)player->usercmd.rightmove, (int)player->usercmd.upmove,
+		player->usercmd.buttons.btn.attack ? 1 : 0,
+		player->GetIsLagged() ? 1 : 0, phys.IsFrozen() ? 1 : 0, player->InhibitMovement() ? 1 : 0 );
 }
 
 /*
@@ -3068,6 +3113,7 @@ void idGameLocal::InitConsoleCommands( void ) {
 	cmdSystem->AddCommand( "kill",					Cmd_Kill_f,					CMD_FL_GAME,				"kills the player" );
 	cmdSystem->AddCommand( "toggleLimbo",			Cmd_ToggleLimbo_f,			CMD_FL_GAME,				"toggle limbo menu" );
 	cmdSystem->AddCommand( "closeLimbo",			Cmd_CloseLimbo_f,			CMD_FL_GAME,				"close limbo menu" );
+	cmdSystem->AddCommand( "playerPos",				Cmd_PlayerPos_f,			CMD_FL_GAME,				"prints current player position, velocity, and stance" );
 #ifdef SD_PRIVATE_BETA_BUILD
 	cmdSystem->AddCommand( "where",					Cmd_GetViewpos_f,			CMD_FL_GAME,				"prints the current view position (x y z) yaw pitch roll" );
 	cmdSystem->AddCommand( "getviewpos",			Cmd_GetViewpos_f,			CMD_FL_GAME,				"prints the current view position (x y z) yaw pitch roll" );
@@ -3237,5 +3283,6 @@ idGameLocal::ShutdownConsoleCommands
 =================
 */
 void idGameLocal::ShutdownConsoleCommands( void ) {
+	cmdSystem->RemoveCommand( "playerPos" );
 	cmdSystem->RemoveFlaggedCommands( CMD_FL_GAME );
 }

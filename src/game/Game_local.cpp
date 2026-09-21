@@ -1048,7 +1048,7 @@ const idEventDef EV_ScriptMissing_resetWeapon( "resetWeapon", "", '\0' );
 const idEventDef EV_ScriptMissing_getActiveWeapon( "getActiveWeapon", "", 's' );
 const idEventDef EV_ScriptMissing_setSwayScale( "setSwayScale", "f", '\0' );
 const idEventDef EV_ScriptMissing_canRevive( "canRevive", "", 'b' );
-const idEventDef EV_ScriptMissing_isDead( "isDead", "", 'b' );
+extern const idEventDef EV_ScriptMissing_isDead( "isDead", "", 'b' );
 const idEventDef EV_ScriptMissing_getItemIndexByName( "getItemIndexByName", "s", 'f' );
 const idEventDef EV_ScriptMissing_getItemNameByIndex( "getItemNameByIndex", "f", 's' );
 const idEventDef EV_ScriptMissing_randomPath( "randomPath", "", 'e' );
@@ -5265,14 +5265,16 @@ void idGameLocal::RunFrame( const usercmd_t *clientCmds, int elapsedTime ) {
 		gameRenderWorld->DebugClearPolygons( time );
 
 		// set the user commands for this frame
-		memcpy( usercmds, clientCmds, numClients * sizeof( usercmds[ 0 ] ) );
+		memcpy( usercmds, clientCmds, MAX_CLIENTS * sizeof( usercmds[ 0 ] ) );
 
 		UpdateDeploymentRequests();
 
 		// update our gravity vector if needed.
 		UpdateGravity();
 
-		bse->StartFrame();
+		if ( bse != NULL ) {
+			bse->StartFrame();
+		}
 
 		timer_think.Clear();
 		timer_think.Start();
@@ -5399,7 +5401,9 @@ void idGameLocal::RunFrame( const usercmd_t *clientCmds, int elapsedTime ) {
 		// set latest world state as current for the bots
 		botThreadData.SetCurrentGameWorldState();
 
-		bse->EndFrame();
+		if ( bse != NULL ) {
+			bse->EndFrame();
+		}
 
 		UpdateLoggedDecals();
 

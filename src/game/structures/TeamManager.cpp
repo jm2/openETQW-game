@@ -1428,6 +1428,10 @@ sdTeamInfo::GetNumPlayers
 int sdTeamInfo::GetNumPlayers( bool excludeBots ) const {
 	int count = 0;
 	for ( int i = 0; i < MAX_CLIENTS; i++ ) {
+		if ( !gameLocal.IsClientConnected( i ) ) {
+			continue;
+		}
+
 		idPlayer* player = gameLocal.GetClient( i );
 		if ( player == NULL ) {
 			continue;

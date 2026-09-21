@@ -726,8 +726,8 @@ void idGameLocal::ServerClientBegin( int clientNum, bool isBot ) {
 	sdGlobalStatsTracker::GetInstance().Restore( clientNum );
 	SetupFixedClientRank( clientNum );
 
-	if ( clientNum == localClientNum ) {
-		rules->EnterGame( GetLocalPlayer() );
+	if ( player != NULL ) {
+		rules->EnterGame( player );
 	}
 }
 
@@ -783,6 +783,7 @@ void idGameLocal::ServerClientDisconnect( int clientNum ) {
 		if ( !disconnectClient->userInfo.isBot ) {
 			sdProficiencyManager::GetInstance().CacheProficiency( disconnectClient );
 		}
+		disconnectClient->SetGameTeam( NULL );
 		disconnectClient->PostEventMS( &EV_Remove, 0 );
 	}
 
@@ -3697,12 +3698,12 @@ void idGameLocal::ClientPrediction( const usercmd_t* clientCmds, const usercmd_t
 #endif
 	sdProfileHelperManager::GetInstance().Update();
 
-	if ( isNewFrame ) {
+	if ( isNewFrame && bse != NULL ) {
 		bse->StartFrame();
 	}
 
 	// set the user commands for this frame
-	memcpy( usercmds, clientCmds, numClients * sizeof( usercmds[ 0 ] ) );
+	memcpy( usercmds, clientCmds, MAX_CLIENTS * sizeof( usercmds[ 0 ] ) );
 
 	// update demo state
 	demoManager.RunDemoFrame( demoCmd );
@@ -3825,7 +3826,9 @@ void idGameLocal::ClientPrediction( const usercmd_t* clientCmds, const usercmd_t
 				}
 			}
 
-			bse->EndFrame();
+			if ( bse != NULL ) {
+				bse->EndFrame();
+			}
 
 			UpdateLoggedDecals();
 

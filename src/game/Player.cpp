@@ -514,6 +514,7 @@ const idEventDef EV_Player_AdjustDeathYaw( "adjustDeathYaw", '\0', DOC_TEXT( "Al
 const idEventDef EV_Player_SetCarryingObjective( "setCarryingObjective", '\0', DOC_TEXT( "Sets flag which controls whether the objective icon is shown by the player's name on the scoreboard." ), 1, NULL, "b", "value", "Whether to set or clear the flag." );
 const idEventDef EV_Player_AddDamageEvent( "addDamageEvent", '\0', DOC_TEXT( "Add a damage event for the player." ), 4, NULL, "d", "time", "Time for event.", "f", "dir", "Direction for the damage event.", "f", "damage", "Amount of damage done.", "b", "update", "Continually update direction." );
 const idEventDef EV_Player_IsInLimbo( "isInLimbo", 'b', DOC_TEXT( "Returns whether the player is currently in the limbo waiting to respawn." ), 0, NULL );
+extern const idEventDef EV_ScriptMissing_isDead;
 
 CLASS_DECLARATION( idActor, idPlayer )
 	EVENT( EV_Player_GetButton,				idPlayer::Event_GetButton )
@@ -676,6 +677,7 @@ CLASS_DECLARATION( idActor, idPlayer )
 	EVENT( EV_Player_SetCarryingObjective,		idPlayer::Event_SetCarryingObjective )
 	EVENT( EV_Player_AddDamageEvent,			idPlayer::Event_AddDamageEvent )
 	EVENT( EV_Player_IsInLimbo,					idPlayer::Event_IsInLimbo )
+	EVENT( EV_ScriptMissing_isDead,				idPlayer::Event_IsDead )
 
 END_CLASS
 
@@ -1639,7 +1641,10 @@ void idPlayer::Spawn( void ) {
 		gameLocal.localPlayerProperties.UpdateTeam( team );
 		gameLocal.localPlayerProperties.SetClipIndex( 0 );
 		if ( !sdDemoManager::GetInstance().InPlayBack() && com_timeServer.GetInteger() <= 0 ) {
-			gameLocal.localPlayerProperties.GetLimboMenu()->Enable( true, true );
+			sdLimboMenu* limbo = gameLocal.localPlayerProperties.GetLimboMenu();
+			if ( limbo != NULL ) {
+				limbo->Enable( true, true );
+			}
 		}
 	}
 
@@ -2057,7 +2062,7 @@ void idPlayer::RunToolTipTimelineEvent( const sdDeclToolTip::timelineEvent_t& ev
 					if ( lastWeaponSwitchPos == -1 ) {
 						lastWeaponSwitchPos = GetInventory().GetIdealWeapon();
 					}
-					if ( weaponMenu->IsMenuVisible() ) {
+					if ( weaponMenu && weaponMenu->IsMenuVisible() ) {
 						lastWeaponMenuState = true;
 					}
 
@@ -2515,6 +2520,8 @@ void idPlayer::OnRespawn( bool revive, bool parachute, int respawnTime, bool for
 	}
 
 	physicsObj.SetupPlayerClipModels();
+	physicsObj.SetClipModelAxis();
+	physicsObj.LinkClip();
 
 	UpdateCombatModel();
 
@@ -2527,8 +2534,6 @@ void idPlayer::OnRespawn( bool revive, bool parachute, int respawnTime, bool for
 			Init( false );
 		}
 		SetPhysics( &physicsObj );
-		physicsObj.SetClipModelAxis();
-		physicsObj.LinkClip();
 		physicsObj.SetLinearVelocity( vec3_origin );
 	}
 	physicsObj.SetFrozen( false );
@@ -2622,6 +2627,13 @@ void idPlayer::SpawnToPoint( const idVec3& spawnOrigin, const idAngles& spawnAng
 	playerFlags.wantSpawn = false;
 
 	OnRespawn( revive, parachute, gameLocal.time, forced );
+
+	gameLocal.Printf( "Player %d ('%s') spawned at (%.2f, %.2f, %.2f) angles (%.2f, %.2f, %.2f) team %s spectating %d\n",
+		entityNumber, userInfo.name.c_str(),
+		GetPhysics()->GetOrigin().x, GetPhysics()->GetOrigin().y, GetPhysics()->GetOrigin().z,
+		spawnAngles.pitch, spawnAngles.yaw, spawnAngles.roll,
+		GetGameTeam() ? GetGameTeam()->GetLookupName() : "none",
+		IsSpectating() ? 1 : 0 );
 
 	damageAreasScale.Clear();
 	damageAreasScale.SetNum( LDA_COUNT );
@@ -4475,7 +4487,7 @@ void idPlayer::Weapon_Combat( void ) {
 			ShowWeaponMenu( sdWeaponSelectionMenu::AT_DISABLED );
 		}
 
-		if( weaponMenu->IsPassiveSwitchActive() ) {
+		if( weaponMenu && weaponMenu->IsPassiveSwitchActive() ) {
 			if ( ( !clientOldButtons.btn.attack && clientButtons.btn.attack ) || ( !clientOldButtons.btn.altAttack && clientButtons.btn.altAttack ) ) {
 				if ( !gameLocal.isPaused ) {
 					AcceptWeaponSwitch();
@@ -8181,7 +8193,9 @@ void idPlayer::Damage( idEntity *inflictor, idEntity *attacker, const idVec3 &di
 
 	if( gameLocal.IsLocalPlayer( this )) {
 		sdWeaponSelectionMenu* weaponMenu = gameLocal.localPlayerProperties.GetWeaponSelectionMenu();
-		weaponMenu->SetSwitchActive( sdWeaponSelectionMenu::AT_DISABLED );
+		if ( weaponMenu != NULL ) {
+			weaponMenu->SetSwitchActive( sdWeaponSelectionMenu::AT_DISABLED );
+		}
 	}
 }
 
@@ -11368,7 +11382,9 @@ void idPlayer::ShowWeaponMenu( sdWeaponSelectionMenu::eActivationType show, bool
 	}
 
 	sdWeaponSelectionMenu* weaponMenu = gameLocal.localPlayerProperties.GetWeaponSelectionMenu();
-	weaponMenu->SetSwitchActive( show );
+	if ( weaponMenu != NULL ) {
+		weaponMenu->SetSwitchActive( show );
+	}
 
 	if( show == sdWeaponSelectionMenu::AT_DISABLED ) {
 		weaponSwitchTimeout = 0;
@@ -11380,21 +11396,20 @@ void idPlayer::ShowWeaponMenu( sdWeaponSelectionMenu::eActivationType show, bool
 		} else {
 			// cancel context/radio menu if you try to switch weapons while either is up
 			sdQuickChatMenu* contextMenu = gameLocal.localPlayerProperties.GetContextMenu();
-			if ( contextMenu->Enabled() ) {
+			if ( contextMenu && contextMenu->Enabled() ) {
 				contextMenu->Enable( false );
 			}
 
 			sdQuickChatMenu* quickChatMenu = gameLocal.localPlayerProperties.GetQuickChatMenu();
-			if ( quickChatMenu->Enabled() ) {
+			if ( quickChatMenu && quickChatMenu->Enabled() ) {
 				quickChatMenu->Enable( false );
 			}
-			sdWeaponSelectionMenu* weaponMenu = gameLocal.localPlayerProperties.GetWeaponSelectionMenu();
-			if( !weaponMenu->Enabled() ) {
+			if( weaponMenu && !weaponMenu->Enabled() ) {
 				weaponMenu->Enable( true );
 			}
 
 			sdFireTeamMenu* fireTeamMenu = gameLocal.localPlayerProperties.GetFireTeamMenu();
-			if( fireTeamMenu->Enabled() ) {
+			if( fireTeamMenu && fireTeamMenu->Enabled() ) {
 				fireTeamMenu->Enable( false );
 			}
 		}
@@ -11432,7 +11447,7 @@ bool idPlayer::AcceptWeaponSwitch( bool hideWeaponMenu ) {
 
 	bool retVal = false;
 	sdWeaponSelectionMenu* weaponMenu = gameLocal.localPlayerProperties.GetWeaponSelectionMenu();
-	if( weaponMenu->IsMenuVisible() ) {
+	if( weaponMenu && weaponMenu->IsMenuVisible() ) {
 
 		if( GetInventory().GetSwitchingWeapon() != GetInventory().GetCurrentWeapon() ) {
 			retVal = true;
@@ -15210,6 +15225,15 @@ idPlayer::Event_IsInLimbo
 */
 void idPlayer::Event_IsInLimbo( void ) {
 	sdProgram::ReturnBoolean( IsInLimbo() );
+}
+
+/*
+================
+idPlayer::Event_IsDead
+================
+*/
+void idPlayer::Event_IsDead( void ) {
+	sdProgram::ReturnBoolean( IsDead() );
 }
 
 /*

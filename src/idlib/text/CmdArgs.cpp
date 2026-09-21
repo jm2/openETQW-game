@@ -97,10 +97,18 @@ void idCmdArgs::TokenizeString( const char *text, bool keepAsStrings ) {
 			return;
 		}
 
-		// check for negative numbers
+		// check for negative numbers and +/- command prefixes
 		if ( !keepAsStrings && ( token == "-" ) ) {
 			if ( lex.CheckTokenType( TT_NUMBER, 0, &number ) ) {
 				token = "-" + number;
+			} else if ( lex.CheckTokenType( TT_NAME, 0, &number ) ) {
+				token = "-" + number;
+			}
+		} else if ( !keepAsStrings && ( token == "+" ) ) {
+			if ( lex.CheckTokenType( TT_NUMBER, 0, &number ) ) {
+				token = "+" + number;
+			} else if ( lex.CheckTokenType( TT_NAME, 0, &number ) ) {
+				token = "+" + number;
 			}
 		}
 

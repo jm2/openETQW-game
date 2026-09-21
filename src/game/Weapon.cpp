@@ -1125,6 +1125,9 @@ void idWeapon::Event_SendTracerMessage( const idVec3& start, const idVec3& end, 
 		return;
 	}
 
+	gameLocal.Printf( "EVENT_TRACER: server broadcast tracer weapon '%s' start=(%.2f, %.2f, %.2f) end=(%.2f, %.2f, %.2f)\n",
+		GetName(), start.x, start.y, start.z, end.x, end.y, end.z );
+
 	sdEntityBroadcastUnreliableEvent message( this, EVENT_TRACER );
 	message.WriteLong( weaponItem->Index() );
 	message.WriteVector( start );
@@ -1148,11 +1151,14 @@ bool idWeapon::ClientReceiveUnreliableEvent( int event, int time, const idBitMsg
 				return true;
 			}
 
-			if ( scriptObject != NULL ) {
-				idVec3 start = msg.ReadVector();
-				idVec3 end = msg.ReadVector();
-				float strength = msg.ReadFloat();
+			idVec3 start = msg.ReadVector();
+			idVec3 end = msg.ReadVector();
+			float strength = msg.ReadFloat();
 
+			gameLocal.Printf( "EVENT_TRACER: client received tracer weapon '%s' start=(%.2f, %.2f, %.2f) end=(%.2f, %.2f, %.2f)\n",
+				GetName(), start.x, start.y, start.z, end.x, end.y, end.z );
+
+			if ( scriptObject != NULL ) {
 				sdScriptHelper h1;
 				h1.Push( start );
 				h1.Push( end );
