@@ -68,6 +68,7 @@ idCVar* idCVar::staticVars;
 #include "./effects/Wakes.h"
 #include "./effects/TireTread.h"
 #include "./effects/FootPrints.h"
+#include "botai/aas/AASFile_local.h"
 #include "ContentMask.h"
 #include "proficiency/StatsTracker.h"
 // Gordon: FIXME: Fix the case of this directory
@@ -117,7 +118,7 @@ idSoundSystem *				soundSystem = NULL;
 idRenderModelManager *		renderModelManager = NULL;
 idDeclManager *				declManager = NULL;
 idCollisionModelManager *	collisionModelManager = NULL;
-idAASFileManager*			AASFileManager = NULL;
+idAASFileManager*			AASFileManager = &aasFileManagerLocal;
 sdNetService*				networkService = NULL;
 sdAdManager*				adManager = NULL;
 sdKeyInputManager*			keyInputManager = NULL;
@@ -825,7 +826,7 @@ extern "C" gameExport_t *GetGameAPI( gameImport_t *import ) {
 #endif
 		adManager					= import->adManager;
 		keyInputManager				= import->keyInputManager;
-		AASFileManager				= import->AASFileManager;
+		AASFileManager				= &aasFileManagerLocal;
 		notificationSystem			= import->notificationSystem;
 		graphManager				= import->graphManager;
 
@@ -3880,7 +3881,15 @@ void idGameLocal::SetupMapMetaData( const char* mapName ) {
 
 	idStr strippedFileName = mapName;
 	strippedFileName.StripFileExtension();
-	mapMetaData = mapMetaDataList->FindMetaData( strippedFileName.c_str(), &defaultMetaData );
+	mapMetaData = mapMetaDataList->FindMetaData( strippedFileName.c_str(), NULL );
+	if ( mapMetaData == NULL && idStr::Icmpn( strippedFileName.c_str(), "maps/", 5 ) != 0 ) {
+		idStr withMaps = "maps/" + strippedFileName;
+		mapMetaData = mapMetaDataList->FindMetaData( withMaps.c_str(), NULL );
+	}
+	if ( mapMetaData == NULL ) {
+		mapMetaData = &defaultMetaData;
+	}
+	common->Printf( "SetupMapMetaData: '%s' -> mapinfo='%s'\n", mapName, mapMetaData->GetString( "mapinfo", "default" ) );
 }
 
 /*
@@ -7900,6 +7909,23 @@ const sdSpawnPoint* idGameLocal::SelectInitialSpawnPoint( idPlayer *player, idVe
 		}
 
 		break;
+	}
+
+	if ( availableSpots == 0 && numBlockedSpots == 0 ) {
+		for ( int i = 0; i < spawnSpots.Num() && availableSpots < MAX_AVAILABLE_SPAWN_POINTS; i++ ) {
+			const sdSpawnPoint& tempSpot = spawnSpots[ i ];
+			if ( !tempSpot.InUse() ) {
+				continue;
+			}
+			idEntity* other = tempSpot.GetOwner();
+			if ( player->GetGameTeam() != NULL ) {
+				if ( other && other->GetGameTeam() == player->GetGameTeam() ) {
+					spots[ availableSpots++ ] = &tempSpot;
+				} else if ( other && idStr::FindText( other->GetName(), player->GetGameTeam()->GetLookupName() ) != -1 ) {
+					spots[ availableSpots++ ] = &tempSpot;
+				}
+			}
+		}
 	}
 
 	if ( availableSpots == 0 && numBlockedSpots == 0 ) {

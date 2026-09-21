@@ -80,6 +80,8 @@ bool idAASLocal::Init( const char *mapName, unsigned int mapFileCRC ) {
 		return false;
 	}
 
+	gameLocal.Printf( "Loaded AAS file: '%s' (%d areas, %d reachabilities)\n", file->GetName(), file->GetNumAreas(), file->GetNumReachabilities() );
+
 	SetupRouting();
 
 	SetupObstaclePVS();
