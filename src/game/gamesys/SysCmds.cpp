@@ -862,22 +862,27 @@ void Cmd_PlayerPos_f( const idCmdArgs &args ) {
 	idPlayer *player = NULL;
 	if ( args.Argc() > 1 ) {
 		int clientNum = atoi( args.Argv( 1 ) );
-		if ( clientNum >= 0 && clientNum < MAX_CLIENTS && gameLocal.entities[ clientNum ] != NULL ) {
-			player = gameLocal.entities[ clientNum ]->Cast< idPlayer >();
+		if ( clientNum < 0 || clientNum >= MAX_CLIENTS || gameLocal.entities[ clientNum ] == NULL ) {
+			gameLocal.Printf( "PLAYER_POS: invalid client %d\n", clientNum );
+			return;
 		}
-	}
-	if ( !player ) {
+		player = gameLocal.entities[ clientNum ]->Cast< idPlayer >();
+		if ( !player ) {
+			gameLocal.Printf( "PLAYER_POS: entity %d is not a player\n", clientNum );
+			return;
+		}
+	} else {
 		player = gameLocal.GetLocalPlayer();
-	}
-	if ( !player ) {
-		int clientNum = 0;
-		if ( clientNum >= 0 && clientNum < MAX_CLIENTS && gameLocal.entities[ clientNum ] != NULL ) {
-			player = gameLocal.entities[ clientNum ]->Cast< idPlayer >();
+		if ( !player ) {
+			int clientNum = 0;
+			if ( clientNum >= 0 && clientNum < MAX_CLIENTS && gameLocal.entities[ clientNum ] != NULL ) {
+				player = gameLocal.entities[ clientNum ]->Cast< idPlayer >();
+			}
 		}
-	}
-	if ( !player ) {
-		gameLocal.Printf( "PLAYER_POS: no player\n" );
-		return;
+		if ( !player ) {
+			gameLocal.Printf( "PLAYER_POS: no player\n" );
+			return;
+		}
 	}
 
 	const idPhysics_Player& phys = player->GetPlayerPhysics();
@@ -888,11 +893,11 @@ void Cmd_PlayerPos_f( const idCmdArgs &args ) {
 	bool prone = phys.IsProne();
 	bool jumped = phys.HasJumped();
 	bool attacking = ( player->GetWeapon() != NULL ) ? player->GetWeapon()->IsAttacking() : false;
-	const char* teamName = player->GetGameTeam() ? player->GetGameTeam()->GetName() : "none";
+	const char* teamName = player->GetGameTeam() ? player->GetGameTeam()->GetLookupName() : "none";
 
-	gameLocal.Printf( "PLAYER_POS: (%.2f, %.2f, %.2f) vel: (%.2f, %.2f, %.2f) ground: %d ducked: %d prone: %d jumped: %d (client: %d team: %s atk: %d cmd: fwd=%d side=%d up=%d atk_cmd=%d lagged=%d frozen=%d inh=%d)\n",
+	gameLocal.Printf( "PLAYER_POS: (%.2f, %.2f, %.2f) vel: (%.2f, %.2f, %.2f) ground: %d ducked: %d prone: %d jumped: %d (client: %d team: %s spectating %d atk: %d cmd: fwd=%d side=%d up=%d atk_cmd=%d lagged=%d frozen=%d inh=%d)\n",
 		org.x, org.y, org.z, vel.x, vel.y, vel.z, ground ? 1 : 0, ducked ? 1 : 0, prone ? 1 : 0, jumped ? 1 : 0,
-		player->entityNumber, teamName, attacking ? 1 : 0,
+		player->entityNumber, teamName, player->IsSpectating() ? 1 : 0, attacking ? 1 : 0,
 		(int)player->usercmd.forwardmove, (int)player->usercmd.rightmove, (int)player->usercmd.upmove,
 		player->usercmd.buttons.btn.attack ? 1 : 0,
 		player->GetIsLagged() ? 1 : 0, phys.IsFrozen() ? 1 : 0, player->InhibitMovement() ? 1 : 0 );
@@ -2535,6 +2540,52 @@ void Cmd_Admin_f( const idCmdArgs &args ) {
 	sdAdminSystem::GetInstance().PerformCommand( args, NULL );
 }
 
+/*
+==================
+Cmd_AddBot_f
+==================
+*/
+void Cmd_AddBot_f( const idCmdArgs &args ) {
+	idCmdArgs adminArgs;
+	adminArgs.AppendArg( "admin" );
+	adminArgs.AppendArg( "addbot" );
+	for ( int i = 1; i < args.Argc(); i++ ) {
+		adminArgs.AppendArg( args.Argv( i ) );
+	}
+
+	Cmd_Admin_f( adminArgs );
+}
+
+static argCompletionCallback_t g_addBotCallback = NULL;
+
+static void AddBot_CallbackAdapter( const char *s ) {
+	if ( !g_addBotCallback ) {
+		return;
+	}
+	if ( idStr::Icmpn( s, "admin addbot ", 13 ) == 0 ) {
+		g_addBotCallback( va( "addbot %s", s + 13 ) );
+	} else if ( idStr::Icmp( s, "admin addbot" ) == 0 ) {
+		g_addBotCallback( "addbot" );
+	}
+}
+
+static void ArgCompletion_AddBot( const idCmdArgs &args, argCompletionCallback_t callback ) {
+	if ( args.Argc() <= 2 ) {
+		callback( va( "%s gdf", args.Argv( 0 ) ) );
+		callback( va( "%s strogg", args.Argv( 0 ) ) );
+	}
+	idCmdArgs adminArgs;
+	adminArgs.AppendArg( "admin" );
+	adminArgs.AppendArg( "addbot" );
+	for ( int i = 1; i < args.Argc(); i++ ) {
+		adminArgs.AppendArg( args.Argv( i ) );
+	}
+
+	g_addBotCallback = callback;
+	sdAdminSystemLocal::CommandCompletion( adminArgs, AddBot_CallbackAdapter );
+	g_addBotCallback = NULL;
+}
+
 static void ArgCompletion_DefFile( const idCmdArgs &args, void(*callback)( const char *s ) ) {
 	cmdSystem->ArgCompletion_FolderExtension( args, callback, "def/", true, ".def", NULL );
 }
@@ -3189,6 +3240,7 @@ void idGameLocal::InitConsoleCommands( void ) {
 	cmdSystem->AddCommand( "cameraPrev",			Cmd_CameraPrev_f,			CMD_FL_GAME|CMD_FL_CHEAT,	"Sets the current view to the previous camera found in the map" );
 
 	cmdSystem->AddCommand( "admin",					Cmd_Admin_f,				CMD_FL_GAME,				"perform administration commands", sdAdminSystemLocal::CommandCompletion );
+	cmdSystem->AddCommand( "addbot",				Cmd_AddBot_f,				CMD_FL_GAME,				"spawns an AI bot into the game", ArgCompletion_AddBot );
 	cmdSystem->AddCommand( "callvote",				sdVoteManagerLocal::Callvote_f,		CMD_FL_GAME,		"call a vote to change server settings, etc" );
 	cmdSystem->AddCommand( "vote",					Cmd_Vote_f,					CMD_FL_GAME,				"send your vote response" );
 	cmdSystem->AddCommand( "fireteam",				Cmd_Fireteam_f,				CMD_FL_GAME,				"perform fireteam related commands", sdFireTeamManagerLocal::CommandCompletion );

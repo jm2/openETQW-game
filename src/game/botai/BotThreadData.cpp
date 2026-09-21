@@ -690,23 +690,54 @@ void idBotThreadData::InitAAS( const idMapFile *mapFile ) {
 	declStringMapType.Init( declStringMapIdentifier );
 
 	const sdDeclStringMap* stringMap = declStringMapType.LocalFind( "navigation_types", false );
-	const idKeyValue *kv = stringMap->GetDict().MatchPrefix( "type" );
+	if ( stringMap != NULL ) {
+		const idKeyValue *kv = stringMap->GetDict().MatchPrefix( "type" );
 
-	while( kv != NULL ) {
-		idAAS *aas = idAAS::Alloc();
-		aasList.Append( aas );
-		aasNames.Append( kv->GetValue() );
-		kv = stringMap->GetDict().MatchPrefix( "type", kv );
+		while( kv != NULL ) {
+			idAAS *aas = idAAS::Alloc();
+			aasList.Append( aas );
+			aasNames.Append( kv->GetValue() );
+			kv = stringMap->GetDict().MatchPrefix( "type", kv );
+		}
+	}
+
+	if ( aasNames.Num() == 0 ) {
+		aasNames.Append( "aas_playerb" );
+		aasList.Append( idAAS::Alloc() );
+
+		aasNames.Append( "aas_vehicleb" );
+		aasList.Append( idAAS::Alloc() );
 	}
 
 	// load navigation system for all the different player/vehicle sizes
 	for( int i = 0; i < aasNames.Num(); i++ ) {
-		aasList[ i ]->Init( idStr( mapFile->GetName() ).SetFileExtension( aasNames[ i ] ).c_str(), mapFile->GetGeometryCRC() );
+		idStr fileName = idStr( mapFile->GetName() ).SetFileExtension( aasNames[ i ] );
+		if ( !aasList[ i ]->Init( fileName.c_str(), mapFile->GetGeometryCRC() ) ) {
+			// Try alternative extension (.aas_playerb <-> .aas_player, .aas_vehicleb <-> .aas_vehicle)
+			idStr altName = fileName;
+			if ( altName.StripFileExtension() ) {
+				if ( idStr::Icmp( aasNames[ i ], "aas_player" ) == 0 ) {
+					altName.SetFileExtension( "aas_playerb" );
+				} else if ( idStr::Icmp( aasNames[ i ], "aas_playerb" ) == 0 ) {
+					altName.SetFileExtension( "aas_player" );
+				} else if ( idStr::Icmp( aasNames[ i ], "aas_vehicle" ) == 0 ) {
+					altName.SetFileExtension( "aas_vehicleb" );
+				} else if ( idStr::Icmp( aasNames[ i ], "aas_vehicleb" ) == 0 ) {
+					altName.SetFileExtension( "aas_vehicle" );
+				}
+				aasList[ i ]->Init( altName.c_str(), mapFile->GetGeometryCRC() );
+			}
+		}
 	}
 
 //mal: now, lets do a check to make sure that at least the player AAS was loaded - if not, we're in trouble!
-	if ( aasList.Num() == 0 ) {
-		common->Warning( "No valid Recast navigation profiles found for this map. Run navBuild for the source map." );
+	if ( aasList.Num() == 0 || aasList[ AAS_PLAYER ] == NULL || aasList[ AAS_PLAYER ]->GetSettings() == NULL ) {
+		common->Warning( "No valid AAS navigation profiles found for this map. Run navBuild for the source map." );
+	} else {
+		gameLocal.Printf( "AAS initialization complete: %d profiles loaded (player AAS: %s, vehicle AAS: %s)\n",
+			aasList.Num(),
+			GetAAS( AAS_PLAYER ) ? "OK" : "NULL",
+			GetAAS( AAS_VEHICLE ) ? "OK" : "NULL" );
 	}
 
 	pendingAreaChanges.SetNum( 0, false );
@@ -931,7 +962,7 @@ void idBotThreadData::UpdateState() {
 	gameLocalInfo.botTrainingModeObjDelayTime = ( bot_doObjsDelayTimeInMins.GetInteger() * 60 );
 	
 	if ( bot_sleepWhenServerEmpty.GetBool() ) {
-		if ( !ServerHasHumans() ) {
+		if ( !ServerHasHumans() && GetNumBotsInServer( NOTEAM ) == 0 ) {
 			gameLocalInfo.botsSleep = true;
 		}
 	}

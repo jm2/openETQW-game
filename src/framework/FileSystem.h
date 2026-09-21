@@ -185,12 +185,30 @@ public:
 										return meta[ i ].meta;
 									}
 								}
+								for( int i = 0; i < meta.Num(); i++ ) {
+									const char* value = meta[ i ].meta->GetString( "metadata_name" );
+									if ( !idStr::Icmpn( value, "maps/", 5 ) && !idStr::Icmp( name, value + 5 ) ) {
+										return meta[ i ].meta;
+									}
+									if ( !idStr::Icmpn( name, "maps/", 5 ) && !idStr::Icmp( name + 5, value ) ) {
+										return meta[ i ].meta;
+									}
+								}
 								return defaultDict;
 							}
 	int						FindMetaDataIndex( const char* name ) {
 								for( int i = 0; i < meta.Num(); i++ ) {
 									const char* value = meta[ i ].meta->GetString( "metadata_name" );
 									if( !idStr::Icmp( name, value ) ) {
+										return i;
+									}
+								}
+								for( int i = 0; i < meta.Num(); i++ ) {
+									const char* value = meta[ i ].meta->GetString( "metadata_name" );
+									if ( !idStr::Icmpn( value, "maps/", 5 ) && !idStr::Icmp( name, value + 5 ) ) {
+										return i;
+									}
+									if ( !idStr::Icmpn( name, "maps/", 5 ) && !idStr::Icmp( name + 5, value ) ) {
 										return i;
 									}
 								}
@@ -201,6 +219,15 @@ public:
 								for( int i = 0; i < meta.Num(); i++ ) {
 									const char* value = meta[ i ].meta->GetString( "metadata_name" );
 									if( !idStr::Icmp( name, value ) ) {
+										return &meta[ i ];
+									}
+								}
+								for( int i = 0; i < meta.Num(); i++ ) {
+									const char* value = meta[ i ].meta->GetString( "metadata_name" );
+									if ( !idStr::Icmpn( value, "maps/", 5 ) && !idStr::Icmp( name, value + 5 ) ) {
+										return &meta[ i ];
+									}
+									if ( !idStr::Icmpn( name, "maps/", 5 ) && !idStr::Icmp( name + 5, value ) ) {
 										return &meta[ i ];
 									}
 								}

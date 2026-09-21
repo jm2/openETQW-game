@@ -1460,6 +1460,8 @@ bool sdAdminSystemCommand_AddBot::PerformCommand( const idCmdArgs& cmd, const sd
 
 	idBot::Bot_SetClassType( newPlayer, botClass, botGun );
 
+	newPlayer->SpawnFromSpawnSpot();
+
 	return true;
 }
 

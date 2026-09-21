@@ -176,6 +176,8 @@ void idBotNodeGraph::LoadNodes( const char *filename ) {
 		gameLocal.DWarning("The nodes in this map's nav file are out of date!");
 	}
 
+	gameLocal.Printf( "Loaded vehicle navigation graph '%s' (%d nodes)\n", filename, nodes.Num() );
+
 	fileSystem->CloseFile( file );
 }
 
