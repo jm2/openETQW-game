@@ -470,6 +470,8 @@ public:
 	virtual sdInteractiveInterface*		GetInteractiveInterface( void ) { return &usableInterface; }
 
 	virtual void						UpdateModelTransform( void );
+	void								ClientUpdateInterpolation( float interpFraction );
+	void								ResetChassisHistory( void );
 
 	void								UpdatePlayZoneInfo( void );
 	void								UpdateDecay( void );
@@ -641,6 +643,11 @@ protected:
 	int									damagedCriticalDriveParts;
 
 	int									routeKickDistance;
+
+	idVec3								chassisOriginLog[2];
+	idQuat								chassisQuatLog[2];
+	int									chassisFrameLog[2];
+	bool								chassisPoseValid[2];
 };
 
 class sdTransport_AF : public sdTransport {

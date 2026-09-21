@@ -1711,6 +1711,8 @@ void idGameLocal::Clear( void ) {
 	realClientTime = 0;
 	isNewFrame = true;
 	isPaused = false;
+	cumulativeEventsServiced = 0;
+	unlock.interpFraction = 0.0f;
 
 	globalMaterial = NULL;
 	newInfo.Clear();
@@ -5179,6 +5181,8 @@ idCVar g_fpuExceptions( "g_fpuExceptions", "0", CVAR_BOOL | CVAR_GAME | CVAR_NOC
 #endif // GAME_FPU_EXCEPTIONS
 
 idCVar g_debugStatsSetup( "g_debugStatsSetup", "0", CVAR_GAME | CVAR_BOOL | CVAR_NOCHEAT, "prints any problems with calculating a client rank when they connect to a server" );
+idCVar g_simHash( "g_simHash", "1", CVAR_GAME | CVAR_BOOL, "emit authoritative simulation state hash every tick" );
+idCVar g_determinismTest( "g_determinismTest", "0", CVAR_GAME | CVAR_BOOL, "execute tick-indexed determinism test input stream" );
 
 /*
 ================
@@ -5275,6 +5279,41 @@ void idGameLocal::RunFrame( const usercmd_t *clientCmds, int elapsedTime ) {
 
 		// set the user commands for this frame
 		memcpy( usercmds, clientCmds, MAX_CLIENTS * sizeof( usercmds[ 0 ] ) );
+
+		if ( g_determinismTest.GetBool() ) {
+			int tick = framenum;
+			idPlayer* p = GetLocalPlayer();
+			if ( !p ) {
+				p = GetClient( 0 );
+			}
+			if ( p != NULL ) {
+				if ( tick <= 20 ) {
+					if ( p->IsSpectating() ) {
+						p->SetGameTeam( &sdTeamManager::GetInstance().GetTeam( "gdf" ) );
+						p->SpawnFromSpawnSpot();
+					}
+				} else if ( tick >= 21 && tick <= 50 ) {
+					usercmds[ p->entityNumber ].forwardmove = 127;
+				} else if ( tick >= 51 && tick <= 70 ) {
+					usercmds[ p->entityNumber ].rightmove = 127;
+					usercmds[ p->entityNumber ].upmove = 127;
+				} else if ( tick >= 71 && tick <= 90 ) {
+					usercmds[ p->entityNumber ].buttons.btn.attack = 1;
+				} else if ( tick == 91 ) {
+					cmdSystem->BufferCommandText( CMD_EXEC_NOW, va( "enterVehicle %d", p->entityNumber ) );
+				} else if ( tick >= 92 && tick <= 104 ) {
+					usercmds[ p->entityNumber ].forwardmove = 127;
+				} else if ( tick == 105 ) {
+					cmdSystem->BufferCommandText( CMD_EXEC_NOW, va( "swapVehicleSeat %d", p->entityNumber ) );
+				} else if ( tick == 115 ) {
+					cmdSystem->BufferCommandText( CMD_EXEC_NOW, va( "exitVehicle %d", p->entityNumber ) );
+				} else if ( tick == 121 ) {
+					cmdSystem->BufferCommandText( CMD_EXEC_NOW, "completeObjective 0" );
+				} else if ( tick >= 150 ) {
+					cmdSystem->BufferCommandText( CMD_EXEC_APPEND, "quit\n" );
+				}
+			}
+		}
 
 		UpdateDeploymentRequests();
 
@@ -5387,6 +5426,7 @@ void idGameLocal::RunFrame( const usercmd_t *clientCmds, int elapsedTime ) {
 
 		// service any pending events
 		idEvent::ServiceEvents();
+		cumulativeEventsServiced += idEvent::eventsToRun.Num();
 
 		timer_events.Stop();
 
@@ -5440,6 +5480,8 @@ void idGameLocal::RunFrame( const usercmd_t *clientCmds, int elapsedTime ) {
 #ifdef GAME_FPU_EXCEPTIONS
 	sys->FPU_EnableExceptions( 0 );
 #endif // GAME_FPU_EXCEPTIONS
+
+	EmitSimStateHash();
 
 	demoManager.EndDemoFrame();
 
@@ -5922,6 +5964,30 @@ void idGameLocal::ClientUpdateView( const usercmd_t &cmd, int timeLeft ) {
 	}
 
 	float interpFraction = float( USERCMD_MSEC - timeLeft ) / float( USERCMD_MSEC );
+	unlock.interpFraction = interpFraction;
+
+	idEntity* proxy = p->GetProxyEntity();
+	if ( proxy != NULL ) {
+		sdTransport* transport = proxy->Cast< sdTransport >();
+		if ( transport != NULL ) {
+			// 1. Interpolate chassis & presentation occupants
+			transport->ClientUpdateInterpolation( interpFraction );
+
+			// 2. Interpolate camera view
+			p->CalculateFirstPersonView( false );
+			p->CalculateRenderView();
+
+			// 3. Update active cockpit entity if present
+			if ( gameLocal.playerView.CockpitIsValid() ) {
+				rvClientEntityPtr< sdClientAnimated > &cockpit = gameLocal.playerView.GetCockpit();
+				if ( cockpit.IsValid() ) {
+					cockpit->ClientUpdateView();
+					cockpit->Present();
+				}
+			}
+			return;
+		}
+	}
 
 	idAngles currentAngles = unlock.refAngles;
 
@@ -11438,4 +11504,119 @@ void idGameLocal::SendBanList( idPlayer* player ) {
 		sdReliableServerMessage msg( GAME_RELIABLE_SMESSAGE_BANLISTFINISHED );
 		msg.Send( sdReliableMessageClientInfo( player->entityNumber ) );
 	}
+}
+
+/*
+================
+idGameLocal::EmitSimStateHash
+================
+*/
+void idGameLocal::EmitSimStateHash( void ) {
+	if ( !g_simHash.GetBool() ) {
+		return;
+	}
+
+	idPlayer* player = GetLocalPlayer();
+	if ( !player ) {
+		player = GetClient( 0 );
+	}
+
+	idVec3 pOrg = vec3_origin;
+	idVec3 pVel = vec3_origin;
+	int pHealth = 0;
+	int pFlags = 0;
+	idVec3 vOrg = vec3_origin;
+	idVec3 vVel = vec3_origin;
+	int vHealth = 0;
+
+	if ( player != NULL ) {
+		const idPhysics_Player& phys = player->GetPlayerPhysics();
+		pOrg = phys.GetOrigin();
+		pVel = phys.GetLinearVelocity();
+		pHealth = player->GetHealth();
+		pFlags = ( phys.IsGrounded() ? 1 : 0 ) |
+		         ( ( phys.IsCrouching() ? 1 : 0 ) << 1 ) |
+		         ( ( phys.IsProne() ? 1 : 0 ) << 2 ) |
+		         ( ( player->IsSpectating() ? 1 : 0 ) << 3 );
+
+		idEntity* proxy = player->GetProxyEntity();
+		sdTransport* transport = proxy ? proxy->Cast< sdTransport >() : NULL;
+		if ( transport != NULL ) {
+			vOrg = transport->GetPhysics()->GetOrigin();
+			vVel = transport->GetPhysics()->GetLinearVelocity();
+			vHealth = transport->GetHealth();
+		}
+	}
+
+	auto normalizeFloat = []( float val ) -> float {
+		if ( val == 0.0f || ( val > -0.0001f && val < 0.0001f ) ) {
+			return 0.0f;
+		}
+		return val;
+	};
+
+	pOrg.x = normalizeFloat( pOrg.x );
+	pOrg.y = normalizeFloat( pOrg.y );
+	pOrg.z = normalizeFloat( pOrg.z );
+	pVel.x = normalizeFloat( pVel.x );
+	pVel.y = normalizeFloat( pVel.y );
+	pVel.z = normalizeFloat( pVel.z );
+
+	vOrg.x = normalizeFloat( vOrg.x );
+	vOrg.y = normalizeFloat( vOrg.y );
+	vOrg.z = normalizeFloat( vOrg.z );
+	vVel.x = normalizeFloat( vVel.x );
+	vVel.y = normalizeFloat( vVel.y );
+	vVel.z = normalizeFloat( vVel.z );
+
+	int gdfObj = sdObjectiveManager::GetInstance().GetNextObjective( 0 );
+	int stroggObj = sdObjectiveManager::GetInstance().GetNextObjective( 1 );
+	int gameState = rules ? rules->GetState() : -1;
+	int winTeam = ( rules && rules->GetWinningTeam() ) ? rules->GetWinningTeam()->GetLookupName()[0] : 0;
+	int eventCount = cumulativeEventsServiced;
+
+	int32_t qPOrg[3] = {
+		static_cast< int32_t >( roundf( pOrg.x * 100.0f ) ),
+		static_cast< int32_t >( roundf( pOrg.y * 100.0f ) ),
+		static_cast< int32_t >( roundf( pOrg.z * 100.0f ) )
+	};
+	int32_t qPVel[3] = {
+		static_cast< int32_t >( roundf( pVel.x * 100.0f ) ),
+		static_cast< int32_t >( roundf( pVel.y * 100.0f ) ),
+		static_cast< int32_t >( roundf( pVel.z * 100.0f ) )
+	};
+	int32_t qVOrg[3] = {
+		static_cast< int32_t >( roundf( vOrg.x * 100.0f ) ),
+		static_cast< int32_t >( roundf( vOrg.y * 100.0f ) ),
+		static_cast< int32_t >( roundf( vOrg.z * 100.0f ) )
+	};
+	int32_t qVVel[3] = {
+		static_cast< int32_t >( roundf( vVel.x * 100.0f ) ),
+		static_cast< int32_t >( roundf( vVel.y * 100.0f ) ),
+		static_cast< int32_t >( roundf( vVel.z * 100.0f ) )
+	};
+
+	unsigned long crc;
+	CRC32_InitChecksum( crc );
+	CRC32_UpdateChecksum( crc, qPOrg, sizeof( qPOrg ) );
+	CRC32_UpdateChecksum( crc, qPVel, sizeof( qPVel ) );
+	CRC32_UpdateChecksum( crc, &pHealth, sizeof( pHealth ) );
+	CRC32_UpdateChecksum( crc, &pFlags, sizeof( pFlags ) );
+	CRC32_UpdateChecksum( crc, qVOrg, sizeof( qVOrg ) );
+	CRC32_UpdateChecksum( crc, qVVel, sizeof( qVVel ) );
+	CRC32_UpdateChecksum( crc, &vHealth, sizeof( vHealth ) );
+	CRC32_UpdateChecksum( crc, &gdfObj, sizeof( gdfObj ) );
+	CRC32_UpdateChecksum( crc, &stroggObj, sizeof( stroggObj ) );
+	CRC32_UpdateChecksum( crc, &gameState, sizeof( gameState ) );
+	CRC32_UpdateChecksum( crc, &winTeam, sizeof( winTeam ) );
+	CRC32_UpdateChecksum( crc, &eventCount, sizeof( eventCount ) );
+	CRC32_FinishChecksum( crc );
+
+	common->Printf( "SIM_HASH: tick=%d hash=0x%08x p=(%.2f,%.2f,%.2f) v=(%.2f,%.2f,%.2f) hp=%d obj=(%d,%d,%d) ev=%d\n",
+		framenum, static_cast< unsigned int >( crc ),
+		pOrg.x, pOrg.y, pOrg.z,
+		pVel.x, pVel.y, pVel.z,
+		pHealth,
+		gdfObj, stroggObj, gameState,
+		eventCount );
 }
