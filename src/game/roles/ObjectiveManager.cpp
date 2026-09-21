@@ -719,6 +719,9 @@ sdObjectiveManagerLocal::Event_SendNetworkEvent
 ================
 */
 void sdObjectiveManagerLocal::Event_SendNetworkEvent( int clientIndex, bool isRepeaterClient, const char* message ) {
+	if ( !message || !*message ) {
+		return;
+	}
 	if ( !isRepeaterClient ) {
 		if ( clientIndex == -1 ) {
 			if ( gameLocal.GetLocalPlayer() != NULL ) {

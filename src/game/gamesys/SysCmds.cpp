@@ -43,6 +43,12 @@ static char THIS_FILE[] = __FILE__;
 #include "../../sdnet/SDNetAccount.h"
 
 #include "../docs/wiki.h"
+#include "../roles/ObjectiveManager.h"
+#include "../decls/DeclDeployableObject.h"
+#include "../vehicles/Transport.h"
+#include "../misc/DefenceTurret.h"
+#include "../script/Script_ScriptObject.h"
+#include "../script/Script_Helper.h"
 
 //#include "TypeInfo.h"
 
@@ -901,6 +907,278 @@ void Cmd_PlayerPos_f( const idCmdArgs &args ) {
 		(int)player->usercmd.forwardmove, (int)player->usercmd.rightmove, (int)player->usercmd.upmove,
 		player->usercmd.buttons.btn.attack ? 1 : 0,
 		player->GetIsLagged() ? 1 : 0, phys.IsFrozen() ? 1 : 0, player->InhibitMovement() ? 1 : 0 );
+}
+
+/*
+==================
+Cmd_CompleteObjective_f
+==================
+*/
+void Cmd_CompleteObjective_f( const idCmdArgs &args ) {
+	if ( args.Argc() < 2 ) {
+		gameLocal.Printf( "usage: completeObjective <index>\n" );
+		return;
+	}
+	int objIndex = atoi( args.Argv( 1 ) );
+	idScriptObject* objManagerScript = sdObjectiveManager::GetInstance().GetScriptObject();
+	if ( !objManagerScript ) {
+		gameLocal.Printf( "completeObjective: objectiveManager script object not initialized\n" );
+		return;
+	}
+	const sdProgram::sdFunction* func = objManagerScript->GetFunction( "CompleteObjective" );
+	if ( !func ) {
+		gameLocal.Printf( "completeObjective: CompleteObjective function not found\n" );
+		return;
+	}
+	sdScriptHelper helper;
+	helper.Push( static_cast< float >( objIndex ) );
+	helper.Push( static_cast< idScriptObject* >( NULL ) );
+	objManagerScript->CallNonBlockingScriptEvent( func, helper );
+	gameLocal.Printf( "COMPLETE_OBJECTIVE: %d triggered\n", objIndex );
+}
+
+/*
+==================
+Cmd_ObjectiveStatus_f
+==================
+*/
+void Cmd_ObjectiveStatus_f( const idCmdArgs &args ) {
+	sdTeamInfo* winningTeam = gameLocal.rules ? gameLocal.rules->GetWinningTeam() : NULL;
+	const char* winName = winningTeam ? winningTeam->GetLookupName() : "none";
+	int gameState = gameLocal.rules ? gameLocal.rules->GetState() : -1;
+	int gdfObj = sdObjectiveManager::GetInstance().GetNextObjective( 0 );
+	int stroggObj = sdObjectiveManager::GetInstance().GetNextObjective( 1 );
+	gameLocal.Printf( "OBJECTIVE_STATUS: gdf_obj=%d strogg_obj=%d state=%d winner=%s\n",
+		gdfObj, stroggObj, gameState, winName );
+}
+
+/*
+==================
+Cmd_Deploy_f
+==================
+*/
+void Cmd_Deploy_f( const idCmdArgs &args ) {
+	if ( args.Argc() < 6 ) {
+		gameLocal.Printf( "usage: deploy <clientNum> <deployObjectName> <x> <y> <z> [yaw]\n" );
+		return;
+	}
+	int clientNum = atoi( args.Argv( 1 ) );
+	if ( clientNum < 0 || clientNum >= MAX_CLIENTS || gameLocal.entities[ clientNum ] == NULL ) {
+		gameLocal.Printf( "DEPLOY: invalid client %d\n", clientNum );
+		return;
+	}
+	idPlayer* player = gameLocal.entities[ clientNum ]->Cast< idPlayer >();
+	if ( !player ) {
+		gameLocal.Printf( "DEPLOY: entity %d is not a player\n", clientNum );
+		return;
+	}
+	const char* deployName = args.Argv( 2 );
+	const sdDeclDeployableObject* object = gameLocal.declDeployableObjectType[ deployName ];
+	if ( !object ) {
+		gameLocal.Printf( "DEPLOY: unknown deployObject '%s'\n", deployName );
+		return;
+	}
+	idVec3 pos( atof( args.Argv( 3 ) ), atof( args.Argv( 4 ) ), atof( args.Argv( 5 ) ) );
+	float yaw = ( args.Argc() > 6 ) ? atof( args.Argv( 6 ) ) : 0.0f;
+
+	if ( player->IsSpectating() ) {
+		player->SpawnFromSpawnSpot();
+	}
+
+	deployResult_t res = player->CheckDeployPosition( pos, object );
+	if ( res != DR_CLEAR ) {
+		gameLocal.Printf( "DEPLOY: placement check failed (code %d) at (%.2f, %.2f, %.2f)\n", (int)res, pos.x, pos.y, pos.z );
+		return;
+	}
+	bool success = gameLocal.RequestDeployment( player, object, pos, yaw, 0 );
+	if ( success ) {
+		gameLocal.Printf( "DEPLOY: Client %d deployed %s at (%.2f, %.2f, %.2f) -> SUCCESS\n", clientNum, deployName, pos.x, pos.y, pos.z );
+	} else {
+		gameLocal.Printf( "DEPLOY: RequestDeployment failed for client %d\n", clientNum );
+	}
+}
+
+/*
+==================
+Cmd_VehicleStatus_f
+==================
+*/
+void Cmd_VehicleStatus_f( const idCmdArgs &args ) {
+	idPlayer *player = NULL;
+	int clientNum = 0;
+	if ( args.Argc() > 1 ) {
+		clientNum = atoi( args.Argv( 1 ) );
+		if ( clientNum < 0 || clientNum >= MAX_CLIENTS || gameLocal.entities[ clientNum ] == NULL ) {
+			gameLocal.Printf( "VEHICLE_STATUS: invalid client %d\n", clientNum );
+			return;
+		}
+		player = gameLocal.entities[ clientNum ]->Cast< idPlayer >();
+		if ( !player ) {
+			gameLocal.Printf( "VEHICLE_STATUS: entity %d is not a player\n", clientNum );
+			return;
+		}
+	} else {
+		player = gameLocal.GetLocalPlayer();
+		if ( !player ) {
+			if ( gameLocal.entities[ 0 ] != NULL ) {
+				player = gameLocal.entities[ 0 ]->Cast< idPlayer >();
+				clientNum = 0;
+			}
+		} else {
+			clientNum = player->entityNumber;
+		}
+		if ( !player ) {
+			gameLocal.Printf( "VEHICLE_STATUS: no player\n" );
+			return;
+		}
+	}
+
+	idEntity* proxy = player->GetProxyEntity();
+	if ( proxy != NULL ) {
+		const idVec3& pos = proxy->GetPhysics()->GetOrigin();
+		gameLocal.Printf( "VEHICLE_STATUS: client=%d in_vehicle=1 name=%s def=%s seat=%d health=%d pos=(%.2f, %.2f, %.2f)\n",
+			clientNum, proxy->name.c_str(), proxy->GetEntityDefName(), player->GetProxyPositionId(), proxy->GetHealth(),
+			pos.x, pos.y, pos.z );
+	} else {
+		gameLocal.Printf( "VEHICLE_STATUS: client=%d in_vehicle=0\n", clientNum );
+	}
+}
+
+/*
+==================
+Cmd_EnterVehicle_f
+==================
+*/
+void Cmd_EnterVehicle_f( const idCmdArgs &args ) {
+	if ( args.Argc() < 2 ) {
+		gameLocal.Printf( "usage: enterVehicle <clientNum> [vehicleName]\n" );
+		return;
+	}
+	int clientNum = atoi( args.Argv( 1 ) );
+	if ( clientNum < 0 || clientNum >= MAX_CLIENTS || gameLocal.entities[ clientNum ] == NULL ) {
+		gameLocal.Printf( "ENTER_VEHICLE: invalid client %d\n", clientNum );
+		return;
+	}
+	idPlayer* player = gameLocal.entities[ clientNum ]->Cast< idPlayer >();
+	if ( !player ) {
+		gameLocal.Printf( "ENTER_VEHICLE: entity %d is not a player\n", clientNum );
+		return;
+	}
+	sdTransport* vehicle = NULL;
+	if ( args.Argc() > 2 ) {
+		idEntity* ent = gameLocal.FindEntity( args.Argv( 2 ) );
+		if ( ent ) {
+			vehicle = ent->Cast< sdTransport >();
+		}
+	} else {
+		float bestDist = idMath::INFINITY;
+		const idVec3& pOrg = player->GetPhysics()->GetOrigin();
+		for ( idEntity* ent = gameLocal.spawnedEntities.Next(); ent != NULL; ent = ent->spawnNode.Next() ) {
+			sdTransport* trans = ent->Cast< sdTransport >();
+			if ( trans && trans->GetHealth() > 0 ) {
+				float d2 = ( trans->GetPhysics()->GetOrigin() - pOrg ).LengthSqr();
+				if ( d2 < bestDist ) {
+					bestDist = d2;
+					vehicle = trans;
+				}
+			}
+		}
+	}
+	if ( !vehicle ) {
+		gameLocal.Printf( "ENTER_VEHICLE: no vehicle found for client %d\n", clientNum );
+		return;
+	}
+	vehicle->FindPositionForPlayer( player );
+	gameLocal.Printf( "ENTER_VEHICLE: client %d entered %s (seat %d)\n",
+		clientNum, vehicle->name.c_str(), player->GetProxyPositionId() );
+}
+
+/*
+==================
+Cmd_ExitVehicle_f
+==================
+*/
+void Cmd_ExitVehicle_f( const idCmdArgs &args ) {
+	if ( args.Argc() < 2 ) {
+		gameLocal.Printf( "usage: exitVehicle <clientNum>\n" );
+		return;
+	}
+	int clientNum = atoi( args.Argv( 1 ) );
+	if ( clientNum < 0 || clientNum >= MAX_CLIENTS || gameLocal.entities[ clientNum ] == NULL ) {
+		gameLocal.Printf( "EXIT_VEHICLE: invalid client %d\n", clientNum );
+		return;
+	}
+	idPlayer* player = gameLocal.entities[ clientNum ]->Cast< idPlayer >();
+	if ( !player ) {
+		gameLocal.Printf( "EXIT_VEHICLE: entity %d is not a player\n", clientNum );
+		return;
+	}
+	idEntity* proxy = player->GetProxyEntity();
+	if ( !proxy ) {
+		gameLocal.Printf( "EXIT_VEHICLE: client %d is not in a vehicle\n", clientNum );
+		return;
+	}
+	sdTransport* vehicle = proxy->Cast< sdTransport >();
+	if ( vehicle && vehicle->GetUsableInterface() ) {
+		vehicle->GetUsableInterface()->OnExit( player, true );
+		gameLocal.Printf( "EXIT_VEHICLE: client %d exited %s\n", clientNum, proxy->name.c_str() );
+	} else {
+		gameLocal.Printf( "EXIT_VEHICLE: failed for client %d\n", clientNum );
+	}
+}
+
+/*
+==================
+Cmd_SwapVehicleSeat_f
+==================
+*/
+void Cmd_SwapVehicleSeat_f( const idCmdArgs &args ) {
+	if ( args.Argc() < 2 ) {
+		gameLocal.Printf( "usage: swapVehicleSeat <clientNum>\n" );
+		return;
+	}
+	int clientNum = atoi( args.Argv( 1 ) );
+	if ( clientNum < 0 || clientNum >= MAX_CLIENTS || gameLocal.entities[ clientNum ] == NULL ) {
+		gameLocal.Printf( "SWAP_SEAT: invalid client %d\n", clientNum );
+		return;
+	}
+	idPlayer* player = gameLocal.entities[ clientNum ]->Cast< idPlayer >();
+	if ( !player ) {
+		gameLocal.Printf( "SWAP_SEAT: entity %d is not a player\n", clientNum );
+		return;
+	}
+	idEntity* proxy = player->GetProxyEntity();
+	if ( !proxy ) {
+		gameLocal.Printf( "SWAP_SEAT: client %d is not in a vehicle\n", clientNum );
+		return;
+	}
+	sdTransport* vehicle = proxy->Cast< sdTransport >();
+	if ( vehicle ) {
+		vehicle->GetPositionManager().SwapPosition( player, true );
+		gameLocal.Printf( "SWAP_SEAT: client %d in %s now in seat %d\n",
+			clientNum, proxy->name.c_str(), player->GetProxyPositionId() );
+	}
+}
+
+/*
+==================
+Cmd_DeployStatus_f
+==================
+*/
+void Cmd_DeployStatus_f( const idCmdArgs &args ) {
+	int turretCount = 0;
+	for ( idEntity* ent = gameLocal.spawnedEntities.Next(); ent != NULL; ent = ent->spawnNode.Next() ) {
+		if ( ent->IsType( sdDefenceTurret::Type ) ) {
+			turretCount++;
+			sdDefenceTurret* turret = ent->Cast< sdDefenceTurret >();
+			idEntity* target = turret ? turret->GetTargetEntity() : NULL;
+			const idVec3& pos = ent->GetPhysics()->GetOrigin();
+			gameLocal.Printf( "DEPLOY_STATUS: turret=%s type=%s target=%s pos=(%.2f, %.2f, %.2f)\n",
+				ent->name.c_str(), ent->GetEntityDefName(), target ? target->name.c_str() : "none",
+				pos.x, pos.y, pos.z );
+		}
+	}
+	gameLocal.Printf( "DEPLOY_STATUS: total_turrets=%d\n", turretCount );
 }
 
 /*
@@ -3327,6 +3605,15 @@ void idGameLocal::InitConsoleCommands( void ) {
 	cmdSystem->AddCommand( "setGUIDAutoAuth",			Cmd_SetGUIDAutoAuth_f,			CMD_FL_GAME,		"sets auto auth for the given game guid" );
 
 	cmdSystem->AddCommand( "getRepeaterStatus",			Cmd_GetRepeaterStatus_f,		CMD_FL_GAME,		"displays whether there the repeater server is running on the server the client is currently connected to" );
+
+	cmdSystem->AddCommand( "completeObjective",			Cmd_CompleteObjective_f,		CMD_FL_GAME,		"completes an objective by index" );
+	cmdSystem->AddCommand( "objectiveStatus",			Cmd_ObjectiveStatus_f,			CMD_FL_GAME,		"prints objective and match status" );
+	cmdSystem->AddCommand( "deploy",					Cmd_Deploy_f,					CMD_FL_GAME,		"deploys a deployable object for a player" );
+	cmdSystem->AddCommand( "vehicleStatus",				Cmd_VehicleStatus_f,			CMD_FL_GAME,		"prints vehicle status for a player" );
+	cmdSystem->AddCommand( "enterVehicle",				Cmd_EnterVehicle_f,				CMD_FL_GAME,		"places player in vehicle" );
+	cmdSystem->AddCommand( "exitVehicle",				Cmd_ExitVehicle_f,				CMD_FL_GAME,		"ejects player from vehicle" );
+	cmdSystem->AddCommand( "swapVehicleSeat",			Cmd_SwapVehicleSeat_f,			CMD_FL_GAME,		"swaps vehicle seat for player" );
+	cmdSystem->AddCommand( "deployStatus",				Cmd_DeployStatus_f,				CMD_FL_GAME,		"prints deployable status" );
 }
 
 /*
@@ -3336,5 +3623,13 @@ idGameLocal::ShutdownConsoleCommands
 */
 void idGameLocal::ShutdownConsoleCommands( void ) {
 	cmdSystem->RemoveCommand( "playerPos" );
+	cmdSystem->RemoveCommand( "completeObjective" );
+	cmdSystem->RemoveCommand( "objectiveStatus" );
+	cmdSystem->RemoveCommand( "deploy" );
+	cmdSystem->RemoveCommand( "vehicleStatus" );
+	cmdSystem->RemoveCommand( "enterVehicle" );
+	cmdSystem->RemoveCommand( "exitVehicle" );
+	cmdSystem->RemoveCommand( "swapVehicleSeat" );
+	cmdSystem->RemoveCommand( "deployStatus" );
 	cmdSystem->RemoveFlaggedCommands( CMD_FL_GAME );
 }
