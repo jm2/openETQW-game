@@ -523,11 +523,11 @@ void idPlayerView::DrawScoreBoard( idPlayer* player ) {
 			scoreboardUI->Activate();
 			if( gameLocal.localPlayerProperties.ShouldShowEndGame() ) {
 				sdChatMenu* menu = gameLocal.localPlayerProperties.GetChatMenu();
-				if( menu->Enabled() ) {
+				if( menu != NULL && menu->Enabled() ) {
 					menu->Enable( false );
 				}
 				sdLimboMenu* limboMenu = gameLocal.localPlayerProperties.GetLimboMenu();
-				if ( limboMenu->Enabled() ) {
+				if ( limboMenu != NULL && limboMenu->Enabled() ) {
 					limboMenu->Enable( false );
 				}
 			}

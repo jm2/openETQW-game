@@ -1116,6 +1116,7 @@ public:
 	static void						StartDemos_f( const idCmdArgs &args );
 
 	idPlayer*						GetClient( int i ) const { assert( i >= 0 && i < MAX_CLIENTS ); return reinterpret_cast< idPlayer * >( entities[ i ] ); }
+	bool							IsClientConnected( int i ) const { return ( i >= 0 && i < MAX_CLIENTS ) ? clientConnected[ i ] : false; }
 
 	idMapFile *						GetLevelMap( void );
 	const char *					GetMapName( void ) const;

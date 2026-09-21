@@ -219,6 +219,10 @@ void sdGameRules::InitConsoleCommands( void ) {
 		cmdSystem->AddCommand( "clientDefaultSpawn",	sdGameRules::DefaultSpawn_f,CMD_FL_GAME, "revert to default spawn" );
 		cmdSystem->AddCommand( "clientWantSpawn",		sdGameRules::WantSpawn_f,	CMD_FL_GAME, "tap out" );
 
+		cmdSystem->AddCommand( "setTeam",				sdGameRules::SetTeam_f,		CMD_FL_GAME, "change your team" );
+		cmdSystem->AddCommand( "setClass",				sdGameRules::SetClass_f,	CMD_FL_GAME, "change your class" );
+		cmdSystem->AddCommand( "spawn",					sdGameRules::WantSpawn_f,	CMD_FL_GAME, "tap out" );
+
 		uiManager->RegisterListEnumerationCallback( "chatHistory",			CreateChatList );	// input: show expired, CHAT_MODE_ constant, number of items (-1 for all available)
 
 		InitVotes();
@@ -248,6 +252,10 @@ void sdGameRules::RemoveConsoleCommands( void ) {
 	cmdSystem->RemoveCommand( "clientClass" );
 	cmdSystem->RemoveCommand( "clientDefaultSpawn" );
 	cmdSystem->RemoveCommand( "clientWantSpawn" );
+	cmdSystem->RemoveCommand( "setTeam" );
+	cmdSystem->RemoveCommand( "setClass" );
+	cmdSystem->RemoveCommand( "spawn" );
+	cmdSystem->RemoveCommand( "playerPos" );
 }
 
 /*
@@ -559,6 +567,7 @@ void sdGameRules::SetClientTeam( idPlayer* player, int index, bool force, const 
 
 			player->Kill( NULL );
 			player->SetGameTeam( team );
+			player->SetInGame( true );
 			if ( currentTeam != NULL && team != NULL && player->GetInventory().GetClass() != NULL ) {
 				const sdDeclPlayerClass* remappedClass = currentTeam->GetEquivalentClass( *player->GetInventory().GetClass(), *team );
 				if( remappedClass != NULL  ) {
@@ -575,6 +584,7 @@ void sdGameRules::SetClientTeam( idPlayer* player, int index, bool force, const 
 
 				botPlayer->Kill( NULL );
 				botPlayer->SetGameTeam( newBotTeam );
+				botPlayer->SetInGame( true );
 				botPlayer->SetWantSpectate( false );
 				botPlayer->ServerForceRespawn( false );
 			}

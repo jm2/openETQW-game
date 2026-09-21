@@ -1389,6 +1389,7 @@ public:
 	void					Event_SetCarryingObjective( bool isCarrying );
 	void					Event_AddDamageEvent( int time, float angle, float damage, bool updateDirection );
 	void					Event_IsInLimbo( void );
+	void					Event_IsDead( void );
 };
 
 #endif /* !__GAME_PLAYER_H__ */
