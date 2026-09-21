@@ -35,6 +35,7 @@ static char THIS_FILE[] = __FILE__;
 #include "../client/ClientMoveable.h"
 #include "../PredictionErrorDecay.h"
 
+#include "../botai/Bot.h"
 #include "../botai/BotThreadData.h"
 
 const int	MAX_ENGINE_SOUNDS	= SND_ENGINE_LAST - SND_ENGINE + 1;
@@ -2671,35 +2672,47 @@ sdTransport::FindPositionForPlayer
 ================
 */
 void sdTransport::FindPositionForPlayer( idPlayer* player ) {
+	if ( !player ) {
+		return;
+	}
+
 	idPlayer* botPlayer;
 	sdVehiclePosition* oldPosition = NULL;
 	sdVehiclePosition* botOldPosition = NULL;
 
 	if ( player->GetProxyEntity() == this ) {
-		oldPosition = &positionManager.PositionForPlayer( player );
+		int posId = player->GetProxyPositionId();
+		if ( posId >= 0 && posId < positionManager.NumPositions() ) {
+			oldPosition = positionManager.PositionForId( posId );
+		}
 	}
 
 	sdVehiclePosition* position = positionManager.FreePosition( player, NULL );
+	if ( !position ) {
+		return;
+	}
 
 	botPlayer = position->GetPlayer();
 
 	if ( botPlayer != NULL ) { //mal: if there was a bot in the position the human wants, move then to the next position, or boot them from the vehicle.
-		botOldPosition = &positionManager.PositionForPlayer( botPlayer );
+		botOldPosition = position;
 
 		sdVehiclePosition* botPosition = positionManager.FreePosition( botPlayer, NULL );
 
 		if ( botPosition ) {
 			PlacePlayerInPosition( botPlayer, *botPosition, botOldPosition, false );
+			if ( botPlayer->IsType( idBot::Type ) ) {
+				botThreadData.GetGameWorldState()->clientInfo[ botPlayer->entityNumber ].proxyInfo.clientChangedSeats = true;
+			}
 		} else {
 			positionManager.EjectPlayer( *botOldPosition, true );
+			if ( botPlayer->IsType( idBot::Type ) ) {
+				botThreadData.GetGameWorldState()->clientInfo[ botPlayer->entityNumber ].resetState = MAJOR_RESET_EVENT;
+			}
 		}
 	}
 
-	if ( position ) {
-		PlacePlayerInPosition( player, *position, oldPosition, false );
-	} else {
-		assert( false );
-	}
+	PlacePlayerInPosition( player, *position, oldPosition, false );
 }
 
 /*

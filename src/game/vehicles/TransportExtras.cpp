@@ -621,6 +621,10 @@ sdVehiclePosition* sdTransportPositionManager::FreePosition( idPlayer* player, c
 		*tip = NULL;
 	}
 
+	if ( !player ) {
+		return NULL;
+	}
+
 	for ( int i = startIndex; i < positions.Num(); i++ ) {
 		if ( positions[ i ].GetPlayer() ) {
 			if ( !positions[ i ].GetPlayer()->IsType( idBot::Type ) || player->IsType( idBot::Type ) ) {
@@ -656,8 +660,14 @@ sdTransportPositionManager::SwapPosition
 ================
 */
 void sdTransportPositionManager::SwapPosition( idPlayer* player, bool allowCycle ) {
-	bool haveBotInSeat;
+	if ( !player || player->GetProxyEntity() != transport ) {
+		return;
+	}
 	int startpos = player->GetProxyPositionId();
+	if ( startpos < 0 || startpos >= positions.Num() ) {
+		return;
+	}
+	bool haveBotInSeat;
 	int i;
 	int	endpos;
 	sdVehiclePosition* botPosition = NULL;
