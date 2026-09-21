@@ -724,6 +724,7 @@ public:
 	struct idUnlock {
 		bool					canUnlockFrames;		// tracks when extra view and angles updates are allowed
 		bool					unlockedDraw;			// differenciate between doing draws for unlocked frames and regular draws
+		float					interpFraction;			// sub-tick presentation interpolation fraction [0, 1)
 		idVec3					originlog[2];			// log last two origins
 		idVec3					weaponOffsetLog[2];		// weapon position in view space for the last two full game tics
 		idMat3					weaponAxisLog[2];		// weapon orientation in view space for the last two full game tics
@@ -739,6 +740,8 @@ public:
 		idVec3					weaponGUIOrigin;
 		idMat3					weaponGUIAxis;
 	} unlock;
+
+	int						cumulativeEventsServiced;
 
 	// ---------------------- Public idGame Interface -------------------
 
@@ -873,6 +876,7 @@ public:
 	virtual void			OnSnapshotHitch( int snapshotTime );
 	virtual void			OnClientDisconnected( void );
 	virtual void			ClientUpdateView( const usercmd_t &cmd, int timeLeft );
+	void					EmitSimStateHash( void );
 	virtual void			WriteClientNetworkInfo( idFile* file );
 	virtual void			ReadClientNetworkInfo( idFile* file );
 	virtual void			WriteUserInfo( idBitMsg& msg, const idDict& info );

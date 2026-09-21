@@ -1215,7 +1215,12 @@ void sdPlayerProperties::OnNewTask( sdPlayerTask* task ) {
 	sdScriptHelper h1;
 	h1.Push( task->GetScriptObject() );
 	h1.Push( task->IsMission() );
-	localPlayer->CallNonBlockingScriptEvent( localPlayer->GetScriptFunction( "OnNewTask" ), h1 );
+	if ( localPlayer != NULL && localPlayer->GetScriptObject() != NULL ) {
+		const sdProgram::sdFunction* func = localPlayer->GetScriptObject()->GetFunction( "OnNewTask" );
+		if ( func != NULL ) {
+			localPlayer->CallNonBlockingScriptEvent( func, h1 );
+		}
+	}
 }
 
 /*

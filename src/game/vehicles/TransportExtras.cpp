@@ -436,6 +436,14 @@ void sdVehiclePosition::CycleCamera( void ) {
 	viewMode %= views.Num();
 	player->SetProxyViewMode( viewMode, false );
 
+	if ( views.Num() > 0 && views[ viewMode ] != NULL ) {
+		views[ viewMode ]->ResetViewHistory( player );
+	}
+	if ( player != NULL ) {
+		gameLocal.unlock.originlog[ 0 ] = player->renderView.vieworg;
+		gameLocal.unlock.originlog[ 1 ] = player->renderView.vieworg;
+	}
+
 	if ( player->userInfo.rememberCameraMode ) {
 		const sdDeclVehicleScript* script = transport->GetVehicleScript();
 		script->SetCameraMode( player->entityNumber, GetPositionId(), viewMode );
