@@ -30,6 +30,9 @@ py = find_program('python3', 'python', native: true, required: true)
 cc = meson.get_compiler('c')
 cpp = meson.get_compiler('cpp')
 
+threads_dep = dependency('threads', required: true)
+m_dep = cpp.find_library('m', required: false)
+
 if host_system == 'darwin'
   macos_deployment_target = get_option('macos_deployment_target')
   add_project_arguments(
@@ -64,10 +67,28 @@ shared_defines = [
 
 if host_system == 'darwin'
   shared_defines += ['-DMACOS_X']
+elif host_system == 'windows'
+  shared_defines += [
+    '-DWIN32',
+    '-D_WINDOWS',
+    '-DNOMINMAX',
+    '-DWIN32_LEAN_AND_MEAN',
+    '-D_CRT_SECURE_NO_WARNINGS',
+    '-D_CRT_NONSTDC_NO_WARNINGS',
+  ]
 endif
 
 shared_cpp_args = shared_defines
-if cpp.get_argument_syntax() != 'msvc'
+if cpp.get_argument_syntax() == 'msvc'
+  add_project_arguments(
+    '/EHsc',
+    '/permissive-',
+    '/Zc:__cplusplus',
+    '/utf-8',
+    '/bigobj',
+    language: ['c', 'cpp'],
+  )
+else
   shared_cpp_args += [
     '-fno-strict-aliasing',
     '-Wno-unused-parameter',
@@ -184,6 +205,7 @@ idlib_lib = static_library(
   idlib_sources,
   include_directories: [root_inc, src_inc, idlib_inc],
   cpp_args: shared_cpp_args + idlib_pch_args + ['-D__IDLIB__', '-D_LIB'],
+  dependencies: [threads_dep],
   install: false,
 )
 
@@ -260,6 +282,7 @@ game_module = shared_library(
   name_prefix: '',
   include_directories: [root_inc, src_inc, game_inc],
   cpp_args: shared_cpp_args + game_pch_args + ['-DGAME_DLL'],
+  dependencies: [threads_dep, m_dep],
   link_with: [libgamedecl_lib, idlib_lib],
   link_args: game_link_args,
   install: true,

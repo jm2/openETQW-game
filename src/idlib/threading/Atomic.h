@@ -11,19 +11,9 @@ public:
 
 ID_INLINE bool sdAtomic::CompareAndSwap( volatile int* dest, int comperand, int exchange ) {
 #if defined( _XENON ) || defined( _WIN32 )
-	return ( comperand == ::InterlockedCompareExchange( dest, exchange, comperand ) );
+	return ( comperand == ::InterlockedCompareExchange( reinterpret_cast< volatile LONG* >( dest ), exchange, comperand ) );
 #elif defined( __linux__ )
-	// CHECKME: untested
-	int old;
-
-	__asm__ __volatile__ (
-		"lock\n"										\
-		"cmpxchgl %2, %1\n"								\
-		: "a" (old), "=m" (*dest),						\
-		: "r" (exchange), "m" (*dest), "0" (comperand)	\
-		: "memory" );
-
-	return old == comperand;
+	return __sync_bool_compare_and_swap( dest, comperand, exchange );
 #elif defined( MACOS_X ) || defined( __APPLE__ )
 	return __sync_bool_compare_and_swap( dest, comperand, exchange );
 #endif
