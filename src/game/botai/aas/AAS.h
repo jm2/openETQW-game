@@ -123,6 +123,8 @@ public:
 	virtual bool				ChangeAreaTravelFlags( const idBounds &bounds, const int areaFlags, int travelFlags, bool set ) = 0;
 								// Change the given travel flags on the reachability with the given name.
 	virtual bool				ChangeReachabilityTravelFlags( const char *name, int travelFlags, bool set ) = 0;
+								// Returns the index of the reachability with the given name, or -1 if there is none.
+	virtual int					FindReachabilityByName( const char *name ) const = 0;
 								// Returns the travel time towards the goal area in 100th of a second.
 	virtual int					TravelTimeToGoalArea( int startAreaNum, const idVec3 &startOrigin, int goalAreaNum, int travelFlags ) const = 0;
 								// Get the travel time and first reachability to be used towards the goal, returns false if there is no path.

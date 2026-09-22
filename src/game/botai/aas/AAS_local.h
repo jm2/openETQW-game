@@ -85,6 +85,7 @@ public:
 	virtual void				SetAreaTravelFlags( int areaNum, int travelFlags );
 	virtual bool				ChangeAreaTravelFlags( const idBounds &bounds, const int areaFlags, int travelFlags, bool set );
 	virtual bool				ChangeReachabilityTravelFlags( const char *name, int travelFlags, bool set );
+	virtual int					FindReachabilityByName( const char *name ) const;
 	virtual int					TravelTimeToGoalArea( int startAreaNum, const idVec3 &startOrigin, int goalAreaNum, int travelFlags ) const;
 	virtual bool				RouteToGoalArea( int startAreaNum, const idVec3 &startOrigin, int goalAreaNum, int travelFlags, int &travelTime, const aasReachability_t **reach ) const;
 	virtual bool				WalkPathToGoal( idAASPath &path, int startAreaNum, const idVec3 &startOrigin, int goalAreaNum, const idVec3 &goalOrigin, int travelFlags, int walkTravelFlags ) const;

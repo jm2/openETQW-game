@@ -2829,8 +2829,12 @@ void sdTransport::PlacePlayerInPosition( idPlayer *other, sdVehiclePosition &pos
 	other->SetProxyEntity( this, position.GetPositionId() );
 	other->ResetPredictionErrorDecay();
 	ResetChassisHistory();
-	gameLocal.unlock.originlog[ 0 ] = other->renderView.vieworg;
-	gameLocal.unlock.originlog[ 1 ] = other->renderView.vieworg;
+	// the fps-unlock origin log belongs to the local view: other players (bots included)
+	// boarding must not reset it
+	if ( other == gameLocal.GetLocalViewPlayer() ) {
+		gameLocal.unlock.originlog[ 0 ] = other->renderView.vieworg;
+		gameLocal.unlock.originlog[ 1 ] = other->renderView.vieworg;
+	}
 	GetViewForPlayer( other ).ResetViewHistory( other );
 
 	const char* fsmName = position.GetAttachAnim();

@@ -50,6 +50,10 @@ void idBotThread::StartThread() {
 		thread->Destroy();
 		thread = NULL;
 	}
+
+	// the think frame / wait counters cover the lifetime of this bot thread ( i.e. the current map )
+	botThreadData.ResetThreadStats();
+
 #ifdef _XENON
 	thread = new sdThread( this, THREAD_NORMAL, XENON_STACKSIZE_BOT );
 #else

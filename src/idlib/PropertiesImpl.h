@@ -782,6 +782,7 @@ namespace sdProperties {
 	============
 	*/
 	ID_INLINE void sdPropertyHandler::Remove( const char* name ) {
+		DropStaleProperties();
 		propertyAllocator.Free( GetProperty( name, PT_INVALID ) );
 		properties.Remove( name ); 
 	}

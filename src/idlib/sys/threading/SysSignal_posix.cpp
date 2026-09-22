@@ -6,6 +6,7 @@
 
 #include <sys/time.h>
 #include <time.h>
+#include <errno.h>
 
 /*
 =============
@@ -43,13 +44,56 @@ sdSysSignal::Set
 */
 void sdSysSignal::Set( signalHandle_t& handle ) {
 	pthread_mutex_lock( &handle.mutex );
+	// emulate windows auto-reset event behaviour: the signal stays on until a Wait() consumes it,
+	// which also covers a waiter that times out right as the signal is raised
+	handle.signaled = true;
 	if ( handle.waiting ) {
 		pthread_cond_signal( &handle.cond );
-	} else {
-		// emulate windows behaviour: if no thread is waiting, leave the signal on so next Wait() keeps going
-		handle.signaled = true;
 	}
 	pthread_mutex_unlock( &handle.mutex );
+}
+
+/*
+=============
+WaitLocked
+
+called with handle.mutex held; returns true when the signal was consumed, false on timeout
+=============
+*/
+static bool WaitLocked( signalHandle_t& handle, int timeout ) {
+	assert( !handle.waiting );	// Wait() from multiple threads?
+	if ( !handle.signaled ) {
+		handle.waiting = true;
+		if ( timeout == sdSignal::WAIT_INFINITE ) {
+			while ( !handle.signaled ) {
+				pthread_cond_wait( &handle.cond, &handle.mutex );
+			}
+		} else {
+			struct timeval tp;
+			int rc = gettimeofday( &tp, NULL );
+			assert( rc == 0 );
+			struct timespec ts;
+			ts.tv_sec = tp.tv_sec + timeout / 1000;
+			long nsec = static_cast< long >( tp.tv_usec ) * 1000 + static_cast< long >( timeout % 1000 ) * 1000000;
+			ts.tv_sec += nsec / 1000000000;
+			ts.tv_nsec = nsec % 1000000000;
+			rc = 0;
+			while ( !handle.signaled && rc != ETIMEDOUT ) {
+				rc = pthread_cond_timedwait( &handle.cond, &handle.mutex, &ts );
+				assert( rc == 0 || rc == ETIMEDOUT );
+				if ( rc != 0 && rc != ETIMEDOUT ) {
+					break;
+				}
+			}
+		}
+		handle.waiting = false;
+	}
+	if ( !handle.signaled ) {
+		return false;
+	}
+	// signal has been raised. clear and keep going
+	handle.signaled = false;
+	return true;
 }
 
 /*
@@ -68,29 +112,10 @@ sdSysSignal::Wait
 =============
 */
 bool sdSysSignal::Wait( signalHandle_t& handle, int timeout ) {
-	int rc;
-	struct timespec ts;
-	struct timeval tp;
 	pthread_mutex_lock( &handle.mutex );
-	assert( !handle.waiting );	// Wait() from multiple threads?
-	if ( handle.signaled ) {
-		// emulate windows behaviour: signal has been raised already. clear and keep going
-		handle.signaled = false;
-	} else {
-		handle.waiting = true;
-		if ( timeout == sdSignal::WAIT_INFINITE ) {
-			pthread_cond_wait( &handle.cond, &handle.mutex );
-		} else {
-			rc =  gettimeofday( &tp, NULL );
-			assert( rc == 0 );
-			ts.tv_sec = tp.tv_sec + timeout / 1000;
-			ts.tv_nsec = tp.tv_usec * 1000 + ( timeout % 1000 ) * 1000000;
-			pthread_cond_timedwait( &handle.cond, &handle.mutex, &ts );
-		}
-		handle.waiting = false;
-	}
+	const bool signaled = WaitLocked( handle, timeout );
 	pthread_mutex_unlock( &handle.mutex );
-	return true;
+	return signaled;
 }
 
 /*
@@ -117,31 +142,11 @@ see pthread_cond_wait documentation for precise details
 =============
 */
 bool sdSysSignal::SignalAndWait( signalHandle_t& signal, signalHandle_t& handle, int timeout ) {
-	int rc;
-	struct timespec ts;
-	struct timeval tp;
-
 	pthread_mutex_lock( &handle.mutex );
-	assert( !handle.waiting );	// Wait() from multiple threads?
 
 	Set( signal );
 
-	if ( handle.signaled ) {
-		// emulate windows behaviour: signal has been raised already. clear and keep going
-		handle.signaled = false;
-	} else {
-		handle.waiting = true;
-		if ( timeout == sdSignal::WAIT_INFINITE ) {
-			pthread_cond_wait( &handle.cond, &handle.mutex );
-		} else {
-			rc =  gettimeofday( &tp, NULL );
-			assert( rc == 0 );
-			ts.tv_sec = tp.tv_sec + timeout / 1000;
-			ts.tv_nsec = tp.tv_usec * 1000 + ( timeout % 1000 ) * 1000000;
-			pthread_cond_timedwait( &handle.cond, &handle.mutex, &ts );
-		}
-		handle.waiting = false;
-	}
+	const bool signaled = WaitLocked( handle, timeout );
 	pthread_mutex_unlock( &handle.mutex );
-	return true;
+	return signaled;
 }

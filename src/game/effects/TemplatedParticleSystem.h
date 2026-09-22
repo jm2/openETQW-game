@@ -111,6 +111,9 @@ template< class ParticleClass, class ParameterClass > void sdTemplatedParticleSy
 	ClearSurfaces();
 	AddSurfaceDB( material, maxParticles * ParticleClass::NUM_INSTANCE_VERTEXES, maxParticles * ParticleClass::NUM_INSTANCE_INDEXES );
 
+	GetTriSurf()->numVerts = 0;
+	GetTriSurf()->numIndexes = 0;
+
 	for ( int i = 0; i<maxParticles; i++ ) {
 		particles[i].StaticInitializeAndRender( this );
 	}

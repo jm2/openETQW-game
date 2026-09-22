@@ -24,11 +24,9 @@ private:
 						sdSysThread() {}
 
 #ifndef _WIN32
+	// thread entry point used when the thread has to lower its own priority first;
+	// its argument is the thread's threadHandle_t
 	static void*		setPriorityProc( void *parms );
-
-	static threadProc_t createProc;
-	static void*		createParms;
-	static int			priority;
 #endif
 };
 

@@ -89,18 +89,20 @@ public:
 	static const int		MAX_RAND = 0x7fff;
 
 private:
-	unsigned long			seed;
+	// 32 bit state: the float construction below reinterprets 'i' as an IEEE single, which
+	// requires a 4 byte integer ('unsigned long' is 8 bytes on LP64 targets)
+	dword					seed;
 
-	static const unsigned long	IEEE_ONE = 0x3f800000;
-	static const unsigned long	IEEE_MASK = 0x007fffff;
+	static const dword		IEEE_ONE = 0x3f800000;
+	static const dword		IEEE_MASK = 0x007fffff;
 };
 
 ID_INLINE idRandom2::idRandom2( unsigned long seed ) {
-	this->seed = seed;
+	this->seed = static_cast< dword >( seed );
 }
 
 ID_INLINE void idRandom2::SetSeed( unsigned long seed ) {
-	this->seed = seed;
+	this->seed = static_cast< dword >( seed );
 }
 
 ID_INLINE unsigned long idRandom2::GetSeed( void ) const {
@@ -120,14 +122,14 @@ ID_INLINE int idRandom2::RandomInt( int maxValue ) {
 }
 
 ID_INLINE float idRandom2::RandomFloat( void ) {
-	unsigned long i;
+	dword i;
 	seed = 1664525L * seed + 1013904223L;
 	i = idRandom2::IEEE_ONE | ( seed & idRandom2::IEEE_MASK );
 	return ( ( *(float *)&i ) - 1.0f );
 }
 
 ID_INLINE float idRandom2::CRandomFloat( void ) {
-	unsigned long i;
+	dword i;
 	seed = 1664525L * seed + 1013904223L;
 	i = idRandom2::IEEE_ONE | ( seed & idRandom2::IEEE_MASK );
 	return ( 2.0f * ( *(float *)&i ) - 3.0f );

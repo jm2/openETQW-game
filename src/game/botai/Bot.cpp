@@ -19,6 +19,17 @@
 #include "../WorldSpawn.h"
 
 
+/*
+================
+Bot_ProxyTransport
+
+GetProxyEntity() is NULL when the bot is on foot; never call Cast<> through a NULL pointer.
+================
+*/
+static sdTransport* Bot_ProxyTransport( idEntity* proxy ) {
+	return ( proxy != NULL ) ? proxy->Cast< sdTransport >() : NULL;
+}
+
 idCVar bot_testObstacleAvoidance( "bot_testObstacleAvoidance", "0", CVAR_GAME | CVAR_BOOL, "test obstacle avoidance" );
 
 #ifdef BOT_MOVE_LOOKUP
@@ -705,7 +716,8 @@ void idBot::AngleUcmds( usercmd_t &ucmd ) {
 
 		idAngles deltaViewAngles;
 
-		sdScriptEntity* camera = remoteCamera.GetEntity()->Cast< sdScriptEntity >();
+		idEntity* cameraEntity = remoteCamera.GetEntity();
+		sdScriptEntity* camera = ( cameraEntity != NULL ) ? cameraEntity->Cast< sdScriptEntity >() : NULL;
 		if ( camera != NULL ) {
 			deltaViewAngles = camera->GetDeltaViewAngles();
 		} else {
@@ -1517,7 +1529,7 @@ void idBot::VehicleUcmds( usercmd_t &ucmd ) {
 	clientInfo_t &clientInfo = botThreadData.GetGameWorldState()->clientInfo[ entityNumber ];
 	const botAIOutput_t &clientUcmd = botThreadData.GetGameOutputState()->botOutput[ entityNumber ];
 
-	sdTransport* transport = GetProxyEntity()->Cast< sdTransport >();
+	sdTransport* transport = Bot_ProxyTransport( GetProxyEntity() );
 
 	GetVehicleInfo( GetProxyEntity()->entityNumber, vehicleInfo );
 
@@ -1698,7 +1710,7 @@ void idBot::GroundVehicleControls( usercmd_t &ucmd ) {
 	const botAIOutput_t& botOutput = botThreadData.GetGameOutputState()->botOutput[ entityNumber ];
 	idVec3	vec, end;
 
-	sdTransport* transport = GetProxyEntity()->Cast< sdTransport >();
+	sdTransport* transport = Bot_ProxyTransport( GetProxyEntity() );
 
 	if ( transport == NULL ) { //mal: paranoid safety check
 		gameLocal.Warning("Bot client #: %i thinks its on a vehicle, but its not!!!", entityNumber );
@@ -2186,7 +2198,7 @@ void idBot::Bot_VehicleAimAtEnemy( int clientNum ) {
 	idVec3 vec = GetPlayerViewPosition( clientNum ) - firstPersonViewOrigin;
 	float dist = vec.LengthSqr();
 	float aim;
-	sdTransport* transport = GetProxyEntity()->Cast< sdTransport >();
+	sdTransport* transport = Bot_ProxyTransport( GetProxyEntity() );
 
 	if ( transport == NULL ) {
 		gameLocal.DWarning("Bot client %i thinks its in a vehicle, when its not!\n", entityNumber );
@@ -2265,7 +2277,7 @@ void idBot::AirVehicleControls( usercmd_t &ucmd ) {
 	idVec3 forward;
 	idVec3 right;
 	
-	sdTransport* transport = GetProxyEntity()->Cast< sdTransport >();
+	sdTransport* transport = Bot_ProxyTransport( GetProxyEntity() );
 
 	height = GetPhysics()->GetOrigin().z;
 
@@ -2672,7 +2684,7 @@ idBot::IcarusVehicleControls
 ==================
 */
 void idBot::IcarusVehicleControls( usercmd_t &ucmd ) {
-	sdTransport* transport = GetProxyEntity()->Cast< sdTransport >();
+	sdTransport* transport = Bot_ProxyTransport( GetProxyEntity() );
 
 	if ( transport == NULL ) { //mal: paranoid safety check
 		gameLocal.Warning("Bot client #: %i thinks its on a vehicle, but its not!!!", entityNumber );

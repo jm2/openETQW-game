@@ -33,7 +33,33 @@ public:
 	virtual bool				TraceFloor( aasTraceFloor_t &trace, const idVec3 &start, int startAreaNum, const idVec3 &end, int endAreaNum, int travelFlags ) const override;
 
 private:
-	int							BoundsReachableAreaNum_r( int nodeNum, const idBounds &bounds, const int areaFlags, const int excludeTravelFlags ) const;
+	bool						AreaMatches( int areaNum, int areaFlags, int excludeTravelFlags ) const;
+	int							BoundsReachableAreaNum_r( int nodeNum, const idBounds &bounds, int areaFlags, int excludeTravelFlags, int depth ) const;
+	void						BoundsAreas_r( int nodeNum, const idBounds &bounds, int areaFlags, int excludeTravelFlags, int *areaList, int &numAreas, int maxAreas, int depth ) const;
+	bool						TraceSegment_r( aasTrace_t &trace, const idVec3 &start, const idVec3 &delta, int nodeNum, float startFraction, float endFraction, int enterPlaneNum, int depth ) const;
+	void						SetTraceBlocked( aasTrace_t &trace, const idVec3 &start, const idVec3 &delta, float fraction, int planeNum, int blockingAreaNum ) const;
+
+	bool						ValidateIndices( const char *fileName ) const;
+	void						BuildEdgeAreas();
+
+								// edge of an area polygon in the direction the area uses it ( clockwise seen from above )
+	void						GetAreaEdge( int edgeNum, const idVec3 *&v0, const idVec3 *&v1 ) const;
+								// negative inside the area polygon ( minus the distance to its boundary ), positive outside
+	float						AreaPolygonDistance2D( int areaNum, float x, float y, idVec2 *closest = NULL ) const;
+								// floor height of the area boundary within maxDistance of ( x, y )
+	bool						AreaBoundaryHeight( int areaNum, float x, float y, float maxDistance, float &height ) const;
+
+	bool						AreaTravelAllowed( int areaNum, int travelFlags ) const;
+	bool						ReachabilityAllowed( int fromAreaNum, int toAreaNum, int travelFlags ) const;
+	int							FloorTraceNextArea( int curAreaNum, int edgeNum, const idVec3 &crossPoint, float dirX, float dirY, int travelFlags ) const;
+
+	bool						ColumnHeight( float x, float y, float &height ) const;
+	bool						PushPointIntoColumn( int areaNum, float x, float y, float z, float &pushedZ ) const;
+
+	// the two areas using each edge: [ edgeNum * 2 + 0 ] and [ edgeNum * 2 + 1 ].
+	// 0 = no area, the second entry is -1 when more than two areas use the edge
+	idList<int>					edgeAreas;
+	float						maxVertexHeight;
 };
 
 class idAASFileManagerLocal : public idAASFileManager {

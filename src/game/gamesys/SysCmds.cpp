@@ -19,6 +19,7 @@ static char THIS_FILE[] = __FILE__;
 #include "../Player.h"
 
 #include "../botai/Bot.h"
+#include "../botai/BotThread.h"
 #include "../botai/BotThreadData.h"
 #include "../botai/Bot_Common.h"
 
@@ -901,12 +902,40 @@ void Cmd_PlayerPos_f( const idCmdArgs &args ) {
 	bool attacking = ( player->GetWeapon() != NULL ) ? player->GetWeapon()->IsAttacking() : false;
 	const char* teamName = player->GetGameTeam() ? player->GetGameTeam()->GetLookupName() : "none";
 
-	gameLocal.Printf( "PLAYER_POS: (%.2f, %.2f, %.2f) vel: (%.2f, %.2f, %.2f) ground: %d ducked: %d prone: %d jumped: %d (client: %d team: %s spectating %d atk: %d cmd: fwd=%d side=%d up=%d atk_cmd=%d lagged=%d frozen=%d inh=%d)\n",
+	// player AAS area containing the origin: -1 = no player AAS loaded, 0 = not in any area.
+	// Read-only AAS queries, safe while the bot thread is running.
+	int areaNum = -1;
+	idAAS* playerAAS = botThreadData.GetAAS( AAS_PLAYER );
+	if ( playerAAS != NULL ) {
+		areaNum = playerAAS->PointReachableAreaNum( org, playerAAS->GetSettings()->boundingBox, AAS_AREA_REACHABLE_WALK, 0 );
+	}
+
+	gameLocal.Printf( "PLAYER_POS: (%.2f, %.2f, %.2f) vel: (%.2f, %.2f, %.2f) ground: %d ducked: %d prone: %d jumped: %d (client: %d team: %s spectating %d atk: %d cmd: fwd=%d side=%d up=%d atk_cmd=%d lagged=%d frozen=%d inh=%d hp=%d dead=%d area=%d)\n",
 		org.x, org.y, org.z, vel.x, vel.y, vel.z, ground ? 1 : 0, ducked ? 1 : 0, prone ? 1 : 0, jumped ? 1 : 0,
 		player->entityNumber, teamName, player->IsSpectating() ? 1 : 0, attacking ? 1 : 0,
 		(int)player->usercmd.forwardmove, (int)player->usercmd.rightmove, (int)player->usercmd.upmove,
 		player->usercmd.buttons.btn.attack ? 1 : 0,
-		player->GetIsLagged() ? 1 : 0, phys.IsFrozen() ? 1 : 0, player->InhibitMovement() ? 1 : 0 );
+		player->GetIsLagged() ? 1 : 0, phys.IsFrozen() ? 1 : 0, player->InhibitMovement() ? 1 : 0,
+		player->GetHealth(), player->IsDead() ? 1 : 0, areaNum );
+}
+
+/*
+==================
+Cmd_BotThreadStats_f
+
+Bot think pacing diagnostics: prints exactly one line.
+==================
+*/
+void Cmd_BotThreadStats_f( const idCmdArgs &args ) {
+	gameLocal.Printf( "BOT_THREAD_STATS: threading=%d running=%d gameFrame=%d gameTimeMs=%d botFrames=%d minDelay=%d maxDelay=%d waits=%d\n",
+		botThreadData.IsThreadingEnabled() ? 1 : 0,
+		botThread->IsRunning() ? 1 : 0,
+		gameLocal.GetFrameNum(),
+		gameLocal.time,
+		botThreadData.GetNumBotThinkFrames(),
+		botThreadData.GetThreadMinFrameDelay(),
+		botThreadData.GetThreadMaxFrameDelay(),
+		botThreadData.GetNumBotThreadWaits() );
 }
 
 /*
@@ -3450,6 +3479,7 @@ void idGameLocal::InitConsoleCommands( void ) {
 	cmdSystem->AddCommand( "toggleLimbo",			Cmd_ToggleLimbo_f,			CMD_FL_GAME,				"toggle limbo menu" );
 	cmdSystem->AddCommand( "closeLimbo",			Cmd_CloseLimbo_f,			CMD_FL_GAME,				"close limbo menu" );
 	cmdSystem->AddCommand( "playerPos",				Cmd_PlayerPos_f,			CMD_FL_GAME,				"prints current player position, velocity, and stance" );
+	cmdSystem->AddCommand( "botThreadStats",		Cmd_BotThreadStats_f,		CMD_FL_GAME,				"prints bot think frame pacing statistics" );
 #ifdef SD_PRIVATE_BETA_BUILD
 	cmdSystem->AddCommand( "where",					Cmd_GetViewpos_f,			CMD_FL_GAME,				"prints the current view position (x y z) yaw pitch roll" );
 	cmdSystem->AddCommand( "getviewpos",			Cmd_GetViewpos_f,			CMD_FL_GAME,				"prints the current view position (x y z) yaw pitch roll" );
@@ -3630,6 +3660,7 @@ idGameLocal::ShutdownConsoleCommands
 */
 void idGameLocal::ShutdownConsoleCommands( void ) {
 	cmdSystem->RemoveCommand( "playerPos" );
+	cmdSystem->RemoveCommand( "botThreadStats" );
 	cmdSystem->RemoveCommand( "completeObjective" );
 	cmdSystem->RemoveCommand( "objectiveStatus" );
 	cmdSystem->RemoveCommand( "deploy" );

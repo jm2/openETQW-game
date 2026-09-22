@@ -26,6 +26,7 @@ static char THIS_FILE[] = __FILE__;
 */
 
 extern const idEventDef EV_GetEnemy;
+extern idCVar g_debugDeployables;
 
 const idEventDef EV_Turret_SetDisabled( "setDisabled", '\0', DOC_TEXT( "Sets whether the turret is disabled or not." ), 1, NULL, "b", "state", "Whether the turret is disabled." );
 const idEventDef EV_Turret_IsDisabled( "isDisabled", 'b', DOC_TEXT( "Returns whether the turret is disabled." ), 0, NULL );
@@ -379,7 +380,9 @@ void sdDefenceTurret::SetTargetEntity( idEntity* entity ) {
 
 	if ( entity != NULL ) {
 		turretFlags.hasTarget = true;
-		gameLocal.Printf( "[TURRET_TARGET] %s acquired target %s\n", name.c_str(), entity->name.c_str() );
+		if ( g_debugDeployables.GetBool() ) {
+			gameLocal.Printf( "[TURRET_TARGET] %s acquired target %s\n", name.c_str(), entity->name.c_str() );
+		}
 	} else {
 		turretFlags.hasTarget = false;
 		aimer.ClearTarget();
@@ -485,11 +488,13 @@ void sdDefenceTurret::BeginAttack( void ) {
 
 	turretFlags.attacking = true;
 
-	if ( target != NULL ) {
-		const idVec3& tPos = target->GetPhysics()->GetOrigin();
-		gameLocal.Printf( "[TURRET_ENGAGE] %s attacking target %s at (%.2f, %.2f, %.2f)\n", name.c_str(), target->name.c_str(), tPos.x, tPos.y, tPos.z );
-	} else {
-		gameLocal.Printf( "[TURRET_ENGAGE] %s attacking\n", name.c_str() );
+	if ( g_debugDeployables.GetBool() ) {
+		if ( target != NULL ) {
+			const idVec3& tPos = target->GetPhysics()->GetOrigin();
+			gameLocal.Printf( "[TURRET_ENGAGE] %s attacking target %s at (%.2f, %.2f, %.2f)\n", name.c_str(), target->name.c_str(), tPos.x, tPos.y, tPos.z );
+		} else {
+			gameLocal.Printf( "[TURRET_ENGAGE] %s attacking\n", name.c_str() );
+		}
 	}
 
 	scriptObject->CallEvent( "OnBeginAttack" );

@@ -1992,4 +1992,33 @@ void Mem_EnableLeakTest( const char *name ) {
 
 #endif /* !ID_DEBUG_MEMORY */
 
+#if ID_BLOCKALLOC_VALIDATE
+
+#if !defined( _WIN32 )
+#include <execinfo.h>
+#include <unistd.h>
+#endif
+
+/*
+==================
+idBlockAllocValidationFailed
+
+Only built with ID_BLOCKALLOC_VALIDATE. Reports an invalid idBlockAlloc::Free and
+aborts: it runs from any thread and from static destructors, so it cannot rely on
+idCommon being available.
+==================
+*/
+void idBlockAllocValidationFailed( const char* reason, const void* pointer ) {
+	fprintf( stderr, "idBlockAlloc::Free: %s (pointer %p)\n", reason, pointer );
+#if !defined( _WIN32 )
+	void* frames[ 64 ];
+	const int numFrames = backtrace( frames, 64 );
+	backtrace_symbols_fd( frames, numFrames, STDERR_FILENO );
+#endif
+	fflush( stderr );
+	abort();
+}
+
+#endif /* ID_BLOCKALLOC_VALIDATE */
+
 #pragma warning( pop )

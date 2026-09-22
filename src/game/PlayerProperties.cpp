@@ -381,6 +381,7 @@ sdPlayerProperties::Shutdown
 ================
 */
 void sdPlayerProperties::Shutdown( void ) {
+	ShutdownGUIs();
 	properties.Clear();
 }
 
