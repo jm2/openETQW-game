@@ -718,31 +718,37 @@ void sdObjectiveManagerLocal::OnNetworkEvent( const char* message ) {
 sdObjectiveManagerLocal::Event_SendNetworkEvent
 ================
 */
-void sdObjectiveManagerLocal::Event_SendNetworkEvent( int clientIndex, bool isRepeaterClient, const char* message ) {
+void sdObjectiveManagerLocal::Event_SendNetworkEvent( idEntity* player, const char* message ) {
+	// script/events.script declares 'sendNetworkEvent( entity p, string message )' and
+	// sdEventDefHelper::ReconcileEventsWithScript rewrites EV_SendNetworkEvent to that signature,
+	// so the arguments arrive as ( entity, string ). The SDK handler took ( clientIndex, isRepeater,
+	// message ) and read its message from an argument that was never passed.
+	if ( EV_SendNetworkEvent.GetNumArgs() != 2 ) {
+		gameLocal.Warning( "sdObjectiveManagerLocal::Event_SendNetworkEvent: '%s' has %d arguments, expected the script signature ( entity, string )", EV_SendNetworkEvent.GetName(), EV_SendNetworkEvent.GetNumArgs() );
+		return;
+	}
 	if ( !message || !*message ) {
 		return;
 	}
-	if ( !isRepeaterClient ) {
-		if ( clientIndex == -1 ) {
-			if ( gameLocal.GetLocalPlayer() != NULL ) {
-				OnNetworkEvent( message );
-			}
-		} else {
-			idPlayer* player = gameLocal.GetClient( clientIndex );
-			if ( player != NULL && gameLocal.IsLocalPlayer( player ) ) {
-				OnNetworkEvent( message );
-			}
+
+	// $null_entity means every client; the script handles that case locally itself
+	int clientIndex = -1;
+	if ( player != NULL ) {
+		idPlayer* target = player->Cast< idPlayer >();
+		if ( target == NULL ) {
+			gameLocal.Warning( "sdObjectiveManagerLocal::Event_SendNetworkEvent: '%s' is not a player", player->GetName() );
+			return;
+		}
+		clientIndex = target->entityNumber;
+		if ( gameLocal.IsLocalPlayer( target ) ) {
+			OnNetworkEvent( message );
 		}
 	}
 
 	sdReliableServerMessage msg( GAME_RELIABLE_SMESSAGE_NETWORKEVENT );
 	msg.WriteLong( NETWORKEVENT_OBJECTIVE_ID );
 	msg.WriteString( message );
-	if ( isRepeaterClient ) {
-		msg.Send( sdReliableMessageClientInfoRepeater( clientIndex ) );
-	} else {
-		msg.Send( sdReliableMessageClientInfo( clientIndex ) );
-	}
+	msg.Send( sdReliableMessageClientInfo( clientIndex ) );
 }
 
 /*

@@ -218,7 +218,8 @@ namespace sdProperties {
 	*/
 	class sdPropertyHandler {
 	public:
-		sdPropertyHandler() {
+		sdPropertyHandler() :
+			allocatorGeneration( currentAllocatorGeneration ) {
 			properties.InitHash( 16, 16 );
 			properties.SetGranularity( 16 );
 		}
@@ -233,6 +234,7 @@ namespace sdProperties {
 		sdProperty*			RegisterProperty( const char* name, sdPropertyValue< T >& value ) {
 								typedef sdPropertyTypeTraits< T > typeTraits;
 
+								DropStaleProperties();
 								if( sdProperty* prop = GetProperty( name, static_cast< ePropertyType >( typeTraits::tag ), false )) {
 									return prop;
 								}
@@ -259,12 +261,18 @@ namespace sdProperties {
 							}
 
 		void				Clear() {
-								propertyHashMap_t::Iterator iter = properties.Begin();
-								for ( iter; iter != properties.End(); ++iter ) {
-									propertyAllocator.Free( iter->second );
+								// handlers owned by static objects are destroyed after idLib::ShutDown has
+								// released the allocator's blocks, and with them these properties: only
+								// return properties to the allocator generation they came from
+								if ( allocatorGeneration == currentAllocatorGeneration ) {
+									propertyHashMap_t::Iterator iter = properties.Begin();
+									for ( iter; iter != properties.End(); ++iter ) {
+										propertyAllocator.Free( iter->second );
+									}
 								}
 								properties.Clear();
 								canonicalName.Clear();
+								allocatorGeneration = currentAllocatorGeneration;
 							}
 
 
@@ -276,17 +284,26 @@ namespace sdProperties {
 		void				SetReadOnly( bool readOnly );
 
 		static void			Init() {}
-		static void			Shutdown() { propertyAllocator.Shutdown(); }
+		static void			Shutdown() { propertyAllocator.Shutdown(); currentAllocatorGeneration++; }
 
 	private:
 							sdPropertyHandler( const sdPropertyHandler& rhs );
 		sdPropertyHandler&	operator=( const sdPropertyHandler& rhs );
 		const char*			MakeCanonical( const char* name ) const;
 
+							// forgets (without freeing) properties allocated before the last allocator shutdown
+		void				DropStaleProperties() {
+								if ( allocatorGeneration != currentAllocatorGeneration ) {
+									Clear();
+								}
+							}
+
 	private:
 		sdHashMapGeneric< idStr, sdProperty*, sdHashCompareStrIcmp >	properties;
 		mutable idStr				canonicalName;
+		int							allocatorGeneration;	// value of currentAllocatorGeneration when this handler's properties were allocated
 		static idBlockAlloc< sdProperty, 64 > propertyAllocator;
+		static int					currentAllocatorGeneration;	// bumped every time propertyAllocator is shut down
 	};
 
 	template< class T >

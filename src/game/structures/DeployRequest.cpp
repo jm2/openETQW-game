@@ -17,6 +17,10 @@ static char THIS_FILE[] = __FILE__;
 #include "../script/Script_ScriptObject.h"
 #include "../structures/DeployMask.h"
 
+// debug/test trace of deployable delivery and defence turret engagement ([DEPLOY_DELIVER],
+// [TURRET_TARGET], [TURRET_ENGAGE] log lines); off by default to keep server logs quiet
+idCVar g_debugDeployables( "g_debugDeployables", "0", CVAR_GAME | CVAR_BOOL, "print deployable delivery and defence turret targeting events" );
+
 /*
 ===============================================================================
 
@@ -218,7 +222,9 @@ bool sdDeployRequest::CallForDropOff( void ) {
 	helper.Push( rotation );
 	other->CallNonBlockingScriptEvent( other->scriptObject->GetFunction( "OnSetDeploymentParms" ), helper );
 
-	gameLocal.Printf( "[DEPLOY_DELIVER] Carrier spawned for %s at (%.2f, %.2f, %.2f)\n", object->GetName(), position.x, position.y, position.z );
+	if ( g_debugDeployables.GetBool() ) {
+		gameLocal.Printf( "[DEPLOY_DELIVER] Carrier spawned for %s at (%.2f, %.2f, %.2f)\n", object->GetName(), position.x, position.y, position.z );
+	}
 
 	return true;
 }

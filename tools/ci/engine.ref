@@ -1,0 +1,8 @@
+# SPDX-License-Identifier: MIT
+#
+# Companion engine revision that the Engine Contract workflow builds against
+# this game checkout. Read by tools/ci/fetch_engine.py; update it with
+#   python3 tools/ci/bump_engine.py --remote main        (or --from-local ../openETQW, or <sha>)
+# Keep this a full 40-character commit SHA that exists on the engine remote.
+repository jm2/openETQW
+commit 75456790bb1e7ce6246d4391db7f18b077f69c84

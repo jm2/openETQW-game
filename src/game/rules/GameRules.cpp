@@ -219,9 +219,10 @@ void sdGameRules::InitConsoleCommands( void ) {
 		cmdSystem->AddCommand( "clientDefaultSpawn",	sdGameRules::DefaultSpawn_f,CMD_FL_GAME, "revert to default spawn" );
 		cmdSystem->AddCommand( "clientWantSpawn",		sdGameRules::WantSpawn_f,	CMD_FL_GAME, "tap out" );
 
+		// short aliases for clientTeam / clientClass. There is deliberately no "spawn" alias for
+		// clientWantSpawn: "spawn" is the entity spawn cheat registered by idGameLocal::InitConsoleCommands.
 		cmdSystem->AddCommand( "setTeam",				sdGameRules::SetTeam_f,		CMD_FL_GAME, "change your team" );
 		cmdSystem->AddCommand( "setClass",				sdGameRules::SetClass_f,	CMD_FL_GAME, "change your class" );
-		cmdSystem->AddCommand( "spawn",					sdGameRules::WantSpawn_f,	CMD_FL_GAME, "tap out" );
 
 		uiManager->RegisterListEnumerationCallback( "chatHistory",			CreateChatList );	// input: show expired, CHAT_MODE_ constant, number of items (-1 for all available)
 
@@ -254,8 +255,8 @@ void sdGameRules::RemoveConsoleCommands( void ) {
 	cmdSystem->RemoveCommand( "clientWantSpawn" );
 	cmdSystem->RemoveCommand( "setTeam" );
 	cmdSystem->RemoveCommand( "setClass" );
-	cmdSystem->RemoveCommand( "spawn" );
-	cmdSystem->RemoveCommand( "playerPos" );
+	// only remove the commands registered in InitConsoleCommands: "spawn" and "playerPos"
+	// belong to idGameLocal and must survive the rules being recreated
 }
 
 /*

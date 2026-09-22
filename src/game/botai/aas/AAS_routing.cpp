@@ -444,6 +444,18 @@ bool idAASLocal::ChangeAreaTravelFlags( const idBounds &bounds, const int areaFl
 
 /*
 ============
+idAASLocal::FindReachabilityByName
+============
+*/
+int idAASLocal::FindReachabilityByName( const char *name ) const {
+	if ( file == NULL ) {
+		return -1;
+	}
+	return file->FindReachabilityByName( name );
+}
+
+/*
+============
 idAASLocal::ChangeReachabilityTravelFlags
 ============
 */

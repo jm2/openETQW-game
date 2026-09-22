@@ -155,6 +155,7 @@ public:
 
 	void StaticInitializeAndRender( sdTemplatedParticleSystem<sdFlake, sdPrecipArgs> *sys ) {
 		srfTriangles_t * tri = sys->GetTriSurf(); 
+		assert( tri->numVerts + NUM_INSTANCE_VERTEXES <= tri->numAllocedVerts );
 		idDrawVert *verts = tri->verts + tri->numVerts;
 		for ( int i=0; i<3; i++ ) {
 			verts[i].color[0] = 0xFF;
@@ -278,6 +279,8 @@ public:
 
 		size = dist * height;
 		tri = sys->GetTriSurf(); 
+		assert( tri->numVerts + NUM_INSTANCE_VERTEXES <= tri->numAllocedVerts );
+		assert( tri->numIndexes + NUM_INSTANCE_INDEXES <= tri->numAllocedIndices );
 		face = tri->verts + tri->numVerts;
 
 		left = sys->GetViewAxis()[1];
@@ -342,6 +345,7 @@ public:
 
 	void StaticInitializeAndRender( sdTemplatedParticleSystem<sdDrop, sdPrecipArgs> *sys ) {
 		srfTriangles_t * tri = sys->GetTriSurf(); 
+		assert( tri->numVerts + NUM_INSTANCE_VERTEXES <= tri->numAllocedVerts );
 		idDrawVert *verts = tri->verts + tri->numVerts;
 		for ( int i=0; i<3; i++ ) {
 			verts[i].color[0] = 0xFF;
@@ -488,6 +492,8 @@ public:
 
 		// dist = 1.0;
 		tri = sys->GetTriSurf(); 
+		assert( tri->numVerts + NUM_INSTANCE_VERTEXES <= tri->numAllocedVerts );
+		assert( tri->numIndexes + NUM_INSTANCE_INDEXES <= tri->numAllocedIndices );
 		face = tri->verts + tri->numVerts;
 
 		face->xyz = finish;
@@ -550,6 +556,7 @@ public:
 
 	void StaticInitializeAndRender( sdTemplatedParticleSystem<sdSplash, sdPrecipArgs> *sys ) {
 		srfTriangles_t * tri = sys->GetTriSurf(); 
+		assert( tri->numVerts + NUM_INSTANCE_VERTEXES <= tri->numAllocedVerts );
 		idDrawVert *verts = tri->verts + tri->numVerts;
 		for ( int i=0; i<4; i++ ) {
 			verts[i].color[0] = 0xFF;
@@ -659,6 +666,8 @@ public:
 
 		start = position;
 		tri = sys->GetTriSurf(); 
+		assert( tri->numVerts + NUM_INSTANCE_VERTEXES <= tri->numAllocedVerts );
+		assert( tri->numIndexes + NUM_INSTANCE_INDEXES <= tri->numAllocedIndices );
 		face = tri->verts + tri->numVerts;
 
 		left = sys->GetViewAxis()[1];

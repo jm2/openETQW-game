@@ -256,8 +256,9 @@ MD5_BlockChecksum
 ===============
 */
 unsigned long MD5_BlockChecksum( const void *data, int length ) {
-	unsigned long	digest[4];
-	unsigned long	val;
+	// the digest is 16 bytes: four 32 bit words (not 'unsigned long', which is 8 bytes on LP64)
+	unsigned int	digest[4];
+	unsigned int	val;
 	MD5_CTX			ctx;
 
 	MD5_Init( &ctx );
@@ -293,8 +294,8 @@ MD5_FinishChecksum
 ===============
 */
 unsigned long MD5_FinishChecksum( md5Context_t& context ) {
-	unsigned long	digest[4];
-	unsigned long	val;
+	unsigned int	digest[4];
+	unsigned int	val;
 
 	MD5_Final( &context, (unsigned char *)digest );
 
@@ -309,11 +310,12 @@ MD5_FinishChecksum
 ===============
 */
 unsigned long MD5_FinishChecksum( md5Context_t& context, unsigned char digest[16] ) {
-	unsigned long	*dg;
-	unsigned long	val;
+	unsigned int	dg[4];
+	unsigned int	val;
 	
 	MD5_Final( &context, (unsigned char *)digest );
-	dg = (unsigned long *)digest;
+	// the caller's digest is only 16 bytes: read it as four 32 bit words
+	memcpy( dg, digest, sizeof( dg ) );
 
 	val = dg[0] ^ dg[1] ^ dg[2] ^ dg[3];
 	return val;

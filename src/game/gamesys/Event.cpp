@@ -523,6 +523,14 @@ idEvent::Free
 ================
 */
 void idEvent::Free( void ) {
+	// already on the free list, e.g. ClearEventList ran while this event was being serviced
+	// and ServiceEvent now frees it a second time: don't relink it or count it twice, which
+	// would make numFreeEvents exceed the real length of freeEvents
+	if ( eventNode.ListHead() == &freeEvents ) {
+		assert( data == NULL && activeEventIndex == -1 );
+		return;
+	}
+
 	if ( data ) {
 		eventDataAllocator.Free( data );
 		data = NULL;
@@ -623,6 +631,7 @@ void idEvent::ClearEventList( void ) {
 	eventQueue.Clear();
 	frameEventQueue[ 0 ].Clear();
 	frameEventQueue[ 1 ].Clear();
+	guiEventQueue.Clear();
 	eventsToRun.SetNum( 0, false );
    
 	// 

@@ -18,7 +18,15 @@
 #else
 	#include <pthread.h>
 	typedef void* (*threadProc_t)( void* );
-	#define threadHandle_t	pthread_t
+	// pthreads have no suspended create: sdSysThread::Create records the creation
+	// parameters here (per thread) and sdSysThread::Start creates the OS thread
+	struct threadHandle_t {
+		pthread_t		handle;
+		threadProc_t	proc;
+		void*			parms;
+		int				priority;		// threadPriority_e
+		unsigned int	stackSize;		// 0 = default
+	};
 	struct signalHandle_t {
 		pthread_mutex_t	mutex;
 		pthread_cond_t	cond;

@@ -96,6 +96,11 @@ else
     '-Wno-invalid-offsetof',
     '-Wno-register',
   ]
+  # SDK code relies on 'this == NULL' checks (e.g. idClass::Cast is 'return this ? ... : NULL')
+  # and on null checks after dereferences; keep optimizing compilers from deleting them.
+  if cpp.has_argument('-fno-delete-null-pointer-checks')
+    shared_cpp_args += ['-fno-delete-null-pointer-checks']
+  endif
 endif
 
 # Force-include precompiled header when use_pch is false

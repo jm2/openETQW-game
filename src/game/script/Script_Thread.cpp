@@ -264,11 +264,11 @@ void idThread::Restart( void ) {
 
 	currentThread = NULL;
 
-	threadAllocator.Shutdown();
-
 	while ( !threadList.IsListEmpty() ) {
 		FreeThread( threadList.Next() );
 	}
+
+	threadAllocator.Shutdown();
 	threadNumList.Clear();
 
 	memset( &trace, 0, sizeof( trace ) );
@@ -359,7 +359,6 @@ idThread::Execute
 ================
 */
 bool idThread::Execute( void ) {
-	idThread	*oldThread;
 	bool		done;
 
 	int now = gameLocal.time;
@@ -371,8 +370,12 @@ bool idThread::Execute( void ) {
 		return false;
 	}
 
-	oldThread = currentThread;
-	currentThread = this;
+	struct idScopedCurrentThread {
+		idThread*& slot;
+		idThread* prev;
+		idScopedCurrentThread( idThread*& s, idThread* cur ) : slot( s ), prev( s ) { slot = cur; }
+		~idScopedCurrentThread() { slot = prev; }
+	} threadScopeGuard( currentThread, this );
 
 	lastExecuteTime = now;
 	ClearWaitFor();
@@ -398,8 +401,6 @@ bool idThread::Execute( void ) {
 			}
 		}
 	}
-
-	currentThread = oldThread;
 
 	return done;
 }

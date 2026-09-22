@@ -314,13 +314,19 @@ private:
 
 ID_INLINE float idMath::RSqrt( float x ) {
 	// NOTE: allows x == 0
-	long i;
+	// The float bits must be reinterpreted through a 32 bit integer. The original code used
+	// 'long', which is 64 bits on LP64 targets: it read 4 stale bytes next to x and the stale
+	// bit 32 ended up in the sign bit of the result.
+	union {
+		float	f;
+		int		i;
+	} bits;
 	float y, r;
 
 	y = x * 0.5f;
-	i = *reinterpret_cast<long *>( &x );
-	i = 0x5f3759df - ( i >> 1 );
-	r = *reinterpret_cast<float *>( &i );
+	bits.f = x;
+	bits.i = 0x5f3759df - ( bits.i >> 1 );
+	r = bits.f;
 	r = r * ( 1.5f - r * r * y );
 	return r;
 }
@@ -1142,7 +1148,9 @@ template< typename T > ID_INLINE float MS2SEC( const T value ) { return static_c
 
 class rvRandom {
 private:
-	static	unsigned long	mSeed;
+	// must stay 32 bits wide: 'mSeed >> 17' only yields the documented 15 bit range when the
+	// LCG wraps at 2^32 ('unsigned long' is 64 bits on LP64 targets)
+	static	dword			mSeed;
 public:
 	rvRandom( void ) { mSeed = 0x89abcdef; }
 
@@ -1150,7 +1158,7 @@ public:
 	static	int				Init( void );
 
 	// Init the seed to a unique number
-	static	void			Init( unsigned long seed ) { mSeed = seed; }
+	static	void			Init( unsigned long seed ) { mSeed = static_cast< dword >( seed ); }
 
 	// Returns a float min <= x < max (exclusive; will get max - 0.00001; but never max)
 	static	float			flrand( float min, float max );

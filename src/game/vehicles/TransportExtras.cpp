@@ -439,7 +439,7 @@ void sdVehiclePosition::CycleCamera( void ) {
 	if ( views.Num() > 0 && views[ viewMode ] != NULL ) {
 		views[ viewMode ]->ResetViewHistory( player );
 	}
-	if ( player != NULL ) {
+	if ( player != NULL && player == gameLocal.GetLocalViewPlayer() ) {
 		gameLocal.unlock.originlog[ 0 ] = player->renderView.vieworg;
 		gameLocal.unlock.originlog[ 1 ] = player->renderView.vieworg;
 	}
@@ -1138,7 +1138,11 @@ sdTransportPositionManager::PositionForPlayer
 ================
 */
 sdVehiclePosition& sdTransportPositionManager::PositionForPlayer( const idPlayer* player ) {
-	return positions[ player->GetProxyPositionId() ];
+	const int positionId = player->GetProxyPositionId();
+	if ( positionId < 0 || positionId >= positions.Num() ) {
+		gameLocal.Error( "sdTransportPositionManager::PositionForPlayer: player '%s' has position id %d, vehicle has %d positions", player->GetUserInfo().name.c_str(), positionId, positions.Num() );
+	}
+	return positions[ positionId ];
 }
 
 /*
@@ -1147,7 +1151,11 @@ sdTransportPositionManager::PositionForPlayer
 ================
 */
 const sdVehiclePosition& sdTransportPositionManager::PositionForPlayer( const idPlayer* player ) const {
-	return positions[ player->GetProxyPositionId() ];
+	const int positionId = player->GetProxyPositionId();
+	if ( positionId < 0 || positionId >= positions.Num() ) {
+		gameLocal.Error( "sdTransportPositionManager::PositionForPlayer: player '%s' has position id %d, vehicle has %d positions", player->GetUserInfo().name.c_str(), positionId, positions.Num() );
+	}
+	return positions[ positionId ];
 }
 
 /*

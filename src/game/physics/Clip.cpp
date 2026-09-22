@@ -2483,6 +2483,9 @@ idClip::ActuallyDeleteClipModels
 void idClip::ActuallyDeleteClipModels( bool force ) {
 	// jrad - this can be called during static initialization, guard appropriately
 	if( collisionModelManager == NULL || collisionModelManager->GetThreadId() == 0 ) {
+		// nothing can be queued here: DeleteClipModel only accepts the main thread, which keeps
+		// its collision thread id until idGameLocal::Shutdown has cleared the clip world
+		assert( deletedClipModels == NULL );
 		return;
 	}
 	if ( collisionModelManager->GetThreadId() != MAIN_THREAD_ID ) {

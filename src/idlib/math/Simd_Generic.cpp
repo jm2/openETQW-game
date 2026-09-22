@@ -2679,16 +2679,9 @@ void SlerpOptimized( const idQuat &from, const idQuat &to, float t, idQuat &resu
 		sinSqr = 1.0f -	cosom * cosom;
 
 		//sinom = 1.0f / sqrt( sinSqr );
-		{
-			long i;
-			float y, r;
-
-			y = sinSqr * 0.5f;
-			i = *reinterpret_cast<long *>( &sinSqr );
-			i = 0x5f3759df - ( i >> 1 );
-			r = *reinterpret_cast<float *>( &i );
-			sinom = r * ( 1.5f - r * r * y );
-		}
+		// same single Newton step estimate as before; the inline 'long' bit pun read 8 bytes
+		// from the 4 byte float on LP64 targets
+		sinom = idMath::RSqrt( sinSqr );
 
 		//omega = atan2( sinSqr * sinom, absCosom );
 		{

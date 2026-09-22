@@ -731,6 +731,11 @@ public:							// the following routines are called from the game thread
 	int							GetThreadMinFrameDelay() const { return threadMinFrameDelay; }
 	int							GetThreadMaxFrameDelay() const { return threadMaxFrameDelay; }
 
+								// bot think pacing diagnostics ( botThreadStats console command )
+	void						ResetThreadStats();						// game thread, only while the bot thread is stopped
+	int							GetNumBotThinkFrames() const;			// RunFrame executions since the bot thread was (re)started for this map
+	int							GetNumBotThreadWaits() const;			// "Waiting on BotThread" stalls since the bot thread was (re)started for this map
+
 	bool						AllowDebugData() const { return !threadingEnabled && bot_debug.GetBool(); }
 	bool						PlayerIsBeingBriefed();
 
@@ -856,6 +861,9 @@ private:
 	idClipModel*				personalVehicleClipModel;		// icarus and husky
 	idClipModel*				genericVehicleClipModel;		// everything but goliath
 	idClipModel*				goliathVehicleClipModel;		// 
+
+	void						FreeVehicleClipModels();
+	void						DeleteBotAIs();
 	
 	int							threadMinFrameDelay;
 	int							threadMaxFrameDelay;
