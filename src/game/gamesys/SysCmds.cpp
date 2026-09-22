@@ -902,12 +902,20 @@ void Cmd_PlayerPos_f( const idCmdArgs &args ) {
 	bool attacking = ( player->GetWeapon() != NULL ) ? player->GetWeapon()->IsAttacking() : false;
 	const char* teamName = player->GetGameTeam() ? player->GetGameTeam()->GetLookupName() : "none";
 
-	// player AAS area containing the origin: -1 = no player AAS loaded, 0 = not in any area.
+	// player AAS area that contains the feet: -1 = no player AAS loaded, 0 = not inside any area
+	// (in solid or outside the navigable space). Containment, not the nearest reachable area, so a
+	// player pushed into geometry reports 0. The origin sits on the floor plane, and on some terrain
+	// the AAS area floors lie up to a step above the collision surface (e.g. slipgate's GDF spawn
+	// slope), so test points 1, 8 and 16 units above the origin, all below the 18 unit step height.
 	// Read-only AAS queries, safe while the bot thread is running.
 	int areaNum = -1;
 	idAAS* playerAAS = botThreadData.GetAAS( AAS_PLAYER );
 	if ( playerAAS != NULL ) {
-		areaNum = playerAAS->PointReachableAreaNum( org, playerAAS->GetSettings()->boundingBox, AAS_AREA_REACHABLE_WALK, 0 );
+		static const float feetOffsets[] = { 1.0f, 8.0f, 16.0f };
+		areaNum = 0;
+		for ( int i = 0; i < 3 && areaNum == 0; i++ ) {
+			areaNum = playerAAS->PointAreaNum( org + idVec3( 0.0f, 0.0f, feetOffsets[ i ] ) );
+		}
 	}
 
 	gameLocal.Printf( "PLAYER_POS: (%.2f, %.2f, %.2f) vel: (%.2f, %.2f, %.2f) ground: %d ducked: %d prone: %d jumped: %d (client: %d team: %s spectating %d atk: %d cmd: fwd=%d side=%d up=%d atk_cmd=%d lagged=%d frozen=%d inh=%d hp=%d dead=%d area=%d)\n",
