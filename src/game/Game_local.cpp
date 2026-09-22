@@ -800,7 +800,7 @@ GetGameAPI
 #if __GNUC__ >= 4
 #pragma GCC visibility push(default)
 #endif
-extern "C" gameExport_t *GetGameAPI( gameImport_t *import ) {
+extern "C" GAME_API_EXPORT gameExport_t *GetGameAPI( gameImport_t *import ) {
 
 	if ( import->version == GAME_API_VERSION ) {
 

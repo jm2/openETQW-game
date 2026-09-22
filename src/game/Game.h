@@ -531,7 +531,20 @@ struct gameExport_t{
 	idGameEdit *				gameEdit;				// interface for in-game editing
 };
 
+#if defined( _WIN32 )
+#	ifdef GAME_DLL
+#		define GAME_API_EXPORT __declspec( dllexport )
+#	else
+#		define GAME_API_EXPORT
+#	endif
+#elif defined( __GNUC__ ) && __GNUC__ >= 4
+#	define GAME_API_EXPORT __attribute__(( visibility( "default" ) ))
+#else
+#	define GAME_API_EXPORT
+#endif
+
 extern "C" {
+GAME_API_EXPORT gameExport_t *GetGameAPI( gameImport_t *import );
 typedef gameExport_t * (*GetGameAPI_t)( gameImport_t *import );
 }
 
