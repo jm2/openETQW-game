@@ -1058,6 +1058,19 @@ float idPush::ClipTranslationalPush( trace_t &results, idEntity *pusher, const i
 		return totalMass;
 	}
 
+	// trace models can't be swept further than CM_MAX_TRACE_DIST, idClip::TestHugeTranslation and
+	// the collision model manager answer a longer sweep with a fake fraction 0 collision. every
+	// pushable entity in the swept bounds would then report PUSH_BLOCKED and freeze the pusher's
+	// whole bind team, e.g. a mover bound to a master that was just relocated. a pusher that
+	// doesn't clip against the world already passes through it, so treat such a move as a
+	// teleport and push nothing. clipping pushers keep the blocked result, their own move
+	// can't be traced either
+	if ( ( flags & PUSHFL_CLIP ) == 0 ) {
+		if ( translation.LengthSqr() > Square( CM_MAX_TRACE_DIST ) ) {
+			return totalMass;
+		}
+	}
+
 	dir = translation;
 	dir.Normalize();
 	dir.z += 1.0f;

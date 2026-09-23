@@ -401,6 +401,34 @@ bool idAASFileLocal::ValidateIndices( const char *fileName ) const {
 			problem = "reachability area"; index = i;
 		}
 	}
+	// the routing code (AAS_routing.cpp) walks clusters and portals by index. Entry 0 of the
+	// area, portal and cluster lists is an unused dummy, as in every idTech 4 AAS file
+	for ( int i = 1; i < portals.Num() && problem == NULL; i++ ) {
+		if ( portals[ i ].areaNum >= areas.Num() ) {
+			problem = "portal area"; index = i;
+		}
+		for ( int j = 0; j < 2 && problem == NULL; j++ ) {
+			if ( portals[ i ].clusters[ j ] < 0 || portals[ i ].clusters[ j ] >= clusters.Num() ) {
+				problem = "portal cluster"; index = i;
+			}
+		}
+	}
+	for ( int i = 0; i < portalIndex.Num() && problem == NULL; i++ ) {
+		if ( portalIndex[ i ] < 0 || portalIndex[ i ] >= portals.Num() ) {
+			problem = "portal index"; index = i;
+		}
+	}
+	for ( int i = 1; i < clusters.Num() && problem == NULL; i++ ) {
+		if ( clusters[ i ].numPortals < 0 || clusters[ i ].firstPortal < 0 || clusters[ i ].firstPortal + clusters[ i ].numPortals > portalIndex.Num() ) {
+			problem = "cluster portals"; index = i;
+		}
+	}
+	for ( int i = 1; i < areas.Num() && problem == NULL; i++ ) {
+		// negative cluster = the area is portal -cluster
+		if ( ( areas[ i ].cluster > 0 && areas[ i ].cluster >= clusters.Num() ) || ( areas[ i ].cluster < 0 && -areas[ i ].cluster >= portals.Num() ) ) {
+			problem = "area cluster"; index = i;
+		}
+	}
 	for ( int i = 0; i < nodes.Num() && problem == NULL; i++ ) {
 		if ( nodes[ i ].planeNum >= planes.Num() ) {
 			problem = "node plane"; index = i;
