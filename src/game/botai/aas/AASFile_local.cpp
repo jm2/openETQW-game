@@ -407,32 +407,48 @@ bool idAASFileLocal::ValidateIndices( const char *fileName ) const {
 			problem = "reachability area"; index = i;
 		}
 	}
-	// the routing code (AAS_routing.cpp) walks clusters and portals by index. Entry 0 of the
-	// area, portal and cluster lists is an unused dummy, as in every idTech 4 AAS file
-	for ( int i = 1; i < portals.Num() && problem == NULL; i++ ) {
-		if ( portals[ i ].areaNum >= areas.Num() ) {
-			problem = "portal area"; index = i;
-		}
-		for ( int j = 0; j < 2 && problem == NULL; j++ ) {
-			if ( portals[ i ].clusters[ j ] < 0 || portals[ i ].clusters[ j ] >= clusters.Num() ) {
-				problem = "portal cluster"; index = i;
-			}
-		}
-	}
+	// The routing code (AAS_routing.cpp) walks clusters and portals by index and sizes a
+	// per-cluster cache slice from numReachableAreas, indexed by clusterAreaNum. Entry 0 of
+	// the area, portal and cluster lists is an unused dummy, as in every idTech 4 AAS file;
+	// retail cluster 0 has no portals or reachable areas, but its firstPortal is garbage.
 	for ( int i = 0; i < portalIndex.Num() && problem == NULL; i++ ) {
 		if ( portalIndex[ i ] < 0 || portalIndex[ i ] >= portals.Num() ) {
 			problem = "portal index"; index = i;
 		}
 	}
-	for ( int i = 1; i < clusters.Num() && problem == NULL; i++ ) {
-		if ( !AAS_SpanInRange( clusters[ i ].firstPortal, clusters[ i ].numPortals, portalIndex.Num() ) ) {
+	long long totalReachable = 0;
+	for ( int i = 0; i < clusters.Num() && problem == NULL; i++ ) {
+		if ( clusters[ i ].numReachableAreas < 0 || clusters[ i ].numReachableAreas > areas.Num() ) {
+			problem = "cluster reachable areas"; index = i;
+		} else if ( i == 0 ? ( clusters[ i ].numPortals != 0 || clusters[ i ].numReachableAreas != 0 ) :
+				!AAS_SpanInRange( clusters[ i ].firstPortal, clusters[ i ].numPortals, portalIndex.Num() ) ) {
 			problem = "cluster portals"; index = i;
+		}
+		totalReachable += clusters[ i ].numReachableAreas;
+	}
+	// each area is reachable in its own cluster, a portal area in the two it joins
+	if ( problem == NULL && totalReachable > ( long long )areas.Num() + 2LL * portals.Num() ) {
+		problem = "cluster reachable area total"; index = 0;
+	}
+	for ( int i = 1; i < portals.Num() && problem == NULL; i++ ) {
+		if ( portals[ i ].areaNum >= areas.Num() ) {
+			problem = "portal area"; index = i;
+		}
+		for ( int j = 0; j < 2 && problem == NULL; j++ ) {
+			const int cluster = portals[ i ].clusters[ j ];
+			if ( cluster <= 0 || cluster >= clusters.Num() ) {
+				problem = "portal cluster"; index = i;
+			} else if ( portals[ i ].clusterAreaNum[ j ] >= clusters[ cluster ].numReachableAreas ) {
+				problem = "portal cluster area"; index = i;
+			}
 		}
 	}
 	for ( int i = 1; i < areas.Num() && problem == NULL; i++ ) {
 		// negative cluster = the area is portal -cluster
 		if ( ( areas[ i ].cluster > 0 && areas[ i ].cluster >= clusters.Num() ) || ( areas[ i ].cluster < 0 && -areas[ i ].cluster >= portals.Num() ) ) {
 			problem = "area cluster"; index = i;
+		} else if ( areas[ i ].cluster > 0 && areas[ i ].clusterAreaNum >= clusters[ areas[ i ].cluster ].numReachableAreas ) {
+			problem = "area cluster area"; index = i;
 		}
 	}
 	for ( int i = 0; i < nodes.Num() && problem == NULL; i++ ) {
