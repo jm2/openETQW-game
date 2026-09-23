@@ -4,7 +4,7 @@
 #include "../precompiled.h"
 #pragma hdrstop
 
-idBounds bounds_zero( vec3_zero, vec3_zero );
+idBounds bounds_zero( idVec3( 0.0f, 0.0f, 0.0f ), idVec3( 0.0f, 0.0f, 0.0f ) );	// literal values, not vec3_zero: no cross-TU read during static init
 
 /*
 ============

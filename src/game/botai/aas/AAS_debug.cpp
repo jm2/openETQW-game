@@ -564,7 +564,7 @@ void idAASLocal::ShowNearestInsideArea( const idVec3 &origin ) const {
 struct idPullPlayerState {
 	idPullPlayerState() {
 		jumpNow = false;
-		ladderDir = vec3_zero;
+		ladderDir.Zero();	// not vec3_zero: that reads idLib's vec3_origin during static init (cross-TU init order)
 		ladderTime = 0;
 	}
 
