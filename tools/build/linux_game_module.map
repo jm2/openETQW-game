@@ -1,0 +1,9 @@
+/* SPDX-License-Identifier: MIT */
+/* GNU ld/lld version script for the Linux game module (-Wl,--version-script).
+   Only the module entry point GetGameAPI is exported. */
+{
+	global:
+		GetGameAPI;
+	local:
+		*;
+};
