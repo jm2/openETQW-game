@@ -127,6 +127,9 @@ clientNetworkInfo_t::clientNetworkInfo_t( void ) {
 
 	memset( states, 0, sizeof( states ) );
 	memset( gameStates, 0, sizeof( gameStates ) );
+
+	numAppliedSnapshots = 0;
+	lastAppliedSequence = 0;
 }
 
 /*
@@ -153,6 +156,9 @@ void clientNetworkInfo_t::Reset( void ) {
 		gameLocal.FreeGameState( gameStates[ i ] );
 		gameStates[ i ] = NULL;
 	}
+
+	numAppliedSnapshots = 0;
+	lastAppliedSequence = 0;
 }
 
 
