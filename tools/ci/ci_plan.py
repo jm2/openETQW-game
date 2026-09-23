@@ -82,8 +82,8 @@ class Leg:
 # CI bring-up commit).  Keep these short: they are printed in job summaries.
 # ----------------------------------------------------------------------------
 LINUX_ARM64_GAME = (
-    "not yet observed passing on ARM64: the native legs need hosted ARM64 runners, and the cross "
-    "leg's first run hit the non-x86 assert trap in src/idlib/Lib.cpp (fixed, awaiting a green run)"
+    "never run on a native ARM64 runner (hosted ubuntu-24.04-arm); the x64-hosted cross leg covers "
+    "the ARM64 build"
 )
 MSVC_ARM64_GAME = "Windows ARM64 never exercised (hosted windows-11-arm runner)"
 LINUX_CONTRACT = "engine unit tests and idLib have never been built on Linux"
@@ -105,7 +105,7 @@ TABLES: dict[str, list[Leg]] = {
             experimental=True, reason=LINUX_ARM64_GAME),
         # Runs on an x64 runner, so it covers ARM64 while the hosted ARM64 runners are unavailable.
         Leg("linux-arm64-cross-gcc", "Linux ARM64 cross (GCC, x64 host)", "ubuntu-24.04", "linux", "arm64", "gcc",
-            "gcc", "g++", cross="linux-arm64-gcc.ini", experimental=True, reason=LINUX_ARM64_GAME),
+            "gcc", "g++", cross="linux-arm64-gcc.ini"),
         Leg("macos-arm64", "macOS arm64 (Apple Clang)", "macos-15", "macos", "arm64", "apple-clang", "clang", "clang++"),
         Leg("macos-x64", "macOS Intel x64 (Apple Clang)", "macos-15-intel", "macos", "x64", "apple-clang", "clang", "clang++"),
         Leg("windows-x64", "Windows x64 (MSVC)", "windows-2025", "windows", "x64", "msvc", "cl", "cl"),

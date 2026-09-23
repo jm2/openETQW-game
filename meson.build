@@ -283,7 +283,7 @@ if host_system == 'darwin'
   game_link_depends += [exp_file]
 elif host_system == 'linux'
   map_file = meson.project_source_root() / 'tools' / 'build' / 'linux_game_module.map'
-  game_link_args += ['-Wl,--version-script=' + map_file]
+  game_link_args += ['-Wl,--version-script=' + map_file, '-Wl,-z,relro', '-Wl,-z,now']
   game_link_depends += [map_file]
 elif host_system == 'windows'
   game_link_args += ['/DEF:' + (meson.project_source_root() / 'src' / 'game' / 'Game.def')]
