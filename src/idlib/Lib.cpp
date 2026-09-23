@@ -515,6 +515,10 @@ JUMPIN' JEHOSEPHAT YEEHAW!
 */
 
 
+#if defined( __linux__ ) && !defined( __i386__ ) && !defined( __x86_64__ )
+#include <signal.h>	// raise( SIGTRAP ) in AssertFailed
+#endif
+
 void AssertFailed( const char *file, int line, const char *expression ) {
 	idLib::sys->DebugPrintf( "\n\nASSERTION FAILED!\n%s(%d): '%s'\n", file, line, expression );
 
