@@ -8,9 +8,12 @@ full commit SHA, a branch or a tag instead.
 
 Access policy (the repositories are private today and will become public):
 
-1. Anonymous https first.  Credential helpers, askpass programs and inherited
-   http extra headers are disabled, so "anonymous" really means anonymous and
-   git can never block on a prompt.
+1. Anonymous https first.  Credential helpers (including URL-scoped ones such
+   as ``gh auth git-credential``), askpass programs and inherited http extra
+   headers are disabled, and git may only use the https (and, for local dry
+   runs, file) transports, so a ``url.<base>.insteadOf`` rewrite to ssh cannot
+   smuggle in a key: "anonymous" really means anonymous and git can never
+   block on a prompt.
 2. Only if that is denied and the optional secret OPENETQW_CROSS_REPO_TOKEN is
    non-empty, retry with the token.  The token is passed to git through
    GIT_CONFIG_* environment entries (never argv, never written to .git/config),
@@ -200,6 +203,9 @@ class Git:
                 "GIT_ASKPASS": "",
                 "SSH_ASKPASS": "",
                 "GIT_LFS_SKIP_SMUDGE": "1",
+                # Only https (and local paths for --url dry runs); an ssh
+                # insteadOf rewrite fails instead of silently using a key.
+                "GIT_ALLOW_PROTOCOL": "https:file",
                 "LC_ALL": "C",
             }
         )
@@ -416,6 +422,9 @@ def main(argv: list[str]) -> int:
         return 1
 
     url = args.url or f"{GITHUB_HTTPS}{pin.repository}.git"
+    # What the messages call the companion: the pinned repository, or the URL
+    # that --url substituted for it.
+    label = pin.repository if not args.url else safe_url(url)
     token = os.environ.get(TOKEN_ENV, "").strip()
     git = Git(url, token, verbose=not args.quiet)
     override = (args.ref or "").strip()
@@ -437,7 +446,7 @@ def main(argv: list[str]) -> int:
         else:
             sha, source = pin.commit, "pin"
         record.update({"commit": sha, "source": source})
-        print(f"Engine repository {pin.repository} reachable ({access.mode}); target {sha} ({source})", flush=True)
+        print(f"Engine repository {label} reachable ({access.mode}); target {sha} ({source})", flush=True)
 
         if args.probe:
             with tempfile.TemporaryDirectory(prefix="engine-probe-") as scratch:
@@ -454,17 +463,17 @@ def main(argv: list[str]) -> int:
     except NotAccessible as exc:
         reason = str(exc)
         record.update({"available": False, "reason": reason})
-        print(f"{SKIP_MESSAGE}: {pin.repository} ({reason})", flush=True)
+        print(f"{SKIP_MESSAGE}: {label} ({reason})", flush=True)
         if github_actions():
             print(
                 f"::notice title=Engine contract skipped::{SKIP_MESSAGE} "
-                f"({pin.repository}: anonymous https denied; {TOKEN_ENV} {'set but denied' if token else 'not set'})",
+                f"({label}: anonymous https denied; {TOKEN_ENV} {'set but denied' if token else 'not set'})",
                 flush=True,
             )
         write_summary(
             "### :information_source: Engine contract skipped\n\n"
             f"**{SKIP_MESSAGE}.**\n\n"
-            f"- companion: `{pin.repository}` at pinned commit `{pin.commit[:12]}`"
+            f"- companion: `{label}` at pinned commit `{pin.commit[:12]}`"
             + (f" (requested `{override}`)" if override else "")
             + f"\n- access attempts: {reason}\n"
             "- This is expected while the repositories are private. It starts working automatically once the "
@@ -498,10 +507,10 @@ def main(argv: list[str]) -> int:
     write_record(args.record, record)
     verb = "reachable" if args.probe else f"checked out at {record.get('path')}"
     write_summary(
-        f"### Engine contract input: `{pin.repository}` @ `{record['commit'][:12]}`\n\n"
+        f"### Engine contract input: `{label}` @ `{record['commit'][:12]}`\n\n"
         f"{verb} via {record['auth']} https ({record['source']}).\n"
     )
-    print(f"OK: {pin.repository}@{record['commit']} {verb}")
+    print(f"OK: {label}@{record['commit']} {verb}")
     return 0
 
 
