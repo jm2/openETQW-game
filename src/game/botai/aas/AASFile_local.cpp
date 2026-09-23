@@ -377,6 +377,11 @@ idAASFileLocal::ValidateIndices
 The trace and push code indexes the lists directly, so reject a file whose cross references are out of range.
 ================
 */
+// first..first+num-1 lies in 0..count-1, without int overflow on crafted counts
+static bool AAS_SpanInRange( int first, int num, int count ) {
+	return first >= 0 && num >= 0 && first <= count && num <= count - first;
+}
+
 bool idAASFileLocal::ValidateIndices( const char *fileName ) const {
 	const char *problem = NULL;
 	int index = 0;
@@ -387,12 +392,13 @@ bool idAASFileLocal::ValidateIndices( const char *fileName ) const {
 		}
 	}
 	for ( int i = 0; i < edgeIndex.Num() && problem == NULL; i++ ) {
-		if ( abs( edgeIndex[ i ] ) >= edges.Num() ) {
+		// signed edge number; compared without abs(), which overflows on INT_MIN
+		if ( edgeIndex[ i ] >= edges.Num() || edgeIndex[ i ] <= -edges.Num() ) {
 			problem = "edge index"; index = i;
 		}
 	}
 	for ( int i = 0; i < areas.Num() && problem == NULL; i++ ) {
-		if ( areas[ i ].numEdges < 0 || areas[ i ].firstEdge < 0 || areas[ i ].firstEdge + areas[ i ].numEdges > edgeIndex.Num() ) {
+		if ( !AAS_SpanInRange( areas[ i ].firstEdge, areas[ i ].numEdges, edgeIndex.Num() ) ) {
 			problem = "area edges"; index = i;
 		}
 	}
@@ -419,7 +425,7 @@ bool idAASFileLocal::ValidateIndices( const char *fileName ) const {
 		}
 	}
 	for ( int i = 1; i < clusters.Num() && problem == NULL; i++ ) {
-		if ( clusters[ i ].numPortals < 0 || clusters[ i ].firstPortal < 0 || clusters[ i ].firstPortal + clusters[ i ].numPortals > portalIndex.Num() ) {
+		if ( !AAS_SpanInRange( clusters[ i ].firstPortal, clusters[ i ].numPortals, portalIndex.Num() ) ) {
 			problem = "cluster portals"; index = i;
 		}
 	}
@@ -435,7 +441,7 @@ bool idAASFileLocal::ValidateIndices( const char *fileName ) const {
 		}
 		for ( int j = 0; j < 2 && problem == NULL; j++ ) {
 			const int child = nodes[ i ].children[ j ];
-			if ( ( child > 0 && child >= nodes.Num() ) || ( child < 0 && -child >= areas.Num() ) ) {
+			if ( ( child > 0 && child >= nodes.Num() ) || ( child < 0 && child <= -areas.Num() ) ) {
 				problem = "node child"; index = i;
 			}
 		}
@@ -712,6 +718,9 @@ int idAASFileLocal::PointReachableAreaNum( const idVec3 &origin, const idBounds 
 	}
 
 	// of the areas touching the smallest scaled search bounds, take the one closest to the origin seen from above
+	if ( nodes.Num() <= 1 ) {
+		return 0;	// no BSP tree to search (node 0 is the solid leaf)
+	}
 	const int MAX_BOUNDS_AREAS = 32;
 	int boundsAreas[ MAX_BOUNDS_AREAS ];
 	for ( int i = 1; i <= REACHABLE_BOUNDS_STEPS; i++ ) {

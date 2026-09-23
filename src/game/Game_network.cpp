@@ -1192,16 +1192,25 @@ idGameLocal::WriteUnreliableEntityEvents
   whole server session. Only the oldest events that fit a fixed per snapshot
   budget are written; the rest stay unsent for this client and go out with a
   later snapshot, or expire along with the rest of the queue.
+
+  The budget also leaves room for what the engine adds when it wraps this
+  message into the packet (snapshot header, the usercmd block, the channel
+  header and queued reliable messages). It bounds the events only: entity
+  states are not capped, so it cannot guarantee that the whole packet fits.
 ================
 */
 static const int MAX_UNRELIABLE_EVENT_SNAPSHOT_BYTES = 4096;
+static const int SNAPSHOT_ENGINE_RESERVE_BYTES = 24 + 8 + 1024;	// snapshot header + lengths, channel header, usercmds/reliable margin
 static int unreliableEventBudgetWarnTime = 0;
 
 void idGameLocal::WriteUnreliableEntityNetEvents( int clientNum, bool repeaterClient, idBitMsg &msg ) {
 	// write unreliable entity network events to the snapshot
 	// first count them up, stopping at the first event that doesn't fit the
 	// budget so the ones that do go out are always the oldest, in order
-	int budget = Min( MAX_UNRELIABLE_EVENT_SNAPSHOT_BYTES, msg.GetRemainingSpace() - 4 );
+	int budget = Min( MAX_UNRELIABLE_EVENT_SNAPSHOT_BYTES, msg.GetRemainingSpace() - 4 - SNAPSHOT_ENGINE_RESERVE_BYTES );
+	if ( budget < 0 ) {
+		budget = 0;
+	}
 	int budgetUsed = 0;
 	int numEvents = 0;
 	int numDeferred = 0;
