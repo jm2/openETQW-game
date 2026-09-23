@@ -182,6 +182,7 @@ public:
 	#error "unsupported Linux architecture"
 #endif
 
+#include <stddef.h>						// needed for offsetof (as on Windows); glibc doesn't pull it in transitively
 #include <stdint.h>
 #define UINT_PTR						uintptr_t
 

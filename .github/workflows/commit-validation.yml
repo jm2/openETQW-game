@@ -180,13 +180,10 @@ jobs:
         if: matrix.os == 'linux'
         run: |
           set -euo pipefail
-          packages=()
+          # OpenGL headers (GL/gl.h) for the game's qglLib declarations
+          packages=(libgl-dev)
           if [ "${CI_COMPILER}" = clang ]; then packages+=(clang); fi
           if [ -n "${CI_CROSS}" ]; then packages+=(g++-aarch64-linux-gnu); fi
-          if [ "${#packages[@]}" -eq 0 ]; then
-            echo "Runner toolchain is sufficient."
-            exit 0
-          fi
           for attempt in 1 2 3; do
             if sudo apt-get update && sudo apt-get install -y --no-install-recommends "${packages[@]}"; then
               exit 0
@@ -343,7 +340,7 @@ jobs:
         run: |
           set -euo pipefail
           for attempt in 1 2 3; do
-            if sudo apt-get update && sudo apt-get install -y --no-install-recommends clang; then
+            if sudo apt-get update && sudo apt-get install -y --no-install-recommends clang libgl-dev; then
               exit 0
             fi
             echo "apt attempt ${attempt} failed; retrying in 15 seconds"
@@ -359,6 +356,10 @@ jobs:
           set -euo pipefail
           "${CC}" --version | head -n 1
           args=(setup build-asan . --backend ninja --buildtype "${CI_BUILDTYPE}" "-Db_sanitize=${CI_SANITIZE}")
+          # UBSan's vptr check references the typeinfo of engine-side classes (decl
+          # types such as sdDeclSurfaceType) that the game module never defines, so the
+          # dylib cannot link; a dynamically loaded module has to build without it.
+          args+=("-Dcpp_args=-fno-sanitize=vptr" "-Dcpp_link_args=-fno-sanitize=vptr")
           if [ "${CI_OS}" = linux ]; then
             # Clang does not link the sanitizer runtime into Linux shared
             # libraries; the module's __asan/__ubsan references resolve from the
