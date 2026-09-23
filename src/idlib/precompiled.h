@@ -22,6 +22,7 @@
 #include <errno.h>
 #include <math.h>
 #include <wchar.h>	// wmemset
+#include <wctype.h>	// iswalpha (not pulled in by wchar.h on glibc)
 #include <limits.h>
 
 //-----------------------------------------------------
