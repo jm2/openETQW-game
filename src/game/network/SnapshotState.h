@@ -158,6 +158,9 @@ public:
 
 	sdEntityState*				states[ MAX_GENTITIES ][ NSM_NUM_MODES ];
 	sdGameState*				gameStates[ ENSM_NUM_MODES ];
+
+	int							numAppliedSnapshots;	// net_debugSnapshotBase: snapshots made the base since the last Reset
+	int							lastAppliedSequence;
 };
 
 class sdNetworkStateObject {
