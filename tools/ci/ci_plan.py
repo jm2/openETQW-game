@@ -81,19 +81,11 @@ class Leg:
 # Known blockers (source fixes are tracked separately; see known gaps in the
 # CI bring-up commit).  Keep these short: they are printed in job summaries.
 # ----------------------------------------------------------------------------
-LINUX_GAME = (
-    "never built on Linux; src/common/common.h defines BUILD_STRING/CPUSTRING for Linux only on "
-    "__i386__/__ppc__, so src/game/gamesys/SysCvar.cpp cannot compile for x86_64/aarch64"
-)
 LINUX_ARM64_GAME = (
-    LINUX_GAME + "; src/idlib/Lib.cpp AssertFailed() uses x86 inline asm 'int $0x03' under __linux__"
+    "not yet observed passing on ARM64: the native legs need hosted ARM64 runners, and the cross "
+    "leg's first run hit the non-x86 assert trap in src/idlib/Lib.cpp (fixed, awaiting a green run)"
 )
-MSVC_GAME = (
-    "never built with MSVC; meson.build passes /permissive- (implies /Zc:strictStrings) and the SDK "
-    "sources convert string literals to char* at ~476 sites (clang -Wwritable-strings), e.g. "
-    "src/game/script/Script_Compiler.cpp, src/idlib/math/Simd.cpp, src/idlib/text/Lexer.cpp"
-)
-MSVC_ARM64_GAME = MSVC_GAME + "; Windows ARM64 never exercised"
+MSVC_ARM64_GAME = "Windows ARM64 never exercised (hosted windows-11-arm runner)"
 LINUX_CONTRACT = "engine unit tests and idLib have never been built on Linux"
 LINUX_ARM64_CONTRACT = (
     LINUX_CONTRACT + "; src/idlib/Lib.cpp AssertFailed() uses x86 inline asm 'int $0x03' under __linux__"
@@ -105,21 +97,18 @@ MSVC_CONTRACT = (
 
 TABLES: dict[str, list[Leg]] = {
     "build": [
-        Leg("linux-x64-gcc", "Linux x64 (GCC)", "ubuntu-24.04", "linux", "x64", "gcc", "gcc", "g++",
-            exports="warn", experimental=True, reason=LINUX_GAME),
-        Leg("linux-x64-clang", "Linux x64 (Clang)", "ubuntu-24.04", "linux", "x64", "clang", "clang", "clang++",
-            exports="warn", experimental=True, reason=LINUX_GAME),
+        Leg("linux-x64-gcc", "Linux x64 (GCC)", "ubuntu-24.04", "linux", "x64", "gcc", "gcc", "g++"),
+        Leg("linux-x64-clang", "Linux x64 (Clang)", "ubuntu-24.04", "linux", "x64", "clang", "clang", "clang++"),
         Leg("linux-arm64-gcc", "Linux ARM64 (GCC)", "ubuntu-24.04-arm", "linux", "arm64", "gcc", "gcc", "g++",
-            exports="warn", experimental=True, reason=LINUX_ARM64_GAME),
+            experimental=True, reason=LINUX_ARM64_GAME),
         Leg("linux-arm64-clang", "Linux ARM64 (Clang)", "ubuntu-24.04-arm", "linux", "arm64", "clang", "clang", "clang++",
-            exports="warn", experimental=True, reason=LINUX_ARM64_GAME),
+            experimental=True, reason=LINUX_ARM64_GAME),
         # Runs on an x64 runner, so it covers ARM64 while the hosted ARM64 runners are unavailable.
         Leg("linux-arm64-cross-gcc", "Linux ARM64 cross (GCC, x64 host)", "ubuntu-24.04", "linux", "arm64", "gcc",
-            "gcc", "g++", cross="linux-arm64-gcc.ini", exports="warn", experimental=True, reason=LINUX_ARM64_GAME),
+            "gcc", "g++", cross="linux-arm64-gcc.ini", experimental=True, reason=LINUX_ARM64_GAME),
         Leg("macos-arm64", "macOS arm64 (Apple Clang)", "macos-15", "macos", "arm64", "apple-clang", "clang", "clang++"),
         Leg("macos-x64", "macOS Intel x64 (Apple Clang)", "macos-15-intel", "macos", "x64", "apple-clang", "clang", "clang++"),
-        Leg("windows-x64", "Windows x64 (MSVC)", "windows-2025", "windows", "x64", "msvc", "cl", "cl",
-            experimental=True, reason=MSVC_GAME),
+        Leg("windows-x64", "Windows x64 (MSVC)", "windows-2025", "windows", "x64", "msvc", "cl", "cl"),
         Leg("windows-arm64", "Windows ARM64 (MSVC)", "windows-11-arm", "windows", "arm64", "msvc", "cl", "cl",
             python_arch="arm64", experimental=True, reason=MSVC_ARM64_GAME),
     ],
@@ -127,8 +116,7 @@ TABLES: dict[str, list[Leg]] = {
         Leg("macos-arm64-asan-ubsan", "macOS arm64 ASan+UBSan (Apple Clang)", "macos-15", "macos", "arm64",
             "apple-clang", "clang", "clang++", buildtype="debugoptimized", sanitize="address,undefined"),
         Leg("linux-x64-clang-asan-ubsan", "Linux x64 ASan+UBSan (Clang)", "ubuntu-24.04", "linux", "x64", "clang",
-            "clang", "clang++", buildtype="debugoptimized", sanitize="address,undefined", exports="warn",
-            experimental=True, reason=LINUX_GAME),
+            "clang", "clang++", buildtype="debugoptimized", sanitize="address,undefined"),
     ],
     "contract": [
         Leg("linux-x64-gcc", "Linux x64 (GCC)", "ubuntu-24.04", "linux", "x64", "gcc", "gcc", "g++",
