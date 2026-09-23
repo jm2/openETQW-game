@@ -5,7 +5,7 @@
 #pragma hdrstop
 
 
-idSphere sphere_zero( vec3_zero, 0.0f );
+idSphere sphere_zero( idVec3( 0.0f, 0.0f, 0.0f ), 0.0f );	// literal values, not vec3_zero: no cross-TU read during static init
 
 
 /*

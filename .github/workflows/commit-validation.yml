@@ -315,7 +315,10 @@ jobs:
       CI_REASON: ${{ matrix.reason }}
       CI_EXPERIMENTAL: ${{ matrix.experimental }}
       MACOSX_DEPLOYMENT_TARGET: "11.0"
-      ASAN_OPTIONS: detect_leaks=0:halt_on_error=1:abort_on_error=1:check_initialization_order=1:strict_init_order=1
+      # check_initialization_order catches real cross-TU init-order bugs. strict_init_order is off:
+      # the idTypeInfo class registry reads other TUs' Type objects during static init by design
+      # and is order-independent (GetClass only walks registered types; late superclasses are fixed up).
+      ASAN_OPTIONS: detect_leaks=0:halt_on_error=1:abort_on_error=1:check_initialization_order=1
       UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1:report_error_type=1
       MallocNanoZone: "0"
     steps:

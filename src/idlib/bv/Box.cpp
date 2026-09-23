@@ -4,7 +4,7 @@
 #include "../precompiled.h"
 #pragma hdrstop
 
-idBox box_zero( vec3_zero, vec3_zero, mat3_identity );
+idBox box_zero( idVec3( 0.0f, 0.0f, 0.0f ), idVec3( 0.0f, 0.0f, 0.0f ), idMat3( idVec3( 1.0f, 0.0f, 0.0f ), idVec3( 0.0f, 1.0f, 0.0f ), idVec3( 0.0f, 0.0f, 1.0f ) ) );	// literal values: no cross-TU read during static init
 
 /*
             4---{4}---5

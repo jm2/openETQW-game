@@ -5,4 +5,4 @@
 #include "../precompiled.h"
 #pragma hdrstop
 
-sdBounds2D bounds2d_zero( vec2_zero, vec2_zero );
+sdBounds2D bounds2d_zero( idVec2( 0.0f, 0.0f ), idVec2( 0.0f, 0.0f ) );	// literal values: no cross-TU read during static init
