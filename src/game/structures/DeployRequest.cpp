@@ -19,7 +19,7 @@ static char THIS_FILE[] = __FILE__;
 
 // debug/test trace of deployable delivery and defence turret engagement ([DEPLOY_DELIVER],
 // [TURRET_TARGET], [TURRET_ENGAGE] log lines); off by default to keep server logs quiet
-idCVar g_debugDeployables( "g_debugDeployables", "0", CVAR_GAME | CVAR_BOOL, "print deployable delivery and defence turret targeting events" );
+idCVar g_debugDeployables( "g_debugDeployables", "0", CVAR_GAME | CVAR_BOOL | CVAR_NOCHEAT, "print deployable delivery and defence turret targeting events" );
 
 /*
 ===============================================================================
