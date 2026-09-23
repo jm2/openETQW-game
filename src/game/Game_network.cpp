@@ -1184,48 +1184,83 @@ void idGameLocal::SendUnreliableEntityNetworkEvent( const sdUnreliableEntityNetE
 /*
 ================
 idGameLocal::WriteUnreliableEntityEvents
+
+  The snapshot message is a fixed MAX_MESSAGE_SIZE buffer that does not allow
+  overflow, and unsent events stay queued for up to two seconds, so a client
+  that has gone without snapshots for a while could have more backlog than the
+  message can hold - an idBitMsg overflow is a common->Error that stops the
+  whole server session. Only the oldest events that fit a fixed per snapshot
+  budget are written; the rest stay unsent for this client and go out with a
+  later snapshot, or expire along with the rest of the queue.
 ================
 */
+static const int MAX_UNRELIABLE_EVENT_SNAPSHOT_BYTES = 4096;
+static int unreliableEventBudgetWarnTime = 0;
+
 void idGameLocal::WriteUnreliableEntityNetEvents( int clientNum, bool repeaterClient, idBitMsg &msg ) {
 	// write unreliable entity network events to the snapshot
-	// first count them up
+	// first count them up, stopping at the first event that doesn't fit the
+	// budget so the ones that do go out are always the oldest, in order
+	int budget = Min( MAX_UNRELIABLE_EVENT_SNAPSHOT_BYTES, msg.GetRemainingSpace() - 4 );
+	int budgetUsed = 0;
 	int numEvents = 0;
+	int numDeferred = 0;
 	sdUnreliableEntityNetEvent* event;
 	sdUnreliableEntityNetEvent* nextEvent;
 	for ( event = unreliableEntityNetEventQueue.Next(); event != NULL; event = nextEvent ) {
 		nextEvent = event->GetUnreliableNode().Next();
 
+		bool sent;
 #ifdef SD_SUPPORT_REPEATER
 		if ( repeaterClient ) {
-			if ( !event->GetRepeaterSent( clientNum ) ) {
-				numEvents++;
-			}
+			sent = event->GetRepeaterSent( clientNum );
 		} else
 #endif // SD_SUPPORT_REPEATER
 		{
-			if ( !event->GetSent( clientNum ) ) {
-				numEvents++;
-			}
+			sent = event->GetSent( clientNum );
+		}
+		if ( sent ) {
+			continue;
+		}
+
+		if ( numDeferred == 0 && budgetUsed + event->GetTotalSize() <= budget ) {
+			budgetUsed += event->GetTotalSize();
+			numEvents++;
+		} else {
+			numDeferred++;
+		}
+	}
+
+	if ( numDeferred != 0 ) {
+		int now = sys->Milliseconds();
+		if ( now >= unreliableEventBudgetWarnTime ) {
+			unreliableEventBudgetWarnTime = now + 5000;
+			Warning( "idGameLocal::WriteUnreliableEntityNetEvents: client %d has %d unreliable events over the %d byte snapshot budget, deferring them", clientNum, numDeferred, budget );
 		}
 	}
 
 	// now write them
 	msg.WriteLong( numEvents );
+	int numWritten = 0;
 	for ( event = unreliableEntityNetEventQueue.Next(); event != NULL; event = nextEvent ) {
 		nextEvent = event->GetUnreliableNode().Next();
 
+		if ( numWritten < numEvents ) {
 #ifdef SD_SUPPORT_REPEATER
-		if ( repeaterClient ) {
-			if ( !event->GetRepeaterSent( clientNum ) ) {
-				event->Write( msg );
-				event->SetRepeaterSent( clientNum );
-			}
-		} else
+			if ( repeaterClient ) {
+				if ( !event->GetRepeaterSent( clientNum ) ) {
+					event->Write( msg );
+					event->SetRepeaterSent( clientNum );
+					numWritten++;
+				}
+			} else
 #endif // SD_SUPPORT_REPEATER
-		{
-			if ( !event->GetSent( clientNum ) ) {
-				event->Write( msg );
-				event->SetSent( clientNum );
+			{
+				if ( !event->GetSent( clientNum ) ) {
+					event->Write( msg );
+					event->SetSent( clientNum );
+					numWritten++;
+				}
 			}
 		}
 
