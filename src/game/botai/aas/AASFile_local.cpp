@@ -412,9 +412,16 @@ bool idAASFileLocal::ValidateIndices( const char *fileName ) const {
 	// the area, portal and cluster lists is an unused dummy, as in every idTech 4 AAS file;
 	// retail cluster 0 has no portals or reachable areas, but its firstPortal is garbage.
 	for ( int i = 0; i < portalIndex.Num() && problem == NULL; i++ ) {
-		if ( portalIndex[ i ] < 0 || portalIndex[ i ] >= portals.Num() ) {
+		if ( portalIndex[ i ] <= 0 || portalIndex[ i ] >= portals.Num() ) {	// never the dummy portal 0
 			problem = "portal index"; index = i;
 		}
+	}
+	// the dummies name nothing (portal 0 is read by ClusterAreaNum for an area of cluster 0)
+	if ( problem == NULL && portals.Num() > 0 && ( portals[ 0 ].areaNum != 0 || portals[ 0 ].clusters[ 0 ] != 0 || portals[ 0 ].clusters[ 1 ] != 0 ) ) {
+		problem = "portal 0"; index = 0;
+	}
+	if ( problem == NULL && areas.Num() > 0 && areas[ 0 ].cluster != 0 ) {
+		problem = "area 0 cluster"; index = 0;
 	}
 	long long totalReachable = 0;
 	for ( int i = 0; i < clusters.Num() && problem == NULL; i++ ) {
@@ -423,6 +430,15 @@ bool idAASFileLocal::ValidateIndices( const char *fileName ) const {
 		} else if ( i == 0 ? ( clusters[ i ].numPortals != 0 || clusters[ i ].numReachableAreas != 0 ) :
 				!AAS_SpanInRange( clusters[ i ].firstPortal, clusters[ i ].numPortals, portalIndex.Num() ) ) {
 			problem = "cluster portals"; index = i;
+		} else if ( i > 0 ) {
+			// a cluster's portals border it: ClusterAreaNum picks the portal side from that
+			for ( int k = 0; k < clusters[ i ].numPortals; k++ ) {
+				const aasPortal_t& portal = portals[ portalIndex[ clusters[ i ].firstPortal + k ] ];
+				if ( portal.clusters[ 0 ] != i && portal.clusters[ 1 ] != i ) {
+					problem = "cluster portal side"; index = i;
+					break;
+				}
+			}
 		}
 		totalReachable += clusters[ i ].numReachableAreas;
 	}
@@ -431,7 +447,7 @@ bool idAASFileLocal::ValidateIndices( const char *fileName ) const {
 		problem = "cluster reachable area total"; index = 0;
 	}
 	for ( int i = 1; i < portals.Num() && problem == NULL; i++ ) {
-		if ( portals[ i ].areaNum >= areas.Num() ) {
+		if ( portals[ i ].areaNum >= areas.Num() || areas[ portals[ i ].areaNum ].cluster != -i ) {	// the portal area points back
 			problem = "portal area"; index = i;
 		}
 		for ( int j = 0; j < 2 && problem == NULL; j++ ) {
@@ -445,7 +461,7 @@ bool idAASFileLocal::ValidateIndices( const char *fileName ) const {
 	}
 	for ( int i = 1; i < areas.Num() && problem == NULL; i++ ) {
 		// negative cluster = the area is portal -cluster
-		if ( ( areas[ i ].cluster > 0 && areas[ i ].cluster >= clusters.Num() ) || ( areas[ i ].cluster < 0 && -areas[ i ].cluster >= portals.Num() ) ) {
+		if ( areas[ i ].cluster == 0 || ( areas[ i ].cluster > 0 && areas[ i ].cluster >= clusters.Num() ) || ( areas[ i ].cluster < 0 && -areas[ i ].cluster >= portals.Num() ) ) {
 			problem = "area cluster"; index = i;
 		} else if ( areas[ i ].cluster > 0 && areas[ i ].clusterAreaNum >= clusters[ areas[ i ].cluster ].numReachableAreas ) {
 			problem = "area cluster area"; index = i;
