@@ -249,7 +249,9 @@ void idBlockAlloc<type,blockSize,threadSafe>::Free( type *t ) {
 
 	sdScopedLock< threadSafe > scopedLock( lock );
 
-	element_t *element = (element_t *)( ( (unsigned char *) t ) - ( (UINT_PTR) &((element_t *)0)->t ) );
+	// offsetof instead of the '&((element_t *)0)->t' idiom, which is a member access through a
+	// null pointer (undefined behaviour, reported by UBSan)
+	element_t *element = (element_t *)( ( (unsigned char *) t ) - offsetof( element_t, t ) );
 	//element_t *element;
 	//element = ( element_t * )( ( (unsigned char *)t ) - offsetof( element_t, t ) );
 

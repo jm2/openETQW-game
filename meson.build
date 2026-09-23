@@ -83,6 +83,8 @@ if cpp.get_argument_syntax() == 'msvc'
   add_project_arguments(
     '/EHsc',
     '/permissive-',
+    # /permissive- implies /Zc:strictStrings; the SDK passes string literals to char* in hundreds of places
+    '/Zc:strictStrings-',
     '/Zc:__cplusplus',
     '/utf-8',
     '/bigobj',

@@ -521,7 +521,11 @@ void AssertFailed( const char *file, int line, const char *expression ) {
 #if defined( _WIN32 )
 	__debugbreak();
 #elif defined( __linux__ )
+#if defined( __i386__ ) || defined( __x86_64__ )
 	__asm__ __volatile__ ("int $0x03");
+#else
+	raise( SIGTRAP );
+#endif
 #elif defined( MACOS_X )
 #if 0
 	kill( getpid(), SIGINT );
