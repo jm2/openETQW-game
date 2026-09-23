@@ -1,14 +1,18 @@
 # SPDX-License-Identifier: MIT
 #
-# openETQW-game commit validation:
+# openETQW-game commit validation (openQ4-game commit-validation parity):
 #   * static checks: Python syntax, SPDX/provenance headers, no GPL-family
-#     code, engine pin format, workflow lint;
-#   * the cross-platform build matrix of idLib + game_<arch> (planned by
-#     tools/ci/ci_plan.py, which also holds the per-platform experimental flags);
-#   * a Linux ASan+UBSan build whose static initialisers run under the
-#     sanitizers (tools/ci/module_load_smoke.c).
-# Everything here is asset-free and self-contained. Tests against the companion
-# engine repository live in engine-contract.yml.
+#     code, CI gate self-test, engine pin format, workflow lint;
+#   * the cross-platform build matrix of idLib + game_<arch>, each module
+#     validated by tools/ci/check_game_module.py (file name game_<arch>.{so,
+#     dylib,dll}, 64-bit container for the right CPU, GetGameAPI as the only
+#     export, macOS 11.0 floor, hardening report, dlopen/LoadLibrary smoke);
+#   * ASan+UBSan builds whose static initialisers and destructors run under
+#     the sanitizers (tools/ci/module_load_smoke.c).
+# Legs, runners and the per-leg 'experimental' flag (continue-on-error, with
+# the blocker named in the job summary) live in tools/ci/ci_plan.py.
+# Everything here is asset-free and needs no other repository; tests against
+# the companion engine live in engine-contract.yml.
 
 name: Commit Validation
 
@@ -18,7 +22,7 @@ on:
   workflow_dispatch:
     inputs:
       platforms:
-        description: "Build legs: default | all | comma list of platform ids or prefixes (python3 tools/ci/ci_plan.py --list)"
+        description: "Legs: default | all | comma list of leg ids or prefixes (python3 tools/ci/ci_plan.py --list)"
         required: false
         default: default
         type: string
@@ -39,27 +43,28 @@ env:
 
 jobs:
   plan:
-    name: Plan build matrix
+    name: Plan CI legs
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     outputs:
-      matrix: ${{ steps.plan.outputs.matrix }}
-      count: ${{ steps.plan.outputs.count }}
+      build_matrix: ${{ steps.plan.outputs.build_matrix }}
+      build_count: ${{ steps.plan.outputs.build_count }}
+      sanitizer_matrix: ${{ steps.plan.outputs.sanitizer_matrix }}
+      sanitizer_count: ${{ steps.plan.outputs.sanitizer_count }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
         with:
           persist-credentials: false
 
-      - name: Plan build legs
+      - name: Plan build and sanitizer legs
         id: plan
         env:
-          CI_EVENT: ${{ github.event_name }}
           CI_REPO_PRIVATE: ${{ github.event.repository.private }}
           CI_PLATFORMS: ${{ inputs.platforms }}
           CI_ARM_RUNNERS: ${{ vars.OPENETQW_CI_ARM_RUNNERS }}
           CI_EXPERIMENTAL: ${{ vars.OPENETQW_CI_EXPERIMENTAL }}
-        run: python3 tools/ci/ci_plan.py
+        run: python3 tools/ci/ci_plan.py --tables build,sanitizer
 
   static-checks:
     name: Static checks
@@ -93,15 +98,16 @@ jobs:
       - name: No GPL-family code in the game repository
         run: python tools/ci/check_no_gpl.py
 
-      - name: Engine pin format
-        run: python tools/ci/bump_engine.py --check
+      - name: CI gate self-test (the gates still fail on new gaps)
+        run: python tools/ci/selftest.py
 
-      - name: Build planner dry run
+      - name: CI plan tables and engine pin
         run: |
           set -euo pipefail
-          python tools/ci/ci_plan.py --list
-          CI_REPO_PRIVATE=true python tools/ci/ci_plan.py --pretty
-          CI_REPO_PRIVATE=false python tools/ci/ci_plan.py --pretty
+          python tools/ci/ci_plan.py --check
+          python tools/ci/bump_engine.py --check
+          CI_REPO_PRIVATE=true python tools/ci/ci_plan.py --tables build,sanitizer,contract --pretty
+          CI_REPO_PRIVATE=false python tools/ci/ci_plan.py --tables build,sanitizer,contract --pretty
 
       - name: Lint workflows (actionlint + shellcheck)
         run: |
@@ -131,13 +137,13 @@ jobs:
   build:
     name: Build ${{ matrix.name }}
     needs: plan
-    if: needs.plan.outputs.count != '0'
+    if: needs.plan.outputs.build_count != '0'
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 60
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
-        include: ${{ fromJSON(needs.plan.outputs.matrix) }}
+        include: ${{ fromJSON(needs.plan.outputs.build_matrix) }}
     defaults:
       run:
         shell: bash
@@ -147,8 +153,11 @@ jobs:
       CI_OS: ${{ matrix.os }}
       CI_ARCH: ${{ matrix.arch }}
       CI_COMPILER: ${{ matrix.compiler }}
+      CI_CROSS: ${{ matrix.cross }}
+      CI_BUILDTYPE: ${{ matrix.buildtype }}
       CI_EXPORTS: ${{ matrix.exports }}
       CI_LEG: ${{ matrix.name }}
+      CI_REASON: ${{ matrix.reason }}
       MACOSX_DEPLOYMENT_TARGET: "11.0"
     steps:
       - name: Checkout
@@ -160,24 +169,32 @@ jobs:
         uses: actions/setup-python@v7
         with:
           python-version: "3.x"
+          architecture: ${{ matrix.python_arch }}
 
       - name: Install Meson and Ninja
         run: |
           set -euo pipefail
           python -m pip install --disable-pip-version-check "${MESON_SPEC}" "${NINJA_SPEC}"
 
-      - name: Install Clang (Linux)
-        if: matrix.os == 'linux' && matrix.compiler == 'clang'
+      - name: Install Linux toolchain
+        if: matrix.os == 'linux'
         run: |
           set -euo pipefail
+          packages=()
+          if [ "${CI_COMPILER}" = clang ]; then packages+=(clang); fi
+          if [ -n "${CI_CROSS}" ]; then packages+=(g++-aarch64-linux-gnu); fi
+          if [ "${#packages[@]}" -eq 0 ]; then
+            echo "Runner toolchain is sufficient."
+            exit 0
+          fi
           for attempt in 1 2 3; do
-            if sudo apt-get update && sudo apt-get install -y --no-install-recommends clang; then
+            if sudo apt-get update && sudo apt-get install -y --no-install-recommends "${packages[@]}"; then
               exit 0
             fi
             echo "apt attempt ${attempt} failed; retrying in 15 seconds"
             sleep 15
           done
-          echo "Failed to install clang" >&2
+          echo "Failed to install ${packages[*]}" >&2
           exit 1
 
       - name: Record toolchain
@@ -185,27 +202,33 @@ jobs:
           set -euo pipefail
           mkdir -p .tmp/ci
           {
-            echo "platform: ${CI_OS}/${CI_ARCH} (${CI_COMPILER}) on $(uname -srm)"
+            echo "leg: ${CI_LEG} (${CI_OS}/${CI_ARCH}, ${CI_COMPILER}) on $(uname -srm)"
             python --version
+            python -c "import platform; print('python arch:', platform.machine())"
             echo "meson $(meson --version), ninja $(ninja --version)"
             if [ "${CI_OS}" != windows ]; then
               "${CXX}" --version | head -n 1
             fi
+            if [ -n "${CI_CROSS}" ]; then
+              aarch64-linux-gnu-g++ --version | head -n 1
+            fi
             if [ "${CI_OS}" = macos ]; then
-              xcrun --show-sdk-version
+              echo "macOS SDK $(xcrun --show-sdk-version)"
             fi
           } | tee .tmp/ci/toolchain.txt
 
-      # Experimental legs (per-platform flag in tools/ci/ci_plan.py, or repository
-      # variable OPENETQW_CI_EXPERIMENTAL) use step-level continue-on-error: the
-      # failure is reported as a warning and in the job summary but the job
-      # still concludes 'success', so it never blocks.
+      # Experimental legs (matrix flag 'experimental', set in tools/ci/ci_plan.py)
+      # use step-level continue-on-error: the failure is reported as a warning
+      # and in the job summary, but the job still concludes 'success'.
       - name: Configure
         id: configure
         continue-on-error: ${{ matrix.experimental }}
         run: |
           set -euo pipefail
-          args=(setup build . --backend ninja --buildtype release)
+          args=(setup build . --backend ninja --buildtype "${CI_BUILDTYPE}")
+          if [ -n "${CI_CROSS}" ]; then
+            args+=(--cross-file "tools/ci/cross/${CI_CROSS}")
+          fi
           if [ "${CI_OS}" = windows ]; then
             # Activates the native MSVC toolchain (vcvars64 / vcvarsarm64).
             args+=(--vsenv)
@@ -224,13 +247,13 @@ jobs:
         continue-on-error: ${{ matrix.experimental }}
         run: |
           set -euo pipefail
-          python tools/ci/check_game_module.py \
-            --build-dir build \
-            --os "${CI_OS}" \
-            --arch "${CI_ARCH}" \
-            --exports "${CI_EXPORTS}" \
-            --load-smoke \
-            --report .tmp/ci/module-report.json
+          check=(--build-dir build --os "${CI_OS}" --arch "${CI_ARCH}" --exports "${CI_EXPORTS}"
+                 --report .tmp/ci/module-report.json)
+          if [ -z "${CI_CROSS}" ]; then
+            # dlopen/LoadLibrary + GetGameAPI lookup; cross builds cannot run here.
+            check+=(--load-smoke)
+          fi
+          python tools/ci/check_game_module.py "${check[@]}"
 
       - name: Publish module and logs
         if: always()
@@ -257,28 +280,47 @@ jobs:
           set -euo pipefail
           outcome="configure=${CONFIGURE} compile=${COMPILE} validate=${VALIDATE}"
           if [ "${VALIDATE}" = success ]; then
-            echo "${CI_LEG} (experimental) passed: ${outcome}. Consider marking it required in tools/ci/ci_plan.py."
-            echo "### ${CI_LEG} (experimental): passed" >> "${GITHUB_STEP_SUMMARY}"
+            echo "::notice title=Experimental leg passed::${CI_LEG} passed; consider marking it required in tools/ci/ci_plan.py"
+            echo "### ${CI_LEG} (experimental): passed - consider marking it required" >> "${GITHUB_STEP_SUMMARY}"
           else
-            echo "::warning title=Experimental leg failed (not blocking)::${CI_LEG}: ${outcome}"
-            echo "### :warning: ${CI_LEG} (experimental): failed, not blocking (${outcome})" >> "${GITHUB_STEP_SUMMARY}"
+            echo "::warning title=Experimental leg failed (not blocking)::${CI_LEG}: ${outcome}. Known blocker: ${CI_REASON}"
+            {
+              echo "### :warning: ${CI_LEG} (experimental): failed, not blocking"
+              echo
+              echo "- stages: ${outcome}"
+              echo "- known blocker: ${CI_REASON}"
+            } >> "${GITHUB_STEP_SUMMARY}"
           fi
 
   sanitizer:
-    name: Linux x64 ASan+UBSan load smoke (Clang)
-    runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    name: Sanitizer ${{ matrix.name }}
+    needs: plan
+    if: needs.plan.outputs.sanitizer_count != '0'
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.plan.outputs.sanitizer_matrix) }}
     defaults:
       run:
         shell: bash
     env:
-      CC: clang
-      CXX: clang++
+      CC: ${{ matrix.cc }}
+      CXX: ${{ matrix.cxx }}
+      CI_OS: ${{ matrix.os }}
+      CI_ARCH: ${{ matrix.arch }}
+      CI_COMPILER: ${{ matrix.compiler }}
+      CI_BUILDTYPE: ${{ matrix.buildtype }}
+      CI_SANITIZE: ${{ matrix.sanitize }}
+      CI_EXPORTS: ${{ matrix.exports }}
+      CI_LEG: ${{ matrix.name }}
+      CI_REASON: ${{ matrix.reason }}
+      CI_EXPERIMENTAL: ${{ matrix.experimental }}
+      MACOSX_DEPLOYMENT_TARGET: "11.0"
       ASAN_OPTIONS: detect_leaks=0:halt_on_error=1:abort_on_error=1:check_initialization_order=1:strict_init_order=1
       UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1:report_error_type=1
-      # Experimental (reports, never blocks) until repository variable
-      # OPENETQW_CI_SANITIZER_REQUIRED is set to 'true'.
-      SANITIZER_EXPERIMENTAL: ${{ vars.OPENETQW_CI_SANITIZER_REQUIRED != 'true' }}
+      MallocNanoZone: "0"
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -289,54 +331,76 @@ jobs:
         uses: actions/setup-python@v7
         with:
           python-version: "3.x"
+          architecture: ${{ matrix.python_arch }}
 
       - name: Install Meson and Ninja
         run: |
           set -euo pipefail
           python -m pip install --disable-pip-version-check "${MESON_SPEC}" "${NINJA_SPEC}"
-          clang --version | head -n 1
+
+      - name: Install Linux toolchain
+        if: matrix.os == 'linux'
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3; do
+            if sudo apt-get update && sudo apt-get install -y --no-install-recommends clang; then
+              exit 0
+            fi
+            echo "apt attempt ${attempt} failed; retrying in 15 seconds"
+            sleep 15
+          done
+          echo "Failed to install clang" >&2
+          exit 1
 
       - name: Configure instrumented build
         id: configure
-        continue-on-error: ${{ vars.OPENETQW_CI_SANITIZER_REQUIRED != 'true' }}
-        # Clang does not link the sanitizer runtime into shared libraries, so
-        # the module's __asan/__ubsan references resolve from the host at load
-        # time; -Wl,--no-undefined (b_lundef) must be off for this build.
-        run: meson setup build-asan . --backend ninja --buildtype debugoptimized -Db_sanitize=address,undefined -Db_lundef=false
+        continue-on-error: ${{ matrix.experimental }}
+        run: |
+          set -euo pipefail
+          "${CC}" --version | head -n 1
+          args=(setup build-asan . --backend ninja --buildtype "${CI_BUILDTYPE}" "-Db_sanitize=${CI_SANITIZE}")
+          if [ "${CI_OS}" = linux ]; then
+            # Clang does not link the sanitizer runtime into Linux shared
+            # libraries; the module's __asan/__ubsan references resolve from the
+            # host at load time, so -Wl,--no-undefined (b_lundef) must be off.
+            args+=(-Db_lundef=false)
+          fi
+          meson "${args[@]}"
 
       - name: Compile instrumented idLib and game module
         id: compile
         if: steps.configure.outcome == 'success'
-        continue-on-error: ${{ vars.OPENETQW_CI_SANITIZER_REQUIRED != 'true' }}
+        continue-on-error: ${{ matrix.experimental }}
         run: python tools/ci/run_logged.py --log .tmp/ci/compile-asan.log --paths-from build-asan -- meson compile -C build-asan --ninja-args=-k,25
 
-      - name: Verify instrumentation
+      - name: Verify instrumentation and exports
         id: validate
         if: steps.compile.outcome == 'success'
-        continue-on-error: ${{ vars.OPENETQW_CI_SANITIZER_REQUIRED != 'true' }}
+        continue-on-error: ${{ matrix.experimental }}
         run: |
-          set -euo pipefail
-          python tools/ci/check_game_module.py \
-            --build-dir build-asan \
-            --os linux \
-            --arch x64 \
-            --exports warn \
-            --expect-sanitizer \
-            --report .tmp/ci/module-report-asan.json
+          python tools/ci/check_game_module.py --build-dir build-asan --os "${CI_OS}" --arch "${CI_ARCH}" \
+            --exports "${CI_EXPORTS}" --expect-sanitizer --report .tmp/ci/module-report-asan.json
 
-      - name: Load the module under ASan+UBSan
+      - name: Load and unload the module under ASan+UBSan
         id: smoke
         if: steps.validate.outcome == 'success'
-        continue-on-error: ${{ vars.OPENETQW_CI_SANITIZER_REQUIRED != 'true' }}
+        continue-on-error: ${{ matrix.experimental }}
         run: |
           set -euo pipefail
-          clang -fsanitize=address,undefined -fno-omit-frame-pointer -g \
-            tools/ci/module_load_smoke.c -o .tmp/ci/module_load_smoke -ldl
+          libs=()
+          if [ "${CI_OS}" = linux ]; then libs+=(-ldl); fi
+          "${CC}" "-fsanitize=${CI_SANITIZE}" -fno-omit-frame-pointer -g tools/ci/module_load_smoke.c \
+            -o .tmp/ci/module_load_smoke ${libs[@]+"${libs[@]}"}
+          case "${CI_OS}" in
+            linux) module="build-asan/game_${CI_ARCH}.so" ;;
+            macos) module="build-asan/game_${CI_ARCH}.dylib" ;;
+            *) echo "unsupported sanitizer OS ${CI_OS}" >&2; exit 2 ;;
+          esac
           status=0
-          .tmp/ci/module_load_smoke build-asan/game_x64.so > .tmp/ci/sanitizer-smoke.log 2>&1 || status=$?
+          .tmp/ci/module_load_smoke "${module}" > .tmp/ci/sanitizer-smoke.log 2>&1 || status=$?
           cat .tmp/ci/sanitizer-smoke.log
           if grep -E -q 'ERROR: AddressSanitizer|runtime error:|SUMMARY: (Address|UndefinedBehavior)Sanitizer' .tmp/ci/sanitizer-smoke.log; then
-            echo "::error title=Sanitizer::sanitizer diagnostics while loading/unloading game_x64.so (see sanitizer-smoke.log)"
+            echo "::error title=Sanitizer::sanitizer diagnostics while loading/unloading ${module} (see sanitizer-smoke.log)"
             exit 1
           fi
           exit "${status}"
@@ -345,7 +409,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: game-linux-x64-asan-ubsan
+          name: ${{ matrix.artifact }}
           path: |
             build-asan/meson-logs/meson-log.txt
             .tmp/ci/
@@ -361,12 +425,14 @@ jobs:
         run: |
           set -euo pipefail
           mode=required
-          if [ "${SANITIZER_EXPERIMENTAL}" = true ]; then mode="experimental, not blocking"; fi
+          if [ "${CI_EXPERIMENTAL}" = true ]; then mode="experimental, not blocking"; fi
           if [ "${SMOKE}" = success ]; then
-            echo "### ASan+UBSan load smoke (${mode}): passed" >> "${GITHUB_STEP_SUMMARY}"
+            echo "### ${CI_LEG} load smoke (${mode}): passed" >> "${GITHUB_STEP_SUMMARY}"
+          elif [ "${CI_EXPERIMENTAL}" = true ]; then
+            echo "::warning title=Experimental sanitizer leg failed (not blocking)::${CI_LEG}: ${STAGES}. Known blocker: ${CI_REASON}"
+            echo "### :warning: ${CI_LEG} load smoke (${mode}): failed (${STAGES}); known blocker: ${CI_REASON}" >> "${GITHUB_STEP_SUMMARY}"
           else
-            echo "::warning title=ASan+UBSan load smoke failed (${mode})::${STAGES}"
-            echo "### :warning: ASan+UBSan load smoke (${mode}): failed (${STAGES})" >> "${GITHUB_STEP_SUMMARY}"
+            echo "### :x: ${CI_LEG} load smoke (${mode}): failed (${STAGES})" >> "${GITHUB_STEP_SUMMARY}"
           fi
 
   result:
@@ -379,16 +445,18 @@ jobs:
       - name: Evaluate required jobs
         env:
           NEEDS: ${{ toJSON(needs) }}
-          BUILD_COUNT: ${{ needs.plan.outputs.count }}
+          BUILD_COUNT: ${{ needs.plan.outputs.build_count }}
+          SANITIZER_COUNT: ${{ needs.plan.outputs.sanitizer_count }}
         run: |
           python3 - <<'PY'
           import json, os, sys
           needs = json.loads(os.environ["NEEDS"])
+          empty = {"build": os.environ.get("BUILD_COUNT") == "0", "sanitizer": os.environ.get("SANITIZER_COUNT") == "0"}
           failed = []
           for job, data in needs.items():
               result = data.get("result")
-              if result == "skipped" and job == "build" and os.environ.get("BUILD_COUNT") == "0":
-                  continue
+              if result == "skipped" and empty.get(job):
+                  continue  # nothing planned for this job (dispatch selection)
               if result != "success":
                   failed.append(f"{job}: {result}")
           lines = [f"- {job}: {data.get('result')}" for job, data in needs.items()]
