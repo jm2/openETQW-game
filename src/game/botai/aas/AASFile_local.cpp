@@ -425,7 +425,7 @@ bool idAASFileLocal::ValidateIndices( const char *fileName ) const {
 	}
 	long long totalReachable = 0;
 	for ( int i = 0; i < clusters.Num() && problem == NULL; i++ ) {
-		if ( clusters[ i ].numReachableAreas < 0 || clusters[ i ].numReachableAreas > areas.Num() ) {
+		if ( clusters[ i ].numReachableAreas < 0 || clusters[ i ].numReachableAreas > clusters[ i ].numAreas || clusters[ i ].numAreas > areas.Num() ) {
 			problem = "cluster reachable areas"; index = i;
 		} else if ( i == 0 ? ( clusters[ i ].numPortals != 0 || clusters[ i ].numReachableAreas != 0 ) :
 				!AAS_SpanInRange( clusters[ i ].firstPortal, clusters[ i ].numPortals, portalIndex.Num() ) ) {
@@ -464,6 +464,9 @@ bool idAASFileLocal::ValidateIndices( const char *fileName ) const {
 		if ( areas[ i ].cluster == 0 || ( areas[ i ].cluster > 0 && areas[ i ].cluster >= clusters.Num() ) || ( areas[ i ].cluster < 0 && -areas[ i ].cluster >= portals.Num() ) ) {
 			problem = "area cluster"; index = i;
 		} else if ( areas[ i ].cluster > 0 && areas[ i ].clusterAreaNum >= clusters[ areas[ i ].cluster ].numReachableAreas ) {
+			// Kept to numReachableAreas for every area, not only reachable ones: the
+			// routing cache has that many slots and GetAreaRoutingCache indexes it with
+			// no bound of its own. Every retail file has numAreas == numReachableAreas.
 			problem = "area cluster area"; index = i;
 		}
 	}

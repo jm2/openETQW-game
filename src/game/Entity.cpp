@@ -138,7 +138,7 @@ const idEventDef EV_SetCrosshairLineFraction( "chSetLineFraction", '\0', DOC_TEX
 const idEventDef EV_SetCrosshairLineType( "chSetLineType", '\0', DOC_TEXT( "Sets the type of the specified crosshair info line." ), 2, "Setting an unknown type will cause the line to not be visible.\nThis is only valid within the OnUpdateCrosshairInfo function, if called outside of this, the game will crash.", "d", "index", "Index of the line to set the type of.", "d", "type", "Type to set. Accepted values are CI_BAR, CI_TEXT or CI_IMAGE." );
 
 const idEventDef EV_SendNetworkCommand( "sendNetworkCommand", '\0', DOC_TEXT( "Sends a message from a network client to this entity." ), 1, NULL, "s", "message", "Message to send." );
-const idEventDef EV_SendNetworkEvent( "sendNetworkEvent", '\0', DOC_TEXT( "Sends a message from the server to this object on the specified client." ), 3, NULL, "d", "clientIndex", "Index of the client to send the message to, or -1 for all clients.", "b", "isRepeater", "Whether this is the index of a repeater client, or a regular client.", "s", "message", "Message to send." );
+const idEventDef EV_SendNetworkEvent( "sendNetworkEvent", '\0', DOC_TEXT( "Sends a message from the server to this object on the specified client." ), 2, "Nothing is run for the local player; the script handles that itself.", "E", "player", "Player to send the message to, or $null_entity for all clients.", "s", "message", "Message to send." );
 
 const idEventDef EV_GetNextKey( "getNextKey", 's', DOC_TEXT( "Finds the next key with the given prefix on the entity's metadata." ), 2, "To find the first key that matches, pass an empty string as the previous match.", "s", "prefix", "Prefix of the keys to match.", "s", "lastMatch", "Last key that was found." );
 const idEventDef EV_SetKey( "setKey", '\0', DOC_TEXT( "Sets the given key on the entity's metadata to the specified value." ), 2, NULL, "s", "key", "Key to set.", "s", "value", "Value to set the key to." );
@@ -6848,31 +6848,52 @@ void idEntity::Event_SetCrosshairLineType( int index, int type ) {
 
 /*
 ================
+idEntity::GetNetworkEventClient
+
+script/events.script declares 'sendNetworkEvent( entity p, string message )' and
+sdEventDefHelper::ReconcileEventsWithScript rewrites EV_SendNetworkEvent to it, so the
+handlers get ( player, message ); the SDK's ( clientIndex, isRepeater, message ) read a
+message that was never passed. $null_entity means every client. The retail scripts act
+for the local player themselves (objectiveManager::PlaySound, particle_trigger), so the
+handlers only send. Returns false if nothing should be sent.
+================
+*/
+bool idEntity::GetNetworkEventClient( const char* caller, idEntity* player, const char* message, int& clientIndex ) {
+	if ( idStr::Cmp( EV_SendNetworkEvent.GetArgFormat(), "Es" ) != 0 ) {
+		gameLocal.Warning( "%s: '%s' has argument format '%s', expected the script signature ( entity, string )", caller, EV_SendNetworkEvent.GetName(), EV_SendNetworkEvent.GetArgFormat() );
+		return false;
+	}
+	if ( message == NULL || *message == '\0' ) {
+		return false;
+	}
+
+	clientIndex = -1;
+	if ( player != NULL ) {
+		idPlayer* target = player->Cast< idPlayer >();
+		if ( target == NULL ) {
+			gameLocal.Warning( "%s: '%s' is not a player", caller, player->GetName() );
+			return false;
+		}
+		clientIndex = target->entityNumber;
+	}
+	return true;
+}
+
+/*
+================
 idEntity::Event_SendNetworkEvent
 ================
 */
-void idEntity::Event_SendNetworkEvent( int clientIndex, bool isRepeaterClient, const char* message ) {
-	if ( !isRepeaterClient ) {
-		if ( clientIndex == -1 ) {
-			if ( gameLocal.GetLocalPlayer() != NULL ) {
-				gameLocal.HandleNetworkEvent( this, message );
-			}
-		} else {
-			idPlayer* player = gameLocal.GetClient( clientIndex );
-			if ( player != NULL && gameLocal.IsLocalPlayer( player ) ) {
-				gameLocal.HandleNetworkEvent( this, message );
-			}
-		}
+void idEntity::Event_SendNetworkEvent( idEntity* player, const char* message ) {
+	int clientIndex;
+	if ( !GetNetworkEventClient( "idEntity::Event_SendNetworkEvent", player, message, clientIndex ) ) {
+		return;
 	}
 
 	sdReliableServerMessage msg( GAME_RELIABLE_SMESSAGE_NETWORKEVENT );
 	msg.WriteLong( gameLocal.GetSpawnId( this ) );
 	msg.WriteString( message );
-	if ( isRepeaterClient ) {
-		msg.Send( sdReliableMessageClientInfoRepeater( clientIndex ) );
-	} else {
-		msg.Send( sdReliableMessageClientInfo( clientIndex ) );
-	}
+	msg.Send( sdReliableMessageClientInfo( clientIndex ) );
 }
 
 /*

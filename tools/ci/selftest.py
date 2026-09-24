@@ -18,6 +18,11 @@ silently turn a gate into a no-op:
 * check_engine_tests.py: missing / skipped required tests and sanitizer
   output fail; run_logged.py propagates the exit status and keeps the log;
   check_game_module.py rejects missing, malformed and mis-typed modules.
+* check_event_handlers.py: a handler taking a float (or more parameters,
+  or a type it does not know as an integer) where its event definition
+  passes an integer fails, as does a binding it cannot resolve; each binding
+  uses the definition in its own file; an inherited or inline handler
+  matching its definition passes.
 
 The copyleft marker strings are assembled from fragments so this file does
 not trip check_no_gpl.py itself.  Exit codes: 0 pass, 1 a case failed.
@@ -253,6 +258,53 @@ def test_module_check(scratch: Path) -> None:
     check(code == 1, "a PE file named like a Linux module fails", out)
 
 
+def test_event_handlers(scratch: Path) -> None:
+    print("check_event_handlers.py")
+    header = ("class idClass {\npublic:\n\tvoid Event_Remove( void );\n};\n"
+              "class idThing : public idClass {\npublic:\n\tvoid Event_Inline( bool on ) { }\n};\n")
+
+    def tree(name: str, fmt: str, params: str) -> tuple[int, str]:
+        root = scratch / f"events-{name}"
+        (root / "src" / "game").mkdir(parents=True)
+        (root / "src" / "game" / "Thing.h").write_text(header, encoding="utf-8")
+        (root / "src" / "game" / "Thing.cpp").write_text(
+            'const idEventDef EV_Set( "set", \'\\0\', DOC_TEXT( "Sets." ), %d, NULL%s );\n'
+            'const idEventDef EV_Remove( "remove", "" );\n'
+            'const idEventDef EV_Inline( "inline", "b" );\n'
+            'CLASS_DECLARATION( idClass, idThing )\n'
+            '\tEVENT( EV_Set, idThing::Event_Set )\n'
+            '\tEVENT( EV_Remove, idThing::Event_Remove )\n'
+            '\tEVENT( EV_Inline, idThing::Event_Inline )\n'
+            'END_CLASS\n'
+            'void idThing::Event_Set( %s ) {\n}\n'
+            % (len(fmt), "".join(f', "{c}", "a{i}", "Argument."' for i, c in enumerate(fmt)), params),
+            encoding="utf-8")
+        return run_tool("check_event_handlers.py", "--root", str(root))
+
+    code, out = tree("ok", "sf", "const char* name, float scale")
+    check(code == 0 and "0 mismatch(es), 0 not checked" in out, "matching, inherited and inline handlers pass", out)
+    code, out = tree("float", "sd", "const char* name, float scale")
+    check(code == 1 and "parameter 2 is float" in out, "float handler for an integer argument fails", out)
+    code, out = tree("extra", "s", "const char* name, float scale")
+    check(code == 1 and "takes 2 parameters" in out, "handler taking more parameters than passed fails", out)
+    code, out = tree("unknown", "sd", "const char* name, idStr scale")
+    check(code == 1 and "parameter 2 is idStr" in out, "a type not known as an integer fails", out)
+
+    root = scratch / "events-files"
+    (root / "src" / "game").mkdir(parents=True)
+    for name, fmt in (("A", "d"), ("B", "f")):
+        (root / "src" / "game" / f"{name}.cpp").write_text(
+            f'const idEventDef EV_Get( "get{name}", "{fmt}" );\n'
+            f'CLASS_DECLARATION( idClass, id{name} )\n\tEVENT( EV_Get, id{name}::Event_Get )\nEND_CLASS\n'
+            f'void id{name}::Event_Get( float value ) {{\n}}\n', encoding="utf-8")
+    (root / "src" / "game" / "C.cpp").write_text(
+        'CLASS_DECLARATION( idClass, idC )\n\tEVENT( EV_Missing, idC::Event_Missing )\nEND_CLASS\n', encoding="utf-8")
+    code, out = run_tool("check_event_handlers.py", "--root", str(root))
+    check(code == 1 and "idA::Event_Get parameter 1 is float" in out and "idB::Event_Get" not in out,
+          "each binding is checked against the definition in its own file", out)
+    check("not checked: " in out and "EV_Missing" in out, "a binding without a definition fails", out)
+
+
 def main() -> int:
     scratch = Path(tempfile.mkdtemp(prefix="openetqw-ci-selftest-"))
     try:
@@ -263,6 +315,7 @@ def main() -> int:
         test_engine_tests(scratch)
         test_run_logged(scratch)
         test_module_check(scratch)
+        test_event_handlers(scratch)
     finally:
         shutil.rmtree(scratch, ignore_errors=True)
     if failures:

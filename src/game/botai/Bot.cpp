@@ -1530,8 +1530,12 @@ void idBot::VehicleUcmds( usercmd_t &ucmd ) {
 	const botAIOutput_t &clientUcmd = botThreadData.GetGameOutputState()->botOutput[ entityNumber ];
 
 	sdTransport* transport = Bot_ProxyTransport( GetProxyEntity() );
+	if ( transport == NULL ) {	// like the other vehicle control functions
+		gameLocal.Warning( "Bot client #: %i thinks its on a vehicle, but its not!!!", entityNumber );
+		return;
+	}
 
-	GetVehicleInfo( GetProxyEntity()->entityNumber, vehicleInfo );
+	GetVehicleInfo( transport->entityNumber, vehicleInfo );
 
 	if ( vehicleInfo.type > ICARUS ) { 
 		AirVehicleControls( ucmd );

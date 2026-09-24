@@ -36,8 +36,18 @@ TAIL_CHARS = 4000
 
 
 def short_name(name: str) -> str:
-    # Meson formats names as "<suite> - <project>:<test>" (or "<project>:<test>").
-    return name.rsplit(":", 1)[-1].strip() if ":" in name else name.strip()
+    # Meson formats names as "<suite> - <project>:<test>" or "<project>:<test>";
+    # some versions write "<project>:<suite>[+<suite>] / <test>".
+    name = name.strip()
+    if " / " in name:
+        return name.rsplit(" / ", 1)[-1].strip()
+    return name.rsplit(":", 1)[-1].strip() if ":" in name else name
+
+
+assert short_name("unit - openETQW:bitmsg") == "bitmsg"
+assert short_name("openETQW:unit / bitmsg") == "bitmsg"
+assert short_name("openETQW:unit+integration / bitmsg") == "bitmsg"
+assert short_name("bitmsg") == "bitmsg"
 
 
 def main(argv: list[str]) -> int:
