@@ -203,6 +203,11 @@ sdThread::ThreadProc
 void* sdThread::ThreadProc( void* p ) {
 	sdThreadParms *parms = static_cast< sdThreadParms* >( p );
 	unsigned int retVal = parms->process->Run( parms->parm );
+
+	// like the Win32 path: owners (e.g. the game's bot thread watchdog) rely on
+	// IsRunning() to detect a worker that has exited
+	parms->thread->isRunning = false;
+
 	sdSysThread::Exit( retVal );
 	return NULL;
 }

@@ -1460,7 +1460,8 @@ bool sdAdminSystemCommand_AddBot::PerformCommand( const idCmdArgs& cmd, const sd
 
 	idBot::Bot_SetClassType( newPlayer, botClass, botGun );
 
-	newPlayer->SpawnFromSpawnSpot();
+	// SetClientTeam has flagged the bot for a forced respawn; sdGameRules::CheckRespawns spawns it
+	// on a later frame ( after gameLocal.playerSpawnTime, once the map script has assigned the team spawns )
 
 	return true;
 }

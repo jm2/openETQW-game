@@ -233,6 +233,10 @@ sdAtmosphereInstance::SetupPrecipitation
 ============
 */
 void sdAtmosphereInstance::SetupPrecipitation( const sdHeightMapInstance* heightMap, bool force ) {
+	if ( !gameLocal.DoClientSideStuff() ) {
+		return;
+	}
+
 	for ( int i = 0; i < sdDeclAtmosphere::NUM_PRECIP_LAYERS; i++ ) {
 		const sdPrecipitationParameters& newParms = atmosphereParms.atmosphere->GetPrecipitation( i );
 

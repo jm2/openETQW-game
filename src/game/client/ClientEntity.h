@@ -241,7 +241,7 @@ public:
 	void					Event_StopEffectHandle( int handle );
 	void					Event_KillEffect( const char *effectName );
 	void					Event_Bind( idEntity *bindMaster );
-	void					Event_BindToJoint( idEntity *bindMaster, const char *boneName, float rotateWithMaster ); 
+	void					Event_BindToJoint( idEntity *bindMaster, const char *boneName, bool rotateWithMaster ); 
 	void					Event_UnBind( void );
 	void					Event_AddCheapDecal( idEntity *attachTo, idVec3 &origin, idVec3 &normal, const char* decalName, const char* materialName );
 	void					Event_GetJointHandle( const char* jointName );

@@ -159,8 +159,21 @@ __inline void operator delete[]( void *p ) {
 	All objects of the 'type' are properly constructed.
 	However, the constructor is not called for re-used objects.
 
+	Free is O(1) and trusts its caller. Build with ID_BLOCKALLOC_VALIDATE=1 to
+	check every Free (ownership, double free, free after Shutdown); a failed
+	check aborts the process with a message and a backtrace.
+
 ===============================================================================
 */
+
+#ifndef ID_BLOCKALLOC_VALIDATE
+#define ID_BLOCKALLOC_VALIDATE 0
+#endif
+
+#if ID_BLOCKALLOC_VALIDATE
+// prints the reason plus a backtrace and aborts; does not return
+void idBlockAllocValidationFailed( const char* reason, const void* pointer );
+#endif
 
 template<class type, int blockSize, bool threadSafe = false >
 class idBlockAlloc {
@@ -236,9 +249,40 @@ void idBlockAlloc<type,blockSize,threadSafe>::Free( type *t ) {
 
 	sdScopedLock< threadSafe > scopedLock( lock );
 
-	element_t *element = (element_t *)( ( (unsigned char *) t ) - ( (UINT_PTR) &((element_t *)0)->t ) );
+	// offsetof instead of the '&((element_t *)0)->t' idiom, which is a member access through a
+	// null pointer (undefined behaviour, reported by UBSan)
+	element_t *element = (element_t *)( ( (unsigned char *) t ) - offsetof( element_t, t ) );
 	//element_t *element;
 	//element = ( element_t * )( ( (unsigned char *)t ) - offsetof( element_t, t ) );
+
+#if ID_BLOCKALLOC_VALIDATE
+	// opt-in debugging aid: O(blocks + free list) per call, so never enable it by default
+	if ( blocks == NULL ) {
+		idBlockAllocValidationFailed( "free after the allocator was shut down (or before it allocated anything)", t );
+	}
+	bool owned = false;
+	for ( block_t *b = blocks; b != NULL; b = b->next ) {
+		if ( element >= &b->elements[0] && element < &b->elements[blockSize] ) {
+			if ( ( ( (UINT_PTR)element - (UINT_PTR)&b->elements[0] ) % sizeof( element_t ) ) != 0 ) {
+				idBlockAllocValidationFailed( "pointer is inside a block but not at an element boundary", t );
+			}
+			owned = true;
+			break;
+		}
+	}
+	if ( !owned ) {
+		idBlockAllocValidationFailed( "pointer was not allocated by this allocator", t );
+	}
+	for ( element_t *curr = free; curr != NULL; curr = curr->next ) {
+		if ( curr == element ) {
+			idBlockAllocValidationFailed( "double free", t );
+		}
+	}
+	if ( active <= 0 ) {
+		idBlockAllocValidationFailed( "more frees than allocations", t );
+	}
+#endif
+
 	element->next = free;
 	free = element;
 	active--;

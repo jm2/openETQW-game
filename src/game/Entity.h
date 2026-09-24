@@ -291,6 +291,7 @@ public:
 	void					WriteDestroyEvent( void );
 
 	static void				ClearEntityCaches( void );
+	static bool				GetNetworkEventClient( const char* caller, idEntity* player, const char* message, int& clientIndex );
 
 	static idEntity*		FromCreationData( idFile* file );
 	void					WriteCreationData( idFile* file ) const;
@@ -905,7 +906,7 @@ protected:
 	void					Event_SetCrosshairLineFraction( int index, float frac );
 	void					Event_SetCrosshairLineType( int index, int type );
 
-	void					Event_SendNetworkEvent( int clientIndex, bool isRepeaterClient, const char* message );
+	void					Event_SendNetworkEvent( idEntity* player, const char* message );
 	void					Event_SendNetworkCommand( const char* message );
 	void					Event_PointInRadar( const idVec3& point, radarMasks_t type, bool ignoreJammers );
 

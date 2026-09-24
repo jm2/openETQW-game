@@ -1364,7 +1364,7 @@ public:
 	void					Event_SetArtyAttackLocation( const idVec3& vector, int artyType );
 	void					Event_SetPlayerKillTarget( idEntity* killTarget );
 	void					Event_SetPlayerRepairTarget( idEntity* repairTarget );
-	void					Event_SetPlayerPickupRequestTime( idEntity* pickUpTarget );
+	void					Event_SetPlayerPickupRequestTime( void );
 	void					Event_SetPlayerCommandRequestTime( void );
 	void					Event_SetTeleporterState( bool destroy );
 	void					Event_SetForceShieldState( bool destroy, idEntity* self );

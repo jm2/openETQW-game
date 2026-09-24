@@ -515,13 +515,21 @@ JUMPIN' JEHOSEPHAT YEEHAW!
 */
 
 
+#if defined( __linux__ ) && !defined( __i386__ ) && !defined( __x86_64__ )
+#include <signal.h>	// raise( SIGTRAP ) in AssertFailed
+#endif
+
 void AssertFailed( const char *file, int line, const char *expression ) {
 	idLib::sys->DebugPrintf( "\n\nASSERTION FAILED!\n%s(%d): '%s'\n", file, line, expression );
 
 #if defined( _WIN32 )
 	__debugbreak();
 #elif defined( __linux__ )
+#if defined( __i386__ ) || defined( __x86_64__ )
 	__asm__ __volatile__ ("int $0x03");
+#else
+	raise( SIGTRAP );
+#endif
 #elif defined( MACOS_X )
 #if 0
 	kill( getpid(), SIGINT );

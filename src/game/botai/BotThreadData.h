@@ -575,6 +575,11 @@ struct botReachChange_t {
 	bool					set;
 };
 
+struct botAreaDisable_t {
+	int						aasType;
+	int						areaNum;
+};
+
 struct botAIOutput_t {
 	botTurnTypes_t			turnType;						//mal: should the bot turn to its viewAngle goal right away, aim, or just move to angles slowly?
 
@@ -707,8 +712,8 @@ public:							// the following routines are called from the game thread
 	void						SetupBotInfo( int clientNum );
 	float						GetVehicleTargetOffset( const playerVehicleTypes_t vehicleType );
 
-	void						ChangeBotName( idPlayer* bot );
-	static bool					FindRandomBotName( int clientNum, idStr& botName );
+	void						ChangeBotName( idPlayer* bot, const char* avoidName = NULL );
+	static bool					FindRandomBotName( int clientNum, idStr& botName, const char* avoidName = NULL );
 
 	int							GetNumClassOnTeam( const playerTeamTypes_t playerTeam, const playerClassTypes_t classType );
 	int							GetNumBotsInServer( const playerTeamTypes_t playerTeam );
@@ -730,6 +735,11 @@ public:							// the following routines are called from the game thread
 	bool						IsThreadingEnabled() const { return threadingEnabled; }
 	int							GetThreadMinFrameDelay() const { return threadMinFrameDelay; }
 	int							GetThreadMaxFrameDelay() const { return threadMaxFrameDelay; }
+
+								// bot think pacing diagnostics ( botThreadStats console command )
+	void						ResetThreadStats();						// game thread, only while the bot thread is stopped
+	int							GetNumBotThinkFrames() const;			// RunFrame executions since the bot thread was (re)started for this map
+	int							GetNumBotThreadWaits() const;			// "Waiting on BotThread" stalls since the bot thread was (re)started for this map
 
 	bool						AllowDebugData() const { return !threadingEnabled && bot_debug.GetBool(); }
 	bool						PlayerIsBeingBriefed();
@@ -852,10 +862,14 @@ private:
 	idBotAI *					removedBotAIs;
 	idList<botAreaChange_t>		pendingAreaChanges;
 	idList<botReachChange_t>	pendingReachChanges;
+	idList<botAreaDisable_t>	pendingAreaDisables;			// disableAASAreaInLocation
 
 	idClipModel*				personalVehicleClipModel;		// icarus and husky
 	idClipModel*				genericVehicleClipModel;		// everything but goliath
 	idClipModel*				goliathVehicleClipModel;		// 
+
+	void						FreeVehicleClipModels();
+	void						DeleteBotAIs();
 	
 	int							threadMinFrameDelay;
 	int							threadMaxFrameDelay;

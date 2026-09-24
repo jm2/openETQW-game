@@ -83,6 +83,8 @@ if cpp.get_argument_syntax() == 'msvc'
   add_project_arguments(
     '/EHsc',
     '/permissive-',
+    # /permissive- implies /Zc:strictStrings; the SDK passes string literals to char* in hundreds of places
+    '/Zc:strictStrings-',
     '/Zc:__cplusplus',
     '/utf-8',
     '/bigobj',
@@ -96,6 +98,11 @@ else
     '-Wno-invalid-offsetof',
     '-Wno-register',
   ]
+  # SDK code relies on 'this == NULL' checks (e.g. idClass::Cast is 'return this ? ... : NULL')
+  # and on null checks after dereferences; keep optimizing compilers from deleting them.
+  if cpp.has_argument('-fno-delete-null-pointer-checks')
+    shared_cpp_args += ['-fno-delete-null-pointer-checks']
+  endif
 endif
 
 # Force-include precompiled header when use_pch is false
@@ -269,9 +276,15 @@ for s in sorted(sources):
 game_source_paths = game_sources_res.stdout().strip().split('\n')
 
 game_link_args = []
+game_link_depends = []
 if host_system == 'darwin'
   exp_file = meson.project_source_root() / 'tools' / 'build' / 'darwin_game_module.exp'
   game_link_args += ['-Wl,-exported_symbols_list,' + exp_file]
+  game_link_depends += [exp_file]
+elif host_system == 'linux'
+  map_file = meson.project_source_root() / 'tools' / 'build' / 'linux_game_module.map'
+  game_link_args += ['-Wl,--version-script=' + map_file, '-Wl,-z,relro', '-Wl,-z,now']
+  game_link_depends += [map_file]
 elif host_system == 'windows'
   game_link_args += ['/DEF:' + (meson.project_source_root() / 'src' / 'game' / 'Game.def')]
 endif
@@ -285,5 +298,6 @@ game_module = shared_library(
   dependencies: [threads_dep, m_dep],
   link_with: [libgamedecl_lib, idlib_lib],
   link_args: game_link_args,
+  link_depends: game_link_depends,
   install: true,
 )

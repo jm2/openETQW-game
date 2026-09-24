@@ -651,8 +651,10 @@ extern GLExtension_t (*qglXGetProcAddressARB)( const GLubyte *procname );
 
 // make sure the code is correctly using qgl everywhere
 // don't enable that when building glimp itself obviously..
-#if !defined( GLIMP )
-	#include "../../sys/linux/qgl_enforce.h"
+#if !defined( GLIMP ) && defined( __has_include )
+#if __has_include( "../../sys/linux/qgl_enforce.h" )
+	#include "../../sys/linux/qgl_enforce.h"	// optional debugging aid; not part of the SDK
+#endif
 #endif
 
 #endif // __linux__

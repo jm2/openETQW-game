@@ -1,0 +1,7 @@
+# SPDX-License-Identifier: MIT
+#
+# Files allowed to mention GPL-family licenses, consumed by tools/ci/check_no_gpl.py.
+# Format: <repo-relative path>  # <mandatory justification>
+# Keep this list minimal: an entry here exempts the whole file from the scan.
+
+LICENSE  # licensing notice; states that the SDK files are NOT under the GPL

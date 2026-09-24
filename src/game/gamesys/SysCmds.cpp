@@ -19,6 +19,7 @@ static char THIS_FILE[] = __FILE__;
 #include "../Player.h"
 
 #include "../botai/Bot.h"
+#include "../botai/BotThread.h"
 #include "../botai/BotThreadData.h"
 #include "../botai/Bot_Common.h"
 
@@ -901,12 +902,48 @@ void Cmd_PlayerPos_f( const idCmdArgs &args ) {
 	bool attacking = ( player->GetWeapon() != NULL ) ? player->GetWeapon()->IsAttacking() : false;
 	const char* teamName = player->GetGameTeam() ? player->GetGameTeam()->GetLookupName() : "none";
 
-	gameLocal.Printf( "PLAYER_POS: (%.2f, %.2f, %.2f) vel: (%.2f, %.2f, %.2f) ground: %d ducked: %d prone: %d jumped: %d (client: %d team: %s spectating %d atk: %d cmd: fwd=%d side=%d up=%d atk_cmd=%d lagged=%d frozen=%d inh=%d)\n",
+	// player AAS area that contains the feet: -1 = no player AAS loaded, 0 = not inside any area
+	// (in solid or outside the navigable space). Containment, not the nearest reachable area, so a
+	// player pushed into geometry reports 0. The origin sits on the floor plane, and on some terrain
+	// the AAS area floors lie up to a step above the collision surface (e.g. slipgate's GDF spawn
+	// slope), so test points 1, 8 and 16 units above the origin, all below the 18 unit step height.
+	// Read-only AAS queries, safe while the bot thread is running.
+	int areaNum = -1;
+	idAAS* playerAAS = botThreadData.GetAAS( AAS_PLAYER );
+	if ( playerAAS != NULL ) {
+		static const float feetOffsets[] = { 1.0f, 8.0f, 16.0f };
+		areaNum = 0;
+		for ( int i = 0; i < 3 && areaNum == 0; i++ ) {
+			areaNum = playerAAS->PointAreaNum( org + idVec3( 0.0f, 0.0f, feetOffsets[ i ] ) );
+		}
+	}
+
+	gameLocal.Printf( "PLAYER_POS: (%.2f, %.2f, %.2f) vel: (%.2f, %.2f, %.2f) ground: %d ducked: %d prone: %d jumped: %d (client: %d team: %s spectating %d atk: %d cmd: fwd=%d side=%d up=%d atk_cmd=%d lagged=%d frozen=%d inh=%d hp=%d dead=%d area=%d)\n",
 		org.x, org.y, org.z, vel.x, vel.y, vel.z, ground ? 1 : 0, ducked ? 1 : 0, prone ? 1 : 0, jumped ? 1 : 0,
 		player->entityNumber, teamName, player->IsSpectating() ? 1 : 0, attacking ? 1 : 0,
 		(int)player->usercmd.forwardmove, (int)player->usercmd.rightmove, (int)player->usercmd.upmove,
 		player->usercmd.buttons.btn.attack ? 1 : 0,
-		player->GetIsLagged() ? 1 : 0, phys.IsFrozen() ? 1 : 0, player->InhibitMovement() ? 1 : 0 );
+		player->GetIsLagged() ? 1 : 0, phys.IsFrozen() ? 1 : 0, player->InhibitMovement() ? 1 : 0,
+		player->GetHealth(), player->IsDead() ? 1 : 0, areaNum );
+}
+
+/*
+==================
+Cmd_BotThreadStats_f
+
+Bot think pacing diagnostics: prints exactly one line.
+==================
+*/
+void Cmd_BotThreadStats_f( const idCmdArgs &args ) {
+	gameLocal.Printf( "BOT_THREAD_STATS: threading=%d running=%d gameFrame=%d gameTimeMs=%d botFrames=%d minDelay=%d maxDelay=%d waits=%d\n",
+		botThreadData.IsThreadingEnabled() ? 1 : 0,
+		botThread->IsRunning() ? 1 : 0,
+		gameLocal.GetFrameNum(),
+		gameLocal.time,
+		botThreadData.GetNumBotThinkFrames(),
+		botThreadData.GetThreadMinFrameDelay(),
+		botThreadData.GetThreadMaxFrameDelay(),
+		botThreadData.GetNumBotThreadWaits() );
 }
 
 /*
@@ -1051,7 +1088,7 @@ Cmd_EnterVehicle_f
 */
 void Cmd_EnterVehicle_f( const idCmdArgs &args ) {
 	if ( args.Argc() < 2 ) {
-		gameLocal.Printf( "usage: enterVehicle <clientNum> [vehicleName]\n" );
+		gameLocal.Printf( "usage: enterVehicle <clientNum> [vehicle entity name or entityDef]\n" );
 		return;
 	}
 	int clientNum = atoi( args.Argv( 1 ) );
@@ -1069,6 +1106,15 @@ void Cmd_EnterVehicle_f( const idCmdArgs &args ) {
 		idEntity* ent = gameLocal.FindEntity( args.Argv( 2 ) );
 		if ( ent ) {
 			vehicle = ent->Cast< sdTransport >();
+		} else {
+			// or the first live vehicle of that entityDef ("vehicle_titan"): entity
+			// names carry the entity number, which depends on spawn order
+			for ( ent = gameLocal.spawnedEntities.Next(); ent != NULL && vehicle == NULL; ent = ent->spawnNode.Next() ) {
+				sdTransport* trans = ent->Cast< sdTransport >();
+				if ( trans != NULL && trans->GetHealth() > 0 && !idStr::Icmp( trans->spawnArgs.GetString( "classname" ), args.Argv( 2 ) ) ) {
+					vehicle = trans;
+				}
+			}
 		}
 	} else {
 		float bestDist = idMath::INFINITY;
@@ -3450,6 +3496,7 @@ void idGameLocal::InitConsoleCommands( void ) {
 	cmdSystem->AddCommand( "toggleLimbo",			Cmd_ToggleLimbo_f,			CMD_FL_GAME,				"toggle limbo menu" );
 	cmdSystem->AddCommand( "closeLimbo",			Cmd_CloseLimbo_f,			CMD_FL_GAME,				"close limbo menu" );
 	cmdSystem->AddCommand( "playerPos",				Cmd_PlayerPos_f,			CMD_FL_GAME,				"prints current player position, velocity, and stance" );
+	cmdSystem->AddCommand( "botThreadStats",		Cmd_BotThreadStats_f,		CMD_FL_GAME,				"prints bot think frame pacing statistics" );
 #ifdef SD_PRIVATE_BETA_BUILD
 	cmdSystem->AddCommand( "where",					Cmd_GetViewpos_f,			CMD_FL_GAME,				"prints the current view position (x y z) yaw pitch roll" );
 	cmdSystem->AddCommand( "getviewpos",			Cmd_GetViewpos_f,			CMD_FL_GAME,				"prints the current view position (x y z) yaw pitch roll" );
@@ -3630,6 +3677,7 @@ idGameLocal::ShutdownConsoleCommands
 */
 void idGameLocal::ShutdownConsoleCommands( void ) {
 	cmdSystem->RemoveCommand( "playerPos" );
+	cmdSystem->RemoveCommand( "botThreadStats" );
 	cmdSystem->RemoveCommand( "completeObjective" );
 	cmdSystem->RemoveCommand( "objectiveStatus" );
 	cmdSystem->RemoveCommand( "deploy" );

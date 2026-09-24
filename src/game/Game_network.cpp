@@ -1184,48 +1184,92 @@ void idGameLocal::SendUnreliableEntityNetworkEvent( const sdUnreliableEntityNetE
 /*
 ================
 idGameLocal::WriteUnreliableEntityEvents
+
+  The snapshot message is a fixed MAX_MESSAGE_SIZE buffer that does not allow
+  overflow, and unsent events stay queued for up to two seconds, so a client
+  that has gone without snapshots for a while could have more backlog than the
+  message can hold - an idBitMsg overflow is a common->Error that stops the
+  whole server session. Only the oldest events that fit a fixed per snapshot
+  budget are written; the rest stay unsent for this client and go out with a
+  later snapshot, or expire along with the rest of the queue.
+
+  The budget also leaves room for what the engine adds when it wraps this
+  message into the packet (snapshot header, the usercmd block, the channel
+  header and queued reliable messages). It bounds the events only: entity
+  states are not capped, so it cannot guarantee that the whole packet fits.
 ================
 */
+static const int MAX_UNRELIABLE_EVENT_SNAPSHOT_BYTES = 4096;
+static const int SNAPSHOT_ENGINE_RESERVE_BYTES = 24 + 8 + 1024;	// snapshot header + lengths, channel header, usercmds/reliable margin
+static int unreliableEventBudgetWarnTime = 0;
+
 void idGameLocal::WriteUnreliableEntityNetEvents( int clientNum, bool repeaterClient, idBitMsg &msg ) {
 	// write unreliable entity network events to the snapshot
-	// first count them up
+	// first count them up, stopping at the first event that doesn't fit the
+	// budget so the ones that do go out are always the oldest, in order
+	int budget = Min( MAX_UNRELIABLE_EVENT_SNAPSHOT_BYTES, msg.GetRemainingSpace() - 4 - SNAPSHOT_ENGINE_RESERVE_BYTES );
+	if ( budget < 0 ) {
+		budget = 0;
+	}
+	int budgetUsed = 0;
 	int numEvents = 0;
+	int numDeferred = 0;
 	sdUnreliableEntityNetEvent* event;
 	sdUnreliableEntityNetEvent* nextEvent;
 	for ( event = unreliableEntityNetEventQueue.Next(); event != NULL; event = nextEvent ) {
 		nextEvent = event->GetUnreliableNode().Next();
 
+		bool sent;
 #ifdef SD_SUPPORT_REPEATER
 		if ( repeaterClient ) {
-			if ( !event->GetRepeaterSent( clientNum ) ) {
-				numEvents++;
-			}
+			sent = event->GetRepeaterSent( clientNum );
 		} else
 #endif // SD_SUPPORT_REPEATER
 		{
-			if ( !event->GetSent( clientNum ) ) {
-				numEvents++;
-			}
+			sent = event->GetSent( clientNum );
+		}
+		if ( sent ) {
+			continue;
+		}
+
+		if ( numDeferred == 0 && budgetUsed + event->GetTotalSize() <= budget ) {
+			budgetUsed += event->GetTotalSize();
+			numEvents++;
+		} else {
+			numDeferred++;
+		}
+	}
+
+	if ( numDeferred != 0 ) {
+		int now = sys->Milliseconds();
+		if ( now >= unreliableEventBudgetWarnTime ) {
+			unreliableEventBudgetWarnTime = now + 5000;
+			Warning( "idGameLocal::WriteUnreliableEntityNetEvents: client %d has %d unreliable events over the %d byte snapshot budget, deferring them", clientNum, numDeferred, budget );
 		}
 	}
 
 	// now write them
 	msg.WriteLong( numEvents );
+	int numWritten = 0;
 	for ( event = unreliableEntityNetEventQueue.Next(); event != NULL; event = nextEvent ) {
 		nextEvent = event->GetUnreliableNode().Next();
 
+		if ( numWritten < numEvents ) {
 #ifdef SD_SUPPORT_REPEATER
-		if ( repeaterClient ) {
-			if ( !event->GetRepeaterSent( clientNum ) ) {
-				event->Write( msg );
-				event->SetRepeaterSent( clientNum );
-			}
-		} else
+			if ( repeaterClient ) {
+				if ( !event->GetRepeaterSent( clientNum ) ) {
+					event->Write( msg );
+					event->SetRepeaterSent( clientNum );
+					numWritten++;
+				}
+			} else
 #endif // SD_SUPPORT_REPEATER
-		{
-			if ( !event->GetSent( clientNum ) ) {
-				event->Write( msg );
-				event->SetSent( clientNum );
+			{
+				if ( !event->GetSent( clientNum ) ) {
+					event->Write( msg );
+					event->SetSent( clientNum );
+					numWritten++;
+				}
 			}
 		}
 
@@ -1313,7 +1357,8 @@ bool idGameLocal::ApplySnapshot( clientNetworkInfo_t& nwInfo, int sequence ) {
 					next = state->next;
 
 					idEntity* ent = EntityForSpawnId( state->GetSpawnId() );
-					if ( ent ) {
+					// no base: the entity stopped being network synced since this was written
+					if ( ent && nwInfo.states[ ent->entityNumber ][ i ] != NULL ) {
 						sdEntityState* oldState = nwInfo.states[ ent->entityNumber ][ i ];
 						oldState->next = ent->freeStates[ i ];
 						ent->freeStates[ i ] = oldState;
@@ -1356,6 +1401,8 @@ bool idGameLocal::ApplySnapshot( clientNetworkInfo_t& nwInfo, int sequence ) {
 			}
 
 			snapshotAllocator.Free( snapshot );
+			nwInfo.numAppliedSnapshots++;
+			nwInfo.lastAppliedSequence = sequence;
 			return true;
 		} else {
 			lastSnapshot = snapshot;
@@ -1547,6 +1594,69 @@ void idGameLocal::WriteSnapshotUserCmds( snapshot_t* snapshot, idBitMsg& msg, in
 
 /*
 ================
+SnapshotBaseChecksum
+
+net_debugSnapshotBase: a CRC of the shape of a client's snapshot delta base:
+which entity and game states it holds (entity, mode, spawn id) and which
+snapshots made it (count, last sequence).  The server sends it with each
+snapshot and the client compares it with its own before reading, so bases
+that drift apart (a snapshot applied on one side only, a create or delete out
+of order) stop with an error instead of decoding deltas against different
+data.  The state values themselves are not compared: the server keeps the
+exact values it wrote (vehicle physics, for one), the client the quantized
+values it read, so they legitimately differ.  Level 2 logs a CRC of every
+state's values on both sides for manual comparison.
+================
+*/
+static idCVar net_debugSnapshotBase( "net_debugSnapshotBase", "0", CVAR_GAME | CVAR_INTEGER, "server: send a checksum of each client's snapshot base; the client stops with an error when its own base differs; 2 also logs a checksum per state on both sides (network debugging)" );
+
+static unsigned long SnapshotBaseChecksum( const clientNetworkInfo_t& nwInfo, const char* logTag = NULL, int logSequence = 0 ) {
+	static idFile_Memory* scratch = NULL;
+	if ( scratch == NULL ) {
+		scratch = fileSystem->OpenMemoryFile( "snapshotBaseChecksum" );
+	}
+	unsigned long crc;
+	CRC32_InitChecksum( crc );
+	for ( int e = 0; e < MAX_GENTITIES; e++ ) {
+		for ( int mode = 0; mode < NSM_NUM_MODES; mode++ ) {
+			const sdEntityState* state = nwInfo.states[ e ][ mode ];
+			if ( state == NULL || state->data == NULL ) {
+				continue;
+			}
+			const int header[ 3 ] = { e, mode, state->spawnId };
+			CRC32_UpdateChecksum( crc, header, sizeof( header ) );
+			if ( logTag != NULL ) {
+				scratch->Clear( false );
+				state->data->Write( scratch );
+				const idEntity* ent = gameLocal.entities[ e ];
+				common->Printf( "BASE %s %d ent %d mode %d spawn %d len %d crc %08lx %s\n", logTag, logSequence, e, mode, state->spawnId, scratch->Length(),
+					CRC32_BlockChecksum( scratch->GetDataPtr(), scratch->Length() ), ent != NULL ? ent->GetType()->classname : "-" );
+			}
+		}
+	}
+	for ( int mode = 0; mode < ENSM_NUM_MODES; mode++ ) {
+		const sdGameState* state = nwInfo.gameStates[ mode ];
+		if ( state == NULL || state->data == NULL ) {
+			continue;
+		}
+		CRC32_UpdateChecksum( crc, &mode, sizeof( mode ) );
+		if ( logTag != NULL ) {
+			scratch->Clear( false );
+			state->data->Write( scratch );
+			common->Printf( "BASE %s %d game %d len %d crc %08lx\n", logTag, logSequence, mode, scratch->Length(), CRC32_BlockChecksum( scratch->GetDataPtr(), scratch->Length() ) );
+		}
+	}
+	const int applied[ 2 ] = { nwInfo.numAppliedSnapshots, nwInfo.lastAppliedSequence };
+	CRC32_UpdateChecksum( crc, applied, sizeof( applied ) );
+	if ( logTag != NULL ) {
+		common->Printf( "BASE %s %d applied %d last %d\n", logTag, logSequence, applied[ 0 ], applied[ 1 ] );
+	}
+	CRC32_FinishChecksum( crc );
+	return crc;
+}
+
+/*
+================
 idGameLocal::ServerWriteSnapshot
 
   Write a snapshot of the current game state for the given client.
@@ -1580,6 +1690,12 @@ void idGameLocal::ServerWriteSnapshot( int clientNum, int sequence, idBitMsg &ms
 
 	// free too old snapshots
 	FreeSnapshotsOlderThanSequence( nwInfo, sequence - 64 );
+
+	// debug: the base this snapshot is written against (checked in ClientReadSnapshot)
+	msg.WriteBool( net_debugSnapshotBase.GetBool() );
+	if ( net_debugSnapshotBase.GetBool() ) {
+		msg.WriteLong( ( int )SnapshotBaseChecksum( nwInfo, net_debugSnapshotBase.GetInteger() > 1 ? va( "server%d", clientNum ) : NULL, sequence ) );
+	}
 
 	snapshot_t* snapshot = AllocateSnapshot( sequence, nwInfo );
 	WriteSnapshotGameStates( snapshot, nwInfo, msg );
@@ -2043,11 +2159,40 @@ void idGameLocal::ClientShowSnapshot( int clientNum ) const {
 // Gordon: FIXME: This is a maintenance nightmare
 /*
 ================
+idGameLocal::PurgeSnapshotGameStates
+================
+*/
+void idGameLocal::PurgeSnapshotGameStates( clientNetworkInfo_t& nwInfo, extNetworkStateMode_t mode ) {
+	for ( snapshot_t* snapshot = nwInfo.snapshots; snapshot != NULL; snapshot = snapshot->next ) {
+		FreeGameState( snapshot->gameStates[ mode ] );
+		snapshot->gameStates[ mode ] = NULL;
+	}
+}
+
+/*
+================
 idGameLocal::ResetGameState
 ================
 */
 void idGameLocal::ResetGameState( extNetworkStateMode_t mode ) {
 	sdNetworkStateObject& object = GetGameStateObject( mode );
+
+	// Snapshots written but not yet applied hold states of the old object (the
+	// old rules, say): applying one later would make it the new object's base.
+	// Server (SetRules) and client (the rules create message) purge at the same
+	// point of the reliable stream, so both bases stay the same.
+	for ( int i = 0; i < MAX_CLIENTS; i++ ) {
+		PurgeSnapshotGameStates( clientNetworkInfo[ i ], mode );
+	}
+	PurgeSnapshotGameStates( demoClientNetworkInfo, mode );
+#ifdef SD_SUPPORT_REPEATER
+	PurgeSnapshotGameStates( repeaterClientNetworkInfo, mode );
+	for ( int i = 0; i < repeaterNetworkInfo.Num(); i++ ) {
+		if ( repeaterNetworkInfo[ i ] != NULL ) {
+			PurgeSnapshotGameStates( *repeaterNetworkInfo[ i ], mode );
+		}
+	}
+#endif // SD_SUPPORT_REPEATER
 
 	for ( int i = 0; i < MAX_CLIENTS; i++ ) {
 		FreeGameState( clientNetworkInfo[ i ].gameStates[ mode ] );
@@ -2237,6 +2382,14 @@ idGameLocal::ClientReadSnapshot
 bool idGameLocal::ClientReadSnapshot( int sequence, const int gameFrame, const int gameTime, const int numDuplicatedUsercmds, const int aheadOfServer, const idBitMsg &msg, const idBitMsg &ucmdmsg ) {
 	snapshot_t*				snapshot;
 	clientNetworkInfo_t&	nwInfo = GetNetworkInfo( localClientNum );
+
+	if ( msg.ReadBool() ) {
+		const int serverChecksum = msg.ReadLong();
+		const int clientChecksum = ( int )SnapshotBaseChecksum( nwInfo, serverChecksum != ( int )SnapshotBaseChecksum( nwInfo ) ? "client" : NULL, sequence );
+		if ( serverChecksum != clientChecksum ) {
+			Error( "idGameLocal::ClientReadSnapshot: snapshot %d was written against a different base (server %08x, client %08x)", sequence, serverChecksum, clientChecksum );
+		}
+	}
 
 	g_trainingMode.SetBool( false );
 
@@ -2500,6 +2653,9 @@ void idGameLocal::WriteClientNetworkInfo( idFile* file ) {
 	ClientWriteGameState( file );
 
 	clientNetworkInfo_t& nwInfo = GetNetworkInfo( localClientNum );
+	// the snapshot base checksum (net_debugSnapshotBase) covers these
+	file->WriteInt( nwInfo.numAppliedSnapshots );
+	file->WriteInt( nwInfo.lastAppliedSequence );
 
 	SetSnapShotClient( GetLocalPlayer() );
 	SetSnapShotPlayer( GetLocalPlayer() );
@@ -2645,6 +2801,8 @@ void idGameLocal::ReadClientNetworkInfo( idFile* file ) {
 	SetSnapShotPlayer( GetLocalPlayer() );
 
 	clientNetworkInfo_t& nwInfo = GetNetworkInfo( localClientNum );
+	file->ReadInt( nwInfo.numAppliedSnapshots );
+	file->ReadInt( nwInfo.lastAppliedSequence );
 
 	while ( true ) {
 		int num;
@@ -3239,6 +3397,8 @@ void idGameLocal::HandleNewEntityEvent( const idBitMsg &msg ) {
 	event->Read( msg );
 }
 
+static idCVar net_clientShowNetworkEvents( "net_clientShowNetworkEvents", "0", CVAR_GAME | CVAR_BOOL, "client: print each network event (sendNetworkEvent) the server sends (network debugging)" );
+
 /*
 ================
 idGameLocal::ClientProcessReliableMessage
@@ -3373,6 +3533,10 @@ void idGameLocal::ClientProcessReliableMessage( const idBitMsg &msg ) {
 
 			char buffer[ 512 ];
 			msg.ReadString( buffer, sizeof( buffer ) );
+
+			if ( net_clientShowNetworkEvents.GetBool() ) {
+				Printf( "Client network event: %s '%s'\n", entityId == NETWORKEVENT_RULES_ID ? "rules" : entityId == NETWORKEVENT_OBJECTIVE_ID ? "objectives" : va( "spawn id %d", entityId ), buffer );
+			}
 
 			if ( entityId == NETWORKEVENT_RULES_ID ) {
 				rules->OnNetworkEvent( buffer );

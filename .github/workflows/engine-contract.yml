@@ -1,0 +1,322 @@
+# SPDX-License-Identifier: MIT
+#
+# Engine contract: build this checkout's idLib (the only game-repo library the
+# engine links) and stage its headers into the companion engine (jm2/openETQW)
+# at the commit pinned in tools/ci/engine.ref, then run the engine's
+# asset-free unit tests (BitMsg, usercmd delta/history, struct-layout ABI
+# asserts, zero-SDK audit) against them. The game module itself is validated
+# by commit-validation.yml. Legs and their 'experimental' flags live in the
+# 'contract' table of tools/ci/ci_plan.py.
+#
+# Cross-repo access policy (owner decision): anonymous https first, then the
+# optional secret OPENETQW_CROSS_REPO_TOKEN only if it is non-empty. While the
+# engine repository is private and no token is configured, the resolve job
+# succeeds with the notice and job summary
+#   "companion repo not accessible - skipped until repos are public",
+# the contract legs are skipped and the result job succeeds. Once the
+# repositories are public the contract runs automatically, with no edits.
+# Optional repository variable OPENETQW_ENGINE_CONTRACT_REQUIRED = 'true'
+# turns "not accessible" into a failure (for use after going public).
+# Retail game data is never used: only the 'unit' suite runs, and the
+# engine's data-dependent integration tests are not even configured.
+# Move the pin with: python3 tools/ci/bump_engine.py --remote <branch>
+
+name: Engine Contract
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      engine_ref:
+        description: "Engine commit SHA, branch or tag to test instead of the pin in tools/ci/engine.ref (blank = pin)"
+        required: false
+        default: ""
+        type: string
+      platforms:
+        description: "Legs: default | all | comma list of contract leg ids or prefixes (python3 tools/ci/ci_plan.py --list)"
+        required: false
+        default: default
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: engine-contract-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+env:
+  MESON_SPEC: "meson>=1.6.0,<2"
+  NINJA_SPEC: "ninja>=1.11"
+  PYTHONUTF8: "1"
+  # Engine tests that must run and pass (tools/ci/check_engine_tests.py).
+  ENGINE_UNIT_TESTS: bitmsg,usercmd-delta,struct-layout,usercmd-history,zero-sdk
+
+jobs:
+  resolve:
+    name: Resolve companion engine
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      available: ${{ steps.probe.outputs.available }}
+      sha: ${{ steps.probe.outputs.sha }}
+      contract_matrix: ${{ steps.plan.outputs.contract_matrix }}
+      contract_count: ${{ steps.plan.outputs.contract_count }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Probe engine repository (anonymous https first)
+        id: probe
+        env:
+          OPENETQW_CROSS_REPO_TOKEN: ${{ secrets.OPENETQW_CROSS_REPO_TOKEN }}
+          ENGINE_REF: ${{ inputs.engine_ref }}
+          CONTRACT_REQUIRED: ${{ vars.OPENETQW_ENGINE_CONTRACT_REQUIRED }}
+          REPO_PRIVATE: ${{ github.event.repository.private }}
+        run: |
+          set -euo pipefail
+          status=0
+          python3 tools/ci/fetch_engine.py --probe --ref "${ENGINE_REF}" --github-output \
+            --record .tmp/ci/engine-probe.json || status=$?
+          if [ "${status}" -eq 78 ]; then
+            # Not accessible: fetch_engine.py already wrote the notice, the
+            # job summary and available=false; the contract legs skip cleanly.
+            if [ "${CONTRACT_REQUIRED}" = "true" ]; then
+              echo "::error title=Engine contract required::companion repo not accessible but OPENETQW_ENGINE_CONTRACT_REQUIRED=true"
+              exit 1
+            fi
+            if [ "${REPO_PRIVATE}" = "false" ]; then
+              echo "::warning title=Engine contract skipped::this repository is public but the engine repository is not reachable anonymously; check tools/ci/engine.ref"
+            fi
+            exit 0
+          fi
+          exit "${status}"
+
+      - name: Plan contract legs
+        id: plan
+        if: steps.probe.outputs.available == 'true'
+        env:
+          CI_REPO_PRIVATE: ${{ github.event.repository.private }}
+          CI_PLATFORMS: ${{ inputs.platforms }}
+          CI_ARM_RUNNERS: ${{ vars.OPENETQW_CI_ARM_RUNNERS }}
+          CI_EXPERIMENTAL: ${{ vars.OPENETQW_CONTRACT_EXPERIMENTAL }}
+        run: python3 tools/ci/ci_plan.py --tables contract
+
+  contract:
+    name: Engine contract ${{ matrix.name }}
+    needs: resolve
+    if: needs.resolve.outputs.available == 'true' && needs.resolve.outputs.contract_count != '0'
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.resolve.outputs.contract_matrix) }}
+    defaults:
+      run:
+        shell: bash
+    env:
+      CC: ${{ matrix.cc }}
+      CXX: ${{ matrix.cxx }}
+      CI_OS: ${{ matrix.os }}
+      CI_COMPILER: ${{ matrix.compiler }}
+      CI_BUILDTYPE: ${{ matrix.buildtype }}
+      CI_SANITIZE: ${{ matrix.sanitize }}
+      CI_LEG: ${{ matrix.name }}
+      CI_REASON: ${{ matrix.reason }}
+      # Engine checkout sits next to this one, matching the engine's default
+      # ../openETQW-game discovery; OPENETQW_GAME_REPO makes it explicit. The
+      # engine links <game repo>/build/libidLib.a (idLib.lib with MSVC).
+      ENGINE_DIR: ${{ github.workspace }}/../openETQW
+      OPENETQW_GAME_REPO: ${{ github.workspace }}
+      MACOSX_DEPLOYMENT_TARGET: "11.0"
+      ASAN_OPTIONS: detect_leaks=0:halt_on_error=1:abort_on_error=1
+      UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1:report_error_type=1
+      MallocNanoZone: "0"
+    steps:
+      - name: Checkout game
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Setup Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.x"
+          architecture: ${{ matrix.python_arch }}
+
+      - name: Install Meson and Ninja
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check "${MESON_SPEC}" "${NINJA_SPEC}"
+
+      - name: Install Linux dependencies
+        if: matrix.os == 'linux'
+        run: |
+          set -euo pipefail
+          packages=(zlib1g-dev pkg-config)
+          if [ "${CI_COMPILER}" = clang ]; then packages+=(clang); fi
+          for attempt in 1 2 3; do
+            if sudo apt-get update && sudo apt-get install -y --no-install-recommends "${packages[@]}"; then
+              exit 0
+            fi
+            echo "apt attempt ${attempt} failed; retrying in 15 seconds"
+            sleep 15
+          done
+          echo "Failed to install ${packages[*]}" >&2
+          exit 1
+
+      - name: Fetch engine
+        id: engine
+        env:
+          OPENETQW_CROSS_REPO_TOKEN: ${{ secrets.OPENETQW_CROSS_REPO_TOKEN }}
+          ENGINE_SHA: ${{ needs.resolve.outputs.sha }}
+        run: |
+          set -euo pipefail
+          status=0
+          python tools/ci/fetch_engine.py --ref "${ENGINE_SHA}" --dest "${ENGINE_DIR}" --github-output \
+            --record .tmp/ci/engine-fetch.json || status=$?
+          if [ "${status}" -eq 78 ]; then
+            exit 0  # access lost since the resolve job: later steps skip (available=false)
+          fi
+          exit "${status}"
+
+      # Experimental legs (matrix flag 'experimental') use step-level
+      # continue-on-error: failures are reported (warning + job summary) but
+      # the job still concludes 'success'.
+      - name: Build idLib
+        id: idlib
+        if: steps.engine.outputs.available == 'true'
+        continue-on-error: ${{ matrix.experimental }}
+        run: |
+          set -euo pipefail
+          args=(setup build . --backend ninja --buildtype "${CI_BUILDTYPE}")
+          if [ "${CI_SANITIZE}" != none ]; then args+=("-Db_sanitize=${CI_SANITIZE}"); fi
+          if [ "${CI_OS}" = windows ]; then args+=(--vsenv); fi
+          meson "${args[@]}"
+          python tools/ci/run_logged.py --log .tmp/ci/compile-idlib.log --paths-from build -- \
+            meson compile -C build idLib --ninja-args=-k,25
+
+      - name: Configure and build engine unit tests
+        id: engine_build
+        if: steps.idlib.outcome == 'success'
+        continue-on-error: ${{ matrix.experimental }}
+        run: |
+          set -euo pipefail
+          # Configuring stages this checkout's headers into the engine
+          # (tools/build/stage_game.py). No engine or dedicated binaries, so
+          # the data-dependent integration tests are not registered at all.
+          args=(setup "${ENGINE_DIR}/build" "${ENGINE_DIR}" --backend ninja --buildtype "${CI_BUILDTYPE}"
+                -Dbuild_engine=false -Dbuild_dedicated=false -Dbuild_tests=true)
+          if [ "${CI_SANITIZE}" != none ]; then args+=("-Db_sanitize=${CI_SANITIZE}"); fi
+          if [ "${CI_OS}" = windows ]; then args+=(--vsenv); fi
+          meson "${args[@]}"
+          manifest="${ENGINE_DIR}/.tmp/gamelibs_stage/openetqw_gamelibs_stage_manifest.json"
+          if [ -f "${manifest}" ]; then cp "${manifest}" .tmp/ci/; fi
+          python tools/ci/run_logged.py --log .tmp/ci/compile-engine.log --paths-from "${ENGINE_DIR}/build" -- \
+            meson compile -C "${ENGINE_DIR}/build" --ninja-args=-k,25
+
+      - name: Run engine unit tests (asset-free)
+        id: tests
+        if: steps.engine_build.outcome == 'success'
+        continue-on-error: ${{ matrix.experimental }}
+        run: |
+          set -euo pipefail
+          # Hosted runners have no retail data and the unit suite never needs it.
+          unset ETQW_DATA_PATH
+          status=0
+          meson test -C "${ENGINE_DIR}/build" --suite unit --print-errorlogs --num-processes 2 || status=$?
+          scan=()
+          if [ "${CI_SANITIZE}" != none ]; then scan+=(--scan-sanitizer); fi
+          # testlog.* embed the whole environment, so only this sanitised report is published.
+          python tools/ci/check_engine_tests.py "${ENGINE_DIR}/build/meson-logs/testlog.json" \
+            --require "${ENGINE_UNIT_TESTS}" --report .tmp/ci/engine-tests.json --label "${CI_LEG}" ${scan[@]+"${scan[@]}"}
+          exit "${status}"
+
+      - name: Collect engine configure log
+        if: always() && steps.engine.outputs.available == 'true'
+        run: |
+          set -euo pipefail
+          mkdir -p .tmp/ci
+          if [ -f "${ENGINE_DIR}/build/meson-logs/meson-log.txt" ]; then
+            cp "${ENGINE_DIR}/build/meson-logs/meson-log.txt" .tmp/ci/engine-meson-log.txt
+          fi
+
+      - name: Publish contract logs
+        if: always() && steps.engine.outputs.available == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.artifact }}
+          path: |
+            build/meson-logs/meson-log.txt
+            .tmp/ci/
+          if-no-files-found: warn
+          retention-days: 7
+          include-hidden-files: true
+
+      - name: Report contract outcome
+        if: always()
+        env:
+          AVAILABLE: ${{ steps.engine.outputs.available }}
+          ENGINE_SHORT: ${{ steps.engine.outputs.short_sha }}
+          EXPERIMENTAL: ${{ matrix.experimental }}
+          STAGES: "idlib=${{ steps.idlib.outcome }} engine=${{ steps.engine_build.outcome }} tests=${{ steps.tests.outcome }}"
+          TESTS: ${{ steps.tests.outcome }}
+        run: |
+          set -euo pipefail
+          if [ "${AVAILABLE}" != true ]; then
+            echo "::notice title=Engine contract skipped::companion repo not accessible - skipped until repos are public"
+            echo "### Engine contract ${CI_LEG}: skipped (companion repo not accessible - skipped until repos are public)" >> "${GITHUB_STEP_SUMMARY}"
+            exit 0
+          fi
+          mode=required
+          if [ "${EXPERIMENTAL}" = true ]; then mode="experimental, not blocking"; fi
+          if [ "${TESTS}" = success ]; then
+            if [ "${EXPERIMENTAL}" = true ]; then
+              echo "::notice title=Experimental leg passed::${CI_LEG} passed; consider marking it required in tools/ci/ci_plan.py"
+            fi
+            echo "### Engine contract ${CI_LEG} @ ${ENGINE_SHORT} (${mode}): passed" >> "${GITHUB_STEP_SUMMARY}"
+          elif [ "${EXPERIMENTAL}" = true ]; then
+            echo "::warning title=Experimental engine contract failed (not blocking)::${CI_LEG}: ${STAGES}. Known blocker: ${CI_REASON}"
+            echo "### :warning: Engine contract ${CI_LEG} @ ${ENGINE_SHORT} (${mode}): failed (${STAGES}); known blocker: ${CI_REASON}" >> "${GITHUB_STEP_SUMMARY}"
+          else
+            echo "### :x: Engine contract ${CI_LEG} @ ${ENGINE_SHORT} (${mode}): failed (${STAGES})" >> "${GITHUB_STEP_SUMMARY}"
+          fi
+
+  result:
+    name: Engine Contract result
+    if: always()
+    needs: [resolve, contract]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Evaluate
+        env:
+          RESOLVE: ${{ needs.resolve.result }}
+          CONTRACT: ${{ needs.contract.result }}
+          AVAILABLE: ${{ needs.resolve.outputs.available }}
+          COUNT: ${{ needs.resolve.outputs.contract_count }}
+        run: |
+          set -euo pipefail
+          if [ "${RESOLVE}" != success ]; then
+            echo "::error title=Engine contract::resolving the companion engine failed (${RESOLVE}); see the resolve job"
+            exit 1
+          fi
+          if [ "${AVAILABLE}" != true ]; then
+            echo "::notice title=Engine contract skipped::companion repo not accessible - skipped until repos are public"
+            echo "### Engine Contract: skipped (companion repo not accessible - skipped until repos are public)" >> "${GITHUB_STEP_SUMMARY}"
+            exit 0
+          fi
+          if [ "${COUNT}" = 0 ]; then
+            echo "### Engine Contract: no legs selected" >> "${GITHUB_STEP_SUMMARY}"
+            exit 0
+          fi
+          if [ "${CONTRACT}" != success ]; then
+            echo "::error title=Engine contract::required contract legs failed (${CONTRACT})"
+            echo "### Engine Contract: failed (${CONTRACT})" >> "${GITHUB_STEP_SUMMARY}"
+            exit 1
+          fi
+          echo "### Engine Contract: passed (experimental legs never block)" >> "${GITHUB_STEP_SUMMARY}"

@@ -144,7 +144,11 @@ sdHardcodedParticleSystem::ClearSurfaces
 ================
 */
 void sdHardcodedParticleSystem::ClearSurfaces( void ) {
-	renderEntity.hModel->InitEmpty( hardcodedParticleSystem_SnapshotName0 );
+	// AddSurfaceDB adds to both double buffered models, so clear both: clearing only the
+	// current one left the other model's stale (possibly smaller) surface 0 in place, which
+	// GetTriSurf() then returned after a re-Init
+	hModel[0]->InitEmpty( hardcodedParticleSystem_SnapshotName0 );
+	hModel[1]->InitEmpty( hardcodedParticleSystem_SnapshotName1 );
 }
 
 /*

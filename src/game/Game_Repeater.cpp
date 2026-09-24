@@ -40,6 +40,10 @@ void idGameLocal::RepeaterWriteSnapshot( int clientNum, int sequence, idBitMsg &
 	SetSnapShotClient( NULL );
 	SetSnapShotPlayer( NULL );
 
+	// ClientReadSnapshot reads the net_debugSnapshotBase flag first (never set for
+	// repeater snapshots: a repeater viewer's base is not a server client's)
+	msg.WriteBool( false );
+
 	idPlayer* followPlayer = NULL;
 	if ( !clientIsRepeater ) {
 		if ( userOrigin.followClient >= 0 && userOrigin.followClient < MAX_CLIENTS ) {

@@ -227,6 +227,12 @@ sdGameRulesObjective::EndGame
 ================
 */
 void sdGameRulesObjective::EndGame( void ) {
+	// retail behaviour ( matches sdGameRulesCampaign / sdGameRulesStopWatch ): a match that has not
+	// started cannot end. Use "admin startMatch" to leave warmup when no humans are ready.
+	if ( IsWarmup() ) {
+		return;
+	}
+
 	NextStateDelayed( GS_GAMEREVIEW, 1000 );
 
 	RecordWinningTeam( winningTeam, "maps", true );

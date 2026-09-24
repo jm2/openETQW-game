@@ -20,6 +20,11 @@ idBotNodeGraph::GetNearestEditNode
 idBotNode * idBotNodeGraph::GetNearestEditNode() {
 	idVec3 o;
 	idPlayer *player = gameLocal.GetLocalPlayer();
+	if ( player == NULL ) {
+		// e.g. a dedicated server console: node editing needs a local player to pick the node
+		common->Printf( "Vehicle node editing requires a local player\n" );
+		return NULL;
+	}
 	if ( player->GetNoClip() ) {
 		// in noclip mode, get the node nearest the cursor
 		const idMat3 & viewAxis = player->GetViewAxis();
@@ -60,6 +65,10 @@ void idBotNodeGraph::Cmd_NodeAdd_f ( const idCmdArgs &args ) {
 	idVec3 newOrigin;
 
 	idPlayer *player = gameLocal.GetLocalPlayer();
+	if ( player == NULL ) {
+		common->Printf( "nodeAdd: vehicle node editing requires a local player\n" );
+		return;
+	}
 	if ( player->GetNoClip() ) {
 		// in no clip mode, we trace a line out and drop the node at that spot
 		static const float MIN_WALK_NORMAL = 0.7f; // from physics_player.cpp
@@ -231,7 +240,16 @@ idBotNodeGraph::Cmd_NodeView_f
 ================
 */
 void idBotNodeGraph::Cmd_NodeView_f( const idCmdArgs &args ) {
-	idBotNode * node = botThreadData.botVehicleNodes.nodes[ atoi( args.Argv( 1 ) ) ];
+	if ( args.Argc() < 2 ) {
+		common->Printf( "syntax: nodeView <nodeNum>\n" );
+		return;
+	}
+	int nodeNum = atoi( args.Argv( 1 ) );
+	if ( nodeNum < 0 || nodeNum >= botThreadData.botVehicleNodes.nodes.Num() || botThreadData.botVehicleNodes.nodes[ nodeNum ] == NULL ) {
+		common->Printf( "nodeView: invalid node %d ( %d nodes loaded )\n", nodeNum, botThreadData.botVehicleNodes.nodes.Num() );
+		return;
+	}
+	idBotNode * node = botThreadData.botVehicleNodes.nodes[ nodeNum ];
 	cmdSystem->BufferCommandText( CMD_EXEC_APPEND, va( "setviewpos %f %f %f", node->origin.x, node->origin.y, node->origin.z ) );
 }
 
@@ -250,8 +268,10 @@ void idBotNodeGraph::Cmd_CreateLink_f( const idCmdArgs &args ) {
 		return;
 	}
 	if ( lastEditNode == NULL ) {
-		common->Printf( "Set last node\n" );
 		lastEditNode = GetNearestEditNode();
+		if ( lastEditNode != NULL ) {
+			common->Printf( "Set last node\n" );
+		}
 		return;
 	}
 	if ( botThreadData.botVehicleNodes.nodes.FindIndex( lastEditNode ) == -1 ) {

@@ -24,8 +24,20 @@
 #include "Bot.h"
 #include "../Misc.h"
 #include "../../sdnet/SDNetSession.h"
+#include "../../idlib/threading/Atomic.h"
 
 idBotThreadData			botThreadData;
+
+// bot think pacing counters, written by whichever thread runs the bot AI and read by the game thread
+static volatile int			botThinkFrameCount = 0;
+static volatile int			botThreadWaitCount = 0;
+
+static void BotThreadStats_Increment( volatile int* counter ) {
+	int value;
+	do {
+		value = *counter;
+	} while ( !sdAtomic::CompareAndSwap( counter, value, value + 1 ) );
+}
 
 
 /*
@@ -37,6 +49,40 @@ idBotThreadData::idBotThreadData() {
 	personalVehicleClipModel = NULL;
 	genericVehicleClipModel = NULL;
 	goliathVehicleClipModel = NULL;
+	removedBotAIs = NULL;
+	memset( bots, 0, sizeof( bots ) );
+	threadingEnabled = false;
+	threadMinFrameDelay = 0;
+	threadMaxFrameDelay = 0;
+	botFPS = 0;
+}
+
+/*
+================
+idBotThreadData::ResetThreadStats
+================
+*/
+void idBotThreadData::ResetThreadStats() {
+	botThinkFrameCount = 0;
+	botThreadWaitCount = 0;
+}
+
+/*
+================
+idBotThreadData::GetNumBotThinkFrames
+================
+*/
+int idBotThreadData::GetNumBotThinkFrames() const {
+	return botThinkFrameCount;
+}
+
+/*
+================
+idBotThreadData::GetNumBotThreadWaits
+================
+*/
+int idBotThreadData::GetNumBotThreadWaits() const {
+	return botThreadWaitCount;
 }
 
 /*
@@ -689,45 +735,50 @@ void idBotThreadData::InitAAS( const idMapFile *mapFile ) {
 	sdDeclWrapperTemplate< sdDeclStringMap > declStringMapType;
 	declStringMapType.Init( declStringMapIdentifier );
 
-	const sdDeclStringMap* stringMap = declStringMapType.LocalFind( "navigation_types", false );
-	if ( stringMap != NULL ) {
-		const idKeyValue *kv = stringMap->GetDict().MatchPrefix( "type" );
+	// Retail data defines the stringMap "aas_types" ( "type1" "aas_player", "type2" "aas_vehicle" ).
+	// "navigation_types" is kept as a fallback for data built for the upstream port.
+	const char* typeMapNames[] = { "aas_types", "navigation_types" };
+	for ( int t = 0; t < 2 && aasNames.Num() == 0; t++ ) {
+		const sdDeclStringMap* stringMap = declStringMapType.LocalFind( typeMapNames[ t ], false );
+		if ( stringMap == NULL ) {
+			continue;
+		}
 
+		const idKeyValue *kv = stringMap->GetDict().MatchPrefix( "type" );
 		while( kv != NULL ) {
-			idAAS *aas = idAAS::Alloc();
-			aasList.Append( aas );
-			aasNames.Append( kv->GetValue() );
+			if ( kv->GetValue().Length() > 0 ) {
+				aasList.Append( idAAS::Alloc() );
+				aasNames.Append( kv->GetValue() );
+			}
 			kv = stringMap->GetDict().MatchPrefix( "type", kv );
 		}
 	}
 
 	if ( aasNames.Num() == 0 ) {
-		aasNames.Append( "aas_playerb" );
+		gameLocal.Warning( "idBotThreadData::InitAAS: no AAS types found in stringMap 'aas_types', using aas_player and aas_vehicle" );
+
+		aasNames.Append( "aas_player" );
 		aasList.Append( idAAS::Alloc() );
 
-		aasNames.Append( "aas_vehicleb" );
+		aasNames.Append( "aas_vehicle" );
 		aasList.Append( idAAS::Alloc() );
 	}
 
 	// load navigation system for all the different player/vehicle sizes
 	for( int i = 0; i < aasNames.Num(); i++ ) {
-		idStr fileName = idStr( mapFile->GetName() ).SetFileExtension( aasNames[ i ] );
-		if ( !aasList[ i ]->Init( fileName.c_str(), mapFile->GetGeometryCRC() ) ) {
-			// Try alternative extension (.aas_playerb <-> .aas_player, .aas_vehicleb <-> .aas_vehicle)
-			idStr altName = fileName;
-			if ( altName.StripFileExtension() ) {
-				if ( idStr::Icmp( aasNames[ i ], "aas_player" ) == 0 ) {
-					altName.SetFileExtension( "aas_playerb" );
-				} else if ( idStr::Icmp( aasNames[ i ], "aas_playerb" ) == 0 ) {
-					altName.SetFileExtension( "aas_player" );
-				} else if ( idStr::Icmp( aasNames[ i ], "aas_vehicle" ) == 0 ) {
-					altName.SetFileExtension( "aas_vehicleb" );
-				} else if ( idStr::Icmp( aasNames[ i ], "aas_vehicleb" ) == 0 ) {
-					altName.SetFileExtension( "aas_vehicle" );
-				}
-				aasList[ i ]->Init( altName.c_str(), mapFile->GetGeometryCRC() );
-			}
+		// the loader reads the compiled binary format ( <ext>b, e.g. "aas_playerb" ), so prefer
+		// that file and only fall back to the plain extension when no binary file exists
+		idStr ext = aasNames[ i ];
+		idStr binaryExt = ext;
+		if ( binaryExt.Length() > 0 && binaryExt[ binaryExt.Length() - 1 ] != 'b' ) {
+			binaryExt += "b";
 		}
+
+		idStr fileName = idStr( mapFile->GetName() ).SetFileExtension( binaryExt.c_str() );
+		if ( fileSystem->FindFile( fileName.c_str() ) == FIND_NO ) {
+			fileName = idStr( mapFile->GetName() ).SetFileExtension( ext.c_str() );
+		}
+		aasList[ i ]->Init( fileName.c_str(), mapFile->GetGeometryCRC() );
 	}
 
 //mal: now, lets do a check to make sure that at least the player AAS was loaded - if not, we're in trouble!
@@ -742,6 +793,10 @@ void idBotThreadData::InitAAS( const idMapFile *mapFile ) {
 
 	pendingAreaChanges.SetNum( 0, false );
 	pendingReachChanges.SetNum( 0, false );
+	pendingAreaDisables.SetNum( 0, false );
+
+	// InitAAS runs on every map load and map restart; release the previous set before allocating new ones
+	FreeVehicleClipModels();
 
 	idVec3 mins = idVec3( 16.f, 16.f, 32.f );
 	idVec3 maxs = idVec3( -16.f, -16.f, 0.f );
@@ -757,6 +812,21 @@ void idBotThreadData::InitAAS( const idMapFile *mapFile ) {
 	maxs = idVec3( -64.f, -32.f, 0.f );
 
 	goliathVehicleClipModel = new idClipModel( idTraceModel( idBounds( mins, maxs ) ), false );
+}
+
+/*
+==================
+idBotThreadData::FreeVehicleClipModels
+==================
+*/
+void idBotThreadData::FreeVehicleClipModels() {
+	// only called while the bot thread is stopped, from the game thread
+	gameLocal.clip.DeleteClipModel( personalVehicleClipModel );
+	personalVehicleClipModel = NULL;
+	gameLocal.clip.DeleteClipModel( genericVehicleClipModel );
+	genericVehicleClipModel = NULL;
+	gameLocal.clip.DeleteClipModel( goliathVehicleClipModel );
+	goliathVehicleClipModel = NULL;
 }
 
 /*
@@ -790,7 +860,8 @@ void idBotThreadData::UpdateState() {
 				client.aasOrigin = aasOrigin;
 			}
 
-			sdTransport* transport = player->GetProxyEntity()->Cast< sdTransport >();
+			idEntity* proxy = player->GetProxyEntity();
+			sdTransport* transport = ( proxy != NULL ) ? proxy->Cast< sdTransport >() : NULL;
 
 			if ( transport == NULL ) {
 				aasOrigin = player->GetPhysics()->GetOrigin();
@@ -1012,6 +1083,7 @@ void idBotThreadData::UpdateState() {
 
 		// wait if the bot thread is falling too far behind
 		while ( botThread->GetLastGameFrameNum() < gameLocal.GetFrameNum() - threadMaxFrameDelay && !botThread->IsWaiting() ) {
+			BotThreadStats_Increment( &botThreadWaitCount );
 			common->Warning( "Waiting on BotThread\n" );
 			if ( !botThread->WaitForBotThread( 1000 ) && !botThread->IsRunning() ) {
 				threadingEnabled = false;
@@ -1024,6 +1096,10 @@ void idBotThreadData::UpdateState() {
 		}
 
 	} else {
+		// the bots think synchronously every game frame
+		threadMinFrameDelay = 0;
+		threadMaxFrameDelay = 0;
+
 		// let the bots think from here
 		RunFrame();
 	}
@@ -1037,6 +1113,8 @@ idBotThreadData::RunFrame
 ==================
 */
 void idBotThreadData::RunFrame() {
+	BotThreadStats_Increment( &botThinkFrameCount );
+
 	// apply any pending changes
 	ApplyPendingAreaChanges();
 	ApplyPendingReachabilityChanges();
@@ -1176,8 +1254,11 @@ void idBotThreadData::Clear( bool clearAll ) {
 	routeHash.Clear();
 
 	if ( clearAll ) {
-        memset( bots, 0, sizeof( bots ) );
+		DeleteBotAIs();
 	}
+
+	// the vehicle clip models are recreated by InitAAS
+	FreeVehicleClipModels();
 
 	threadingEnabled = false;
 
@@ -1197,6 +1278,26 @@ void idBotThreadData::Clear( bool clearAll ) {
 	botOutputState = outputStateBuffer;
 
 	botFPS = 0;
+}
+
+/*
+================
+idBotThreadData::DeleteBotAIs
+
+Frees the AI of every bot. Only called from the game thread while the bot thread is stopped.
+The bot AIs are recreated by SetupBotInfo / ResetBotsInfo.
+================
+*/
+void idBotThreadData::DeleteBotAIs() {
+	assert( !botThread->IsRunning() );
+
+	for ( int i = 0; i < MAX_CLIENTS; i++ ) {
+		delete bots[ i ];
+		bots[ i ] = NULL;
+	}
+
+	// AIs of bots that were removed but not yet deleted by the bot thread
+	DeleteBots();
 }
 
 /*
@@ -1454,33 +1555,44 @@ void idBotThreadData::LoadMap( const char* mapName, int randSeed ) {
 	GetGameWorldState()->gameLocalInfo.supplyTimerTime = constants->dict.GetFloat( "energy_supply_time" );
 	GetGameWorldState()->gameLocalInfo.deployTimerTime = constants->dict.GetFloat( "energy_deployment_time" );
 
-	if ( idStr::Icmp( mapName, "maps/area22.entities" ) == 0 ) {
-		GetGameWorldState()->gameLocalInfo.gameMap = AREA22;
-	} else if ( idStr::Icmp( mapName, "maps/ark.entities" ) == 0 ) {
-		GetGameWorldState()->gameLocalInfo.gameMap = ARK;
-	} else if ( idStr::Icmp( mapName, "maps/canyon.entities" ) == 0 ) {
-		GetGameWorldState()->gameLocalInfo.gameMap = CANYON;
-	} else if ( idStr::Icmp( mapName, "maps/island.entities" ) == 0 ) {
-		GetGameWorldState()->gameLocalInfo.gameMap = ISLAND;
-	} else if ( idStr::Icmp( mapName, "maps/outskirts.entities" ) == 0 ) {
-		GetGameWorldState()->gameLocalInfo.gameMap = OUTSKIRTS;
-	} else if ( idStr::Icmp( mapName, "maps/quarry.entities" ) == 0 ) {
-		GetGameWorldState()->gameLocalInfo.gameMap = QUARRY;
-	} else if ( idStr::Icmp( mapName, "maps/refinery.entities" ) == 0 ) {
-		GetGameWorldState()->gameLocalInfo.gameMap = REFINERY;
-	} else if ( idStr::Icmp( mapName, "maps/salvage.entities" ) == 0 ) {
-		GetGameWorldState()->gameLocalInfo.gameMap = SALVAGE;
-	} else if ( idStr::Icmp( mapName, "maps/sewer.entities" ) == 0 ) {
-		GetGameWorldState()->gameLocalInfo.gameMap = SEWER;
-	} else if ( idStr::Icmp( mapName, "maps/slipgate.entities" ) == 0 ) {
-		GetGameWorldState()->gameLocalInfo.gameMap = SLIPGATE;
-	} else if ( idStr::Icmp( mapName, "maps/valley.entities" ) == 0 ) {
-		GetGameWorldState()->gameLocalInfo.gameMap = VALLEY;
-	} else if ( idStr::Icmp( mapName, "maps/volcano.entities" ) == 0 ) {
-		GetGameWorldState()->gameLocalInfo.gameMap = VOLCANO;
-	} else {
-		GetGameWorldState()->gameLocalInfo.gameMap = UNKNOWN_MAP;
+	// The engine hands the game "maps/<name>.world" on a new map and
+	// LocalMapRestart passes "maps/<name>", while the original SDK compared
+	// against "maps/<name>.entities". Identify the stock map by its base name
+	// so the map-specific bot logic works regardless of the extension.
+	static const struct {
+		const char *		baseName;
+		gameMapNames_t		gameMap;
+	} stockMaps[] = {
+		{ "area22",		AREA22 },
+		{ "ark",		ARK },
+		{ "canyon",		CANYON },
+		{ "island",		ISLAND },
+		{ "outskirts",	OUTSKIRTS },
+		{ "quarry",		QUARRY },
+		{ "refinery",	REFINERY },
+		{ "salvage",	SALVAGE },
+		{ "sewer",		SEWER },
+		{ "slipgate",	SLIPGATE },
+		{ "valley",		VALLEY },
+		{ "volcano",	VOLCANO },
+	};
+
+	idStr mapBaseName;
+	if ( mapName != NULL && mapName[ 0 ] != '\0' ) {
+		idStr( mapName ).ExtractFileBase( mapBaseName );
 	}
+
+	const char* mapProfile = "none";
+	GetGameWorldState()->gameLocalInfo.gameMap = UNKNOWN_MAP;
+	const int numStockMaps = ( int )( sizeof( stockMaps ) / sizeof( stockMaps[ 0 ] ) );
+	for ( int i = 0; i < numStockMaps; i++ ) {
+		if ( idStr::Icmp( mapBaseName.c_str(), stockMaps[ i ].baseName ) == 0 ) {
+			GetGameWorldState()->gameLocalInfo.gameMap = stockMaps[ i ].gameMap;
+			mapProfile = stockMaps[ i ].baseName;
+			break;
+		}
+	}
+	gameLocal.Printf( "Bot map profile for '%s': %s\n", mapName != NULL ? mapName : "", mapProfile );
 }
 
 /*
@@ -1590,6 +1702,14 @@ void idBotThreadData::ApplyPendingAreaChanges() {
 	}
 	pendingAreaChanges.SetNum( 0, false );
 
+	for ( int i = 0; i < pendingAreaDisables.Num(); i++ ) {
+		idAAS* aas = botThreadData.GetAAS( pendingAreaDisables[ i ].aasType );
+		if ( aas != NULL ) {
+			aas->SetAreaTravelFlags( pendingAreaDisables[ i ].areaNum, TFL_INVALID );
+		}
+	}
+	pendingAreaDisables.SetNum( 0, false );
+
 	botThread->UnLock();
 }
 
@@ -1667,9 +1787,17 @@ void idBotThreadData::DisableAASAreaInLocation( int aasType, const idVec3& locat
 		return;
 	}
 
-	aas->SetAreaTravelFlags( areaNum, TFL_INVALID );
+	// Changing travel flags deletes routing caches the bot thread may be using, so the
+	// bot thread applies it at the start of its next frame (ApplyPendingAreaChanges),
+	// as EnableArea does. The lookup above only reads the AAS geometry.
+	botThread->Lock();
+	botAreaDisable_t disable;
+	disable.aasType = aasType;
+	disable.areaNum = areaNum;
+	pendingAreaDisables.Append( disable );
+	botThread->UnLock();
 
-	gameLocal.DPrintf( "Disabled areaNum %i at location X: %.0f Y: %.0f Z: %.0f\n", areaNum, location.x, location.y, location.z );
+	gameLocal.DPrintf( "Disabling areaNum %i at location X: %.0f Y: %.0f Z: %.0f\n", areaNum, location.x, location.y, location.z );
 }
 
 /*
@@ -1678,6 +1806,25 @@ idBotThreadData::EnableReachability
 ================
 */
 void idBotThreadData::EnableReachability( const char *name, int team, bool enable ) {
+	// map scripts refer to manually placed reachabilities by name; make a missing one visible
+	// instead of silently changing nothing ( names are immutable after load, so this read is safe )
+	bool nameFound = false;
+	int numLoadedAAS = 0;
+	for ( int i = 0; i < NumAAS(); i++ ) {
+		idAAS* aas = GetAAS( i );
+		if ( aas == NULL ) {
+			continue;
+		}
+		numLoadedAAS++;
+		if ( aas->FindReachabilityByName( name ) >= 0 ) {
+			nameFound = true;
+		}
+	}
+	if ( numLoadedAAS > 0 && !nameFound ) {
+		gameLocal.Warning( "enableBotReachability: no reachability named '%s' in any loaded AAS - ignored", name );
+		return;
+	}
+
 	botThread->Lock();
 
 	botReachChange_t change;
@@ -2765,7 +2912,7 @@ void idBotThreadData::LoadActions( const idMapFile *mapFile ) {
 			}
 
 			actionLoader->activeForever = mapEnt->epairs.GetBool( "activeForever", "0" );
-			actionLoader->validClasses = mapEnt->epairs.GetBool( "validClasses", "0" );
+			actionLoader->validClasses = mapEnt->epairs.GetInt( "validClasses", "0" ); // class bitmask: 1 soldier, 2 medic, 4 engineer, 8 fieldops, 16 covertops
 			actionLoader->active = mapEnt->epairs.GetBool( "active", "0" );
 			actionLoader->radius = mapEnt->epairs.GetInt( "radius", "120.0f" );
 
@@ -4588,10 +4735,10 @@ botDebugInfo_t idBotThreadData::GetBotDebugInfo( int clientNum ) {
 idBotThreadData::ChangeBotName
 ================
 */
-void idBotThreadData::ChangeBotName( idPlayer* bot ) {
+void idBotThreadData::ChangeBotName( idPlayer* bot, const char* avoidName ) {
 	idStr playerName;
 
-	if ( !FindRandomBotName( bot->entityNumber, playerName ) ) {
+	if ( !FindRandomBotName( bot->entityNumber, playerName, avoidName ) ) {
 		const char * basePlayerName = "Bot";
 
 		if ( GetGameWorldState()->clientInfo[ bot->entityNumber ].team == GDF ) {
@@ -4614,7 +4761,7 @@ Make sure we dont have a duplicate name from a human player, or another bot.
 Randomize the name selection.
 ============
 */
-bool idBotThreadData::FindRandomBotName( int clientNum, idStr& botName ) {
+bool idBotThreadData::FindRandomBotName( int clientNum, idStr& botName, const char* avoidName ) {
 	if ( botThreadData.botNames.Num() == 0 ) {
 		return false;
 	}
@@ -4633,6 +4780,12 @@ bool idBotThreadData::FindRandomBotName( int clientNum, idStr& botName ) {
 		k = botThreadData.random.RandomInt( tempBotNames.Num() );
 		botName = tempBotNames[ k ];
 		gameLocal.CleanName( botName );
+
+		// a bot deferring to a human never picks back the name the human asked for
+		if ( avoidName != NULL && !idStr::Icmp( botName, avoidName ) ) {
+			tempBotNames.RemoveIndexFast( k );
+			continue;
+		}
 		
 		for ( i = 0; i < MAX_CLIENTS; i++ ) {
 			if ( i == clientNum ) {
@@ -5465,7 +5618,11 @@ void idBotThreadData::Cmd_ResetAllBots_f( const idCmdArgs & args ) {
 		clientInfo_t& playerInfo = botThreadData.GetGameWorldState()->clientInfo[ i ];
 
 		playerInfo.resetState = MAJOR_RESET_EVENT;
-		botThreadData.bots[ i ]->ResetLastActionNum();
+
+		// the bot AI only exists once the bot has been set up for this map
+		if ( botThreadData.bots[ i ] != NULL ) {
+			botThreadData.bots[ i ]->ResetLastActionNum();
+		}
 	}
 }
 

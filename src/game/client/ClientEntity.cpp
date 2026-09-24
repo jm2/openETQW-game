@@ -1000,7 +1000,7 @@ void sdClientScriptEntity::Event_Bind( idEntity *bindMaster ) {
 sdClientScriptEntity::Event_BindToJoint
 ================
 */
-void sdClientScriptEntity::Event_BindToJoint( idEntity *bindMaster, const char *boneName, float rotateWithMaster ) {
+void sdClientScriptEntity::Event_BindToJoint( idEntity *bindMaster, const char *boneName, bool rotateWithMaster ) {
 	if ( bindMaster == NULL ) {
 		gameLocal.Warning( "sdClientScriptEntity::Event_BindToJoint: entity is NULL" );
 		return;
@@ -1011,7 +1011,7 @@ void sdClientScriptEntity::Event_BindToJoint( idEntity *bindMaster, const char *
 		return;
 	}
 
-	EnableAxisBind( rotateWithMaster > 0.f );
+	EnableAxisBind( rotateWithMaster );
 	jointHandle_t hand = bindMaster->GetAnimator()->GetJointHandle( boneName );
 
 	if ( hand == INVALID_JOINT ) {

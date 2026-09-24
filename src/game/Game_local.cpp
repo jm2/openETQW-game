@@ -146,7 +146,14 @@ public:
 		LoadMD5Binary( fileName );
 	}
 	virtual void				PartialInitFromFile( const char *fileName ) { InitFromFile( fileName ); }
-	virtual void				InitEmpty( const char *name ) { this->name = name; }
+	virtual void				InitEmpty( const char *name ) {
+		// like the renderer's model: start over with no surfaces or joints (callers such as
+		// sdHardcodedParticleSystem::ClearSurfaces rely on this before adding new surfaces)
+		Reset();
+		joints.Clear();
+		defaultPose.Clear();
+		this->name = name;
+	}
 	virtual void				AddSurface( modelSurface_t surface ) {
 		surfaces.Append( surface );
 	}
@@ -190,9 +197,9 @@ public:
 			return NULL;
 		}
 		srfTriangles_t* triangles = static_cast< srfTriangles_t* >( Mem_ClearedAlloc( sizeof( *triangles ) ) );
-		triangles->numVerts = numVerts;
+		// the caller owns the used counts (retail contract): only the capacity is set here,
+		// numVerts/numIndexes start at 0
 		triangles->numAllocedVerts = numVerts;
-		triangles->numIndexes = numIndexes;
 		triangles->numAllocedIndices = numIndexes;
 		if ( numVerts > 0 ) {
 			triangles->verts = static_cast< idDrawVert* >( Mem_ClearedAlloc( numVerts * sizeof( *triangles->verts ) ) );
@@ -1075,6 +1082,21 @@ const idEventDef EV_ScriptMissing_setup( "setup", "", '\0' );
 
 class sdEventDefHelper : public idEventDef {
 public:
+	// what a native event handler receives for an argument of this format
+	static int ArgKind( char format ) {
+		switch ( format ) {
+			case D_EVENT_INTEGER:
+			case D_EVENT_BOOLEAN:
+			case D_EVENT_HANDLE:
+				return D_EVENT_INTEGER;
+			case D_EVENT_ENTITY:
+			case D_EVENT_ENTITY_NULL:
+				return D_EVENT_ENTITY;
+			default:
+				return format;
+		}
+	}
+
 	static void ReconcileEventsWithScript() {
 		if ( !fileSystem ) {
 			return;
@@ -1149,11 +1171,15 @@ public:
 
 				if ( ev != NULL ) {
 					sdEventDefHelper* h = static_cast< sdEventDefHelper* >( ev );
+					// formatspec holds D_EVENT_MAXARGS characters and is not terminated when full
+					char oldFormat[ D_EVENT_MAXARGS + 1 ];
+					int oldNumArgs = ev->GetNumArgs();
+					memcpy( oldFormat, ev->GetArgFormat(), oldNumArgs );
+					oldFormat[ oldNumArgs ] = '\0';
 					h->returnType = retChar;
 					h->numargs = numArgs;
-					int oldFmtLen = (int)strlen( ev->GetArgFormat() );
 					for ( int a = 0; a < numArgs; a++ ) {
-						char oldChar = ( a < oldFmtLen ) ? ev->GetArgFormat()[ a ] : '\0';
+						char oldChar = ( a < oldNumArgs ) ? oldFormat[ a ] : '\0';
 						if ( fmt[ a ] == D_EVENT_FLOAT ) {
 							if ( oldChar == D_EVENT_INTEGER || oldChar == D_EVENT_BOOLEAN ) {
 								h->formatspec[ a ] = D_EVENT_INTEGER;
@@ -1168,7 +1194,23 @@ public:
 							h->formatspec[ a ] = fmt[ a ];
 						}
 					}
-					h->formatspec[ numArgs ] = '\0';
+					if ( numArgs < D_EVENT_MAXARGS ) {
+						h->formatspec[ numArgs ] = '\0';
+					}
+
+					// The native handler was compiled for the old definition. Extra script arguments
+					// are ignored, but fewer, or arguments of another kind, reach it as garbage
+					// (sendNetworkEvent, broadcastToolTip and setPlayerPickupRequestTime did).
+					bool mismatch = numArgs < oldNumArgs;
+					for ( int a = 0; a < numArgs && a < oldNumArgs && !mismatch; a++ ) {
+						mismatch = ArgKind( oldFormat[ a ] ) != ArgKind( h->formatspec[ a ] );
+					}
+					if ( mismatch ) {
+						char newFormat[ D_EVENT_MAXARGS + 1 ];
+						memcpy( newFormat, h->formatspec, numArgs );
+						newFormat[ numArgs ] = '\0';
+						gameLocal.Warning( "script event '%s' ( %s ) in script/events.script does not match its native definition ( %s )", nameToken.c_str(), newFormat, oldFormat );
+					}
 
 					unsigned int bits = 0;
 					h->argsize = 0;
@@ -1211,7 +1253,9 @@ public:
 						for ( int a = 0; a < numArgs; a++ ) {
 							h->formatspec[ a ] = fmt[ a ];
 						}
-						h->formatspec[ numArgs ] = '\0';
+						if ( numArgs < D_EVENT_MAXARGS ) {
+							h->formatspec[ numArgs ] = '\0';
+						}
 						h->allowFromScript = true;
 						h->description = "";
 						h->comments = "";
@@ -2890,6 +2934,12 @@ void idGameLocal::Shutdown( void ) {
 
 	MapShutdown();
 
+	// destroy the rules here: Clear() below resets 'rules' to NULL, so the 'delete rules' that
+	// used to follow it never freed anything, and an idClass has to be destroyed while the
+	// event system is still up (~idClass cancels its events)
+	delete rules;
+	rules = NULL;
+
 	idWeapon::UnRegisterCVarCallback();
 	sdDeclAOR::ShutdownCVars();
 
@@ -3009,18 +3059,15 @@ void idGameLocal::Shutdown( void ) {
 
 	ShutdownConsoleCommands();
 
-	clip.FreeThread();
-
 	// free memory allocated by class objects
 	Clear();
+
+	clip.FreeThread();
 
 	// shut down the animation manager
 	animationLib.Shutdown();
 
 	playZoneAreas.DeleteContents( true );
-
-	delete rules;
-	rules = NULL;
 
 	uiManager->Clear( true );
 	uiManager->Shutdown();
@@ -3343,8 +3390,18 @@ bool idGameLocal::ValidateUserInfo( int clientNum, idDict& _userInfo ) {
 			idStr cleanBaseName = player->userInfo.baseName;
 			idGameLocal::CleanName( cleanBaseName );
 			if ( !idStr::Icmp( name, cleanBaseName ) ) {
+				// A bot defers by renaming - but its fallback name ("GDF Bot 3") is fixed
+				// when no bot name list loads, so a human asking for exactly that name made
+				// the rescan find the same bot forever (a server hang). Only rescan if the
+				// bot's name really changed; otherwise the human takes the '_' path.
+				bool botRenamed = false;
 				if ( player->IsType( idBot::Type ) ) {
-					botThreadData.ChangeBotName( player );
+					botThreadData.ChangeBotName( player, name );
+					idStr newBotName = player->userInfo.baseName;
+					idGameLocal::CleanName( newBotName );
+					botRenamed = idStr::Icmp( name, newBotName ) != 0;
+				}
+				if ( botRenamed ) {
 					i = -1; //rescan. There shouldn't be other bots with this name, but COULD be another human player.
 				} else if ( !demonwareAccountName ) {
 					_userInfo.Set( "ui_name", va( "%s_", baseName.c_str() ) );
@@ -3503,21 +3560,8 @@ void idGameLocal::LoadMap( const char* mapName, int randSeed, int startTime ) {
 		botThreadData.InitAAS( mapFile ); //mal: load the AAS for this map, if the mapfile was loaded. 
 	}
 
-	// Fix lightProjectionMap renderBinding text for headless server
-	qhandle_t rbHandle = declManager->GetDeclTypeHandle( "renderBinding" );
-	if ( rbHandle != -1 ) {
-		int num = declManager->GetNumDecls( rbHandle );
-		for ( int i = 0; i < num; ++i ) {
-			const idDecl* d = declManager->DeclByIndex( rbHandle, i, false );
-			if ( d != NULL && idStr::Icmp( d->GetName(), "lightProjectionMap" ) == 0 ) {
-				const_cast<idDecl*>( d )->SetText( "{\n\ttexture { lights/squarelight1.tga }\n}\n" );
-				break;
-			}
-		}
-	}
-
 	// load the collision map
-	collisionModelManager->LoadMap( mapName, false );
+	collisionModelManager->LoadMap( mapName, !reloadingSameMap );
 
 	numClients = 0;
 
@@ -3985,6 +4029,8 @@ void idGameLocal::InitFromNewMap( const char* mapName, idRenderWorld *renderWorl
 
 	Printf( "----------- Game Map Init ------------\n" );
 
+	gamestate = GAMESTATE_STARTUP;
+
 	if ( networkSystem && networkSystem->IsDedicated() ) {
 		headlessRenderWorldInstance.Init( renderWorld );
 		gameRenderWorld = &headlessRenderWorldInstance;
@@ -4151,7 +4197,11 @@ void idGameLocal::MapShutdown( void ) {
 	if ( gamestate == GAMESTATE_NOMAP ) {
 		return;
 	}
-	assert( gamestate != GAMESTATE_STARTUP );
+	if ( gamestate == GAMESTATE_STARTUP ) {
+		// InitFromNewMap was aborted part way through (an error during the load): tear down
+		// whatever was loaded instead of asserting
+		Warning( "idGameLocal::MapShutdown: shutting down a partially loaded map" );
+	}
 
 	if( rules != NULL ) {
 		rules->SetWinner( NULL );
@@ -4213,6 +4263,14 @@ void idGameLocal::MapShutdown( void ) {
 
 	// free the collision map
 	collisionModelManager->PurgeModels();
+
+	// No blanket idEvent::ClearEventList() here: every deleted object cancels its own events
+	// (~idClass, idThread::Finalize), and at this point the only pending events belong to
+	// map script threads (internal_execute) that PruneThreads below frees, which cancels them.
+	// A blanket clear would also drop events of objects that survive the map change (GUI
+	// timelines, threads with terminateOnExit == false) and corrupt the free list when a map
+	// change runs from inside an event handler.
+	insideExecuteMapChange = false;
 
 	ShutdownAsyncNetwork();
 
@@ -5181,7 +5239,7 @@ idCVar g_fpuExceptions( "g_fpuExceptions", "0", CVAR_BOOL | CVAR_GAME | CVAR_NOC
 #endif // GAME_FPU_EXCEPTIONS
 
 idCVar g_debugStatsSetup( "g_debugStatsSetup", "0", CVAR_GAME | CVAR_BOOL | CVAR_NOCHEAT, "prints any problems with calculating a client rank when they connect to a server" );
-idCVar g_simHash( "g_simHash", "1", CVAR_GAME | CVAR_BOOL, "emit authoritative simulation state hash every tick" );
+idCVar g_simHash( "g_simHash", "0", CVAR_GAME | CVAR_BOOL, "emit authoritative simulation state hash (SIM_HASH line) every tick; off by default, tests that need it set it explicitly" );
 idCVar g_determinismTest( "g_determinismTest", "0", CVAR_GAME | CVAR_BOOL, "execute tick-indexed determinism test input stream" );
 
 /*
@@ -6903,7 +6961,11 @@ void idGameLocal::SpawnMapEntities( void ) {
 	int num = 0;
 	int inhibit = 0;
 
-	insideExecuteMapChange = true;
+	struct sdScopedMapChangeFlag {
+		bool& flag;
+		sdScopedMapChangeFlag( bool& f ) : flag( f ) { flag = true; }
+		~sdScopedMapChangeFlag() { flag = false; }
+	} mapChangeGuard( insideExecuteMapChange );
 
 	bool showUpdate = !networkSystem->IsDedicated();
 	idWStrList locArgs( 1 );
@@ -7933,7 +7995,8 @@ const sdSpawnPoint* idGameLocal::SelectInitialSpawnPoint( idPlayer *player, idVe
 				}
 
 				// if someone is standing on our spawn point, knock them out the way
-				sdDynamicSpawnPoint* spawnPoint = owner->Cast< sdDynamicSpawnPoint >();
+				// ownerless spawns exist (e.g. temp spawns on quarry/outskirts): don't call Cast<> through NULL
+				sdDynamicSpawnPoint* spawnPoint = ( owner != NULL ) ? owner->Cast< sdDynamicSpawnPoint >() : NULL;
 				if ( blocked && spawnPoint != NULL ) {
 					idPlayer* blockingPlayer = players[ j ];
 

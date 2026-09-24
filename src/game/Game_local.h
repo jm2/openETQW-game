@@ -1334,6 +1334,7 @@ public:
 	void							NetworkEventWarning( const sdEntityNetEvent& event, const char *fmt, ... );
 	void							UnreliableNetworkEventWarning( const sdUnreliableEntityNetEvent& event, const char *fmt, ... );
 	void							ShutdownClientNetworkState( int clientNum );
+	void							PurgeSnapshotGameStates( clientNetworkInfo_t& nwInfo, extNetworkStateMode_t mode );
 
 	static surfaceProperties_t&		GetSurfaceTypeForIndex( int index );
 

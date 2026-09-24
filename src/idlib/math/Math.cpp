@@ -226,7 +226,7 @@ void idMath::TestFloatBitConversions() {
 // jscott: fast and reliable random routines
 // ================================================================================================
 
-unsigned long rvRandom::mSeed;
+dword rvRandom::mSeed;
 
 float rvRandom::flrand( float min, float max )
 {
@@ -262,7 +262,7 @@ int rvRandom::irand( int min, int max )
 
 int rvRandom::Init( void )
 {
-	mSeed *= ( unsigned long )sys->Milliseconds();
+	mSeed *= ( dword )sys->Milliseconds();
 
 	return( mSeed );
 }

@@ -37,8 +37,8 @@ typedef unsigned char *POINTER;
 /* UINT2 defines a two byte word */
 typedef unsigned short int UINT2;
 
-/* UINT4 defines a four byte word */
-typedef unsigned long int UINT4;
+/* UINT4 defines a four byte word ('unsigned long' is 8 bytes on LP64 targets) */
+typedef unsigned int UINT4;
 
 /* MD4 context. */
 struct MD4_CTX {
@@ -245,8 +245,9 @@ MD4_BlockChecksum
 ===============
 */
 unsigned long MD4_BlockChecksum( const void *data, int length ) {
-	unsigned long	digest[4];
-	unsigned long	val;
+	// the digest is 16 bytes: four 32 bit words (not 'unsigned long', which is 8 bytes on LP64)
+	UINT4			digest[4];
+	UINT4			val;
 	MD4_CTX			ctx;
 
 	MD4_Init( &ctx );

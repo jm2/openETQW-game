@@ -241,7 +241,7 @@ public:
 
 	virtual void				OnObjectiveCompletion( int objectiveIndex ) {}
 
-	void						Event_SendNetworkEvent( int clientIndex, bool isRepeaterClient, const char* message );
+	void						Event_SendNetworkEvent( idEntity* player, const char* message );
 	void						Event_SetEndGameCamera( idEntity* other );
 	void						Event_SetWinningTeam( idScriptObject* object );
 	void						Event_EndGame( void );

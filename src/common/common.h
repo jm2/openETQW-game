@@ -168,8 +168,21 @@ public:
 	#define BUILD_OS_ID					2
 	#define CPUSTRING					"ppc"
 	#define CPU_EASYARGS				0
+#elif defined(__x86_64__)
+	#define	BUILD_STRING				"linux-x64"
+	#define BUILD_OS_ID					2
+	#define CPUSTRING					"x64"
+	#define CPU_EASYARGS				0
+#elif defined(__aarch64__)
+	#define	BUILD_STRING				"linux-arm64"
+	#define BUILD_OS_ID					2
+	#define CPUSTRING					"arm64"
+	#define CPU_EASYARGS				0
+#else
+	#error "unsupported Linux architecture"
 #endif
 
+#include <stddef.h>						// needed for offsetof (as on Windows); glibc doesn't pull it in transitively
 #include <stdint.h>
 #define UINT_PTR						uintptr_t
 
