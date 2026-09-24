@@ -4718,10 +4718,10 @@ botDebugInfo_t idBotThreadData::GetBotDebugInfo( int clientNum ) {
 idBotThreadData::ChangeBotName
 ================
 */
-void idBotThreadData::ChangeBotName( idPlayer* bot ) {
+void idBotThreadData::ChangeBotName( idPlayer* bot, const char* avoidName ) {
 	idStr playerName;
 
-	if ( !FindRandomBotName( bot->entityNumber, playerName ) ) {
+	if ( !FindRandomBotName( bot->entityNumber, playerName, avoidName ) ) {
 		const char * basePlayerName = "Bot";
 
 		if ( GetGameWorldState()->clientInfo[ bot->entityNumber ].team == GDF ) {
@@ -4744,7 +4744,7 @@ Make sure we dont have a duplicate name from a human player, or another bot.
 Randomize the name selection.
 ============
 */
-bool idBotThreadData::FindRandomBotName( int clientNum, idStr& botName ) {
+bool idBotThreadData::FindRandomBotName( int clientNum, idStr& botName, const char* avoidName ) {
 	if ( botThreadData.botNames.Num() == 0 ) {
 		return false;
 	}
@@ -4763,6 +4763,12 @@ bool idBotThreadData::FindRandomBotName( int clientNum, idStr& botName ) {
 		k = botThreadData.random.RandomInt( tempBotNames.Num() );
 		botName = tempBotNames[ k ];
 		gameLocal.CleanName( botName );
+
+		// a bot deferring to a human never picks back the name the human asked for
+		if ( avoidName != NULL && !idStr::Icmp( botName, avoidName ) ) {
+			tempBotNames.RemoveIndexFast( k );
+			continue;
+		}
 		
 		for ( i = 0; i < MAX_CLIENTS; i++ ) {
 			if ( i == clientNum ) {

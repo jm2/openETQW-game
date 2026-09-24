@@ -3359,7 +3359,7 @@ bool idGameLocal::ValidateUserInfo( int clientNum, idDict& _userInfo ) {
 				// bot's name really changed; otherwise the human takes the '_' path.
 				bool botRenamed = false;
 				if ( player->IsType( idBot::Type ) ) {
-					botThreadData.ChangeBotName( player );
+					botThreadData.ChangeBotName( player, name );
 					idStr newBotName = player->userInfo.baseName;
 					idGameLocal::CleanName( newBotName );
 					botRenamed = idStr::Icmp( name, newBotName ) != 0;

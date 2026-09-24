@@ -10,7 +10,11 @@ enforced by GitHub. Keep to them anyway.
    - `openETQW`: **CI Matrix**. Build legs skip cleanly while `openETQW-game` is private.
    - `openETQW-game`: **Commit Validation** and **Engine Contract**.
    - Experimental legs report without blocking.
-2. **Bot review.** Codacy's check is resolved, and the ChatGPT Codex connector has reviewed when it is available (comment `@codex review`). Every finding is answered: fixed, or explained in the PR.
+2. **Bot review.** CodeRabbit and the ChatGPT Codex connector are installed on both repositories:
+   - Both review a new PR automatically. Ask again with `@coderabbitai review` or `@codex review`.
+   - When a bot is out of review quota, say so in the PR and wait for its next window.
+   - Codacy counts too, if it is enabled for these repositories.
+   - Every finding is answered: fixed, or explained in the PR.
 3. **Local evidence for runtime changes.** Anything touching the engine, the game or the network gets the full meson suite with retail data (`ETQW_DATA_PATH=... meson test -C build -j 1`), and the result goes in the PR.
 4. **Merge commit.** Branches are merged with a merge commit, which keeps the per-fix history.
 
