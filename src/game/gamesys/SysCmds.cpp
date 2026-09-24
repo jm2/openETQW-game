@@ -1088,7 +1088,7 @@ Cmd_EnterVehicle_f
 */
 void Cmd_EnterVehicle_f( const idCmdArgs &args ) {
 	if ( args.Argc() < 2 ) {
-		gameLocal.Printf( "usage: enterVehicle <clientNum> [vehicleName]\n" );
+		gameLocal.Printf( "usage: enterVehicle <clientNum> [vehicle entity name or entityDef]\n" );
 		return;
 	}
 	int clientNum = atoi( args.Argv( 1 ) );
@@ -1106,6 +1106,15 @@ void Cmd_EnterVehicle_f( const idCmdArgs &args ) {
 		idEntity* ent = gameLocal.FindEntity( args.Argv( 2 ) );
 		if ( ent ) {
 			vehicle = ent->Cast< sdTransport >();
+		} else {
+			// or the first live vehicle of that entityDef ("vehicle_titan"): entity
+			// names carry the entity number, which depends on spawn order
+			for ( ent = gameLocal.spawnedEntities.Next(); ent != NULL && vehicle == NULL; ent = ent->spawnNode.Next() ) {
+				sdTransport* trans = ent->Cast< sdTransport >();
+				if ( trans != NULL && trans->GetHealth() > 0 && !idStr::Icmp( trans->spawnArgs.GetString( "classname" ), args.Argv( 2 ) ) ) {
+					vehicle = trans;
+				}
+			}
 		}
 	} else {
 		float bestDist = idMath::INFINITY;

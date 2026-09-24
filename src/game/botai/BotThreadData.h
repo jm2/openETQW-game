@@ -707,8 +707,8 @@ public:							// the following routines are called from the game thread
 	void						SetupBotInfo( int clientNum );
 	float						GetVehicleTargetOffset( const playerVehicleTypes_t vehicleType );
 
-	void						ChangeBotName( idPlayer* bot );
-	static bool					FindRandomBotName( int clientNum, idStr& botName );
+	void						ChangeBotName( idPlayer* bot, const char* avoidName = NULL );
+	static bool					FindRandomBotName( int clientNum, idStr& botName, const char* avoidName = NULL );
 
 	int							GetNumClassOnTeam( const playerTeamTypes_t playerTeam, const playerClassTypes_t classType );
 	int							GetNumBotsInServer( const playerTeamTypes_t playerTeam );
