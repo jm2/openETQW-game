@@ -3353,8 +3353,18 @@ bool idGameLocal::ValidateUserInfo( int clientNum, idDict& _userInfo ) {
 			idStr cleanBaseName = player->userInfo.baseName;
 			idGameLocal::CleanName( cleanBaseName );
 			if ( !idStr::Icmp( name, cleanBaseName ) ) {
+				// A bot defers by renaming - but its fallback name ("GDF Bot 3") is fixed
+				// when no bot name list loads, so a human asking for exactly that name made
+				// the rescan find the same bot forever (a server hang). Only rescan if the
+				// bot's name really changed; otherwise the human takes the '_' path.
+				bool botRenamed = false;
 				if ( player->IsType( idBot::Type ) ) {
 					botThreadData.ChangeBotName( player );
+					idStr newBotName = player->userInfo.baseName;
+					idGameLocal::CleanName( newBotName );
+					botRenamed = idStr::Icmp( name, newBotName ) != 0;
+				}
+				if ( botRenamed ) {
 					i = -1; //rescan. There shouldn't be other bots with this name, but COULD be another human player.
 				} else if ( !demonwareAccountName ) {
 					_userInfo.Set( "ui_name", va( "%s_", baseName.c_str() ) );
