@@ -6,8 +6,10 @@ Convention enforced (matches the tree as of the CI bring-up):
 
 * New game-side files and build/CI infrastructure carry an
   ``SPDX-License-Identifier`` tag in their first few lines (MIT for new work).
-* Imported ETQW SDK files (``LicenseRef-ETQW-SDK``) and the reconstructed
-  ``src/compiledscript`` tree (MIT) are unmarked.  Their classification is
+* Imported ETQW SDK files (``LicenseRef-ETQW-SDK``, including the SDK's
+  compiled-script runtime and game script text media under
+  ``src/compiledscript``) and the reconstruction's compiled-script build files
+  (MIT) are unmarked.  Their classification is
   recorded in ``tools/ci/spdx_allowlist.txt``, which was seeded from the
   engine repository's provenance manifest (``docs/provenance-manifest.json``
   in jm2/openETQW, entries with ``targetRepo == "openETQW-game"``).
@@ -217,7 +219,7 @@ def default_allowlist_header() -> list[str]:
         "# that its provenance establishes. Entries were seeded from the engine's",
         "# docs/provenance-manifest.json (targetRepo == openETQW-game):",
         "#   SDK tier                     -> LicenseRef-ETQW-SDK",
-        "#   Reconstruction_original tier -> MIT (src/compiledscript)",
+        "#   Reconstruction_original tier -> MIT (src/compiledscript build files and code generator)",
         "#",
         "# Format: <license-id> <repo-relative path>   (one entry per line)",
         "# Do not add new files here: give new files an SPDX header instead. Adding an",

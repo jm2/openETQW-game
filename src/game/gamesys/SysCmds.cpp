@@ -918,13 +918,14 @@ void Cmd_PlayerPos_f( const idCmdArgs &args ) {
 		}
 	}
 
-	gameLocal.Printf( "PLAYER_POS: (%.2f, %.2f, %.2f) vel: (%.2f, %.2f, %.2f) ground: %d ducked: %d prone: %d jumped: %d (client: %d team: %s spectating %d atk: %d cmd: fwd=%d side=%d up=%d atk_cmd=%d lagged=%d frozen=%d inh=%d hp=%d dead=%d area=%d)\n",
+	gameLocal.Printf( "PLAYER_POS: (%.2f, %.2f, %.2f) vel: (%.2f, %.2f, %.2f) ground: %d ducked: %d prone: %d jumped: %d (client: %d team: %s spectating %d atk: %d cmd: fwd=%d side=%d up=%d atk_cmd=%d lagged=%d frozen=%d inh=%d hp=%d dead=%d area=%d yaw=%.2f)\n",
 		org.x, org.y, org.z, vel.x, vel.y, vel.z, ground ? 1 : 0, ducked ? 1 : 0, prone ? 1 : 0, jumped ? 1 : 0,
 		player->entityNumber, teamName, player->IsSpectating() ? 1 : 0, attacking ? 1 : 0,
 		(int)player->usercmd.forwardmove, (int)player->usercmd.rightmove, (int)player->usercmd.upmove,
 		player->usercmd.buttons.btn.attack ? 1 : 0,
 		player->GetIsLagged() ? 1 : 0, phys.IsFrozen() ? 1 : 0, player->InhibitMovement() ? 1 : 0,
-		player->GetHealth(), player->IsDead() ? 1 : 0, areaNum );
+		player->GetHealth(), player->IsDead() ? 1 : 0, areaNum,
+		SHORT2ANGLE( player->usercmd.angles[ YAW ] ) );	// the yaw the client's usercmds carry
 }
 
 /*
