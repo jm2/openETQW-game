@@ -24,7 +24,8 @@ get CI back: both stay private until the owner decides to publish.
 2. **Retail-data suite for runtime changes.** Anything touching the game module, the engine
    or the network gets the engine's full Meson suite with retail data, run in the engine
    repository against this branch:
-   `ETQW_DATA_PATH=<directory containing base/pak000.pk4> meson test -C build -j 1`.
+   `ETQW_DATA_PATH="$HOME/etqw_data" meson test -C build -j 1`
+   (replace `$HOME/etqw_data` with the directory that contains `base/pak000.pk4`).
    Put the result in the PR with the host, OS, architecture and commit. The tests use fixed
    UDP ports, so run one suite at a time on a host.
 3. **Independent review.** Someone other than the author (a person or a separate review
@@ -71,8 +72,10 @@ is now `24f58bf` (was `285eaa1`), engine `main` is `84a224b` (was `2104090`).
 - Retail game data, retail executables, PDBs, raw disassembly or decompiler output, and
   packet captures. This holds for both repositories and their whole history.
 - GPL code. It cannot be combined with the SDK-licensed code here.
-- Relabelled SDK files. SDK-derived files keep their notices and stay under the SDK EULA;
-  new files carry `SPDX-License-Identifier: MIT`.
+- SDK-derived files labeled as anything but SDK. They keep their notices and stay under the
+  SDK EULA (`LicenseRef-ETQW-SDK`), modified or not; correcting a wrong label to SDK, as
+  on 2026-09-24 for `src/compiledscript`, is fine. New files carry
+  `SPDX-License-Identifier: MIT`.
 
 ## Records
 Record deliberate deviations from retail 1.5 in `openETQW/docs/compat-ledger.md` and file
