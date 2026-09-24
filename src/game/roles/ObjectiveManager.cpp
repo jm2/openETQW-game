@@ -159,8 +159,8 @@ const idEventDef EV_ObjManager_SetTeamNeededClass( "setTeamNeededClass", "ddddbb
 const idEventDef EV_ObjManager_SetBotActionVehicleType( "setBotActionVehicleType", "sd" );
 const idEventDef EV_ObjManager_SetBotActionGroupVehicleType( "setBotActionGroupVehicleType", "dd" );
 const idEventDef EV_ObjManager_SetBotSightDist( "setBotSightDist", "f" );
-const idEventDef EV_ObjManager_EnableRouteGroup( "enableRouteGroup", "f" );
-const idEventDef EV_ObjManager_DisableRouteGroup( "disableRouteGroup", "f" );
+const idEventDef EV_ObjManager_EnableRouteGroup( "enableRouteGroup", "d" );
+const idEventDef EV_ObjManager_DisableRouteGroup( "disableRouteGroup", "d" );
 const idEventDef EV_ObjManager_DisableRoute( "disableRoute", "s" );
 const idEventDef EV_ObjManager_EnableRoute( "enableRoute", "s" );
 const idEventDef EV_ObjManager_SetMapHasMCPGoal( "setMapHasMCPGoal", "b" );
@@ -168,7 +168,7 @@ const idEventDef EV_ObjManager_SetSpawnActionOwner( "setSpawnActionOwner", "de" 
 const idEventDef EV_ObjManager_SetActionObjState( "setActionObjState", "ddee" );
 const idEventDef EV_ObjManager_DisableNodes( "disableNode", "s" );
 const idEventDef EV_ObjManager_EnableNodes( "enableNode", "s" );
-const idEventDef EV_ObjManager_TeamSuicideIfNotNearAction( "teamSuicideIfNotNearAction", "sdd" );
+const idEventDef EV_ObjManager_TeamSuicideIfNotNearAction( "teamSuicideIfNotNearAction", "sfd" );
 const idEventDef EV_ObjManager_IsActionGroupActive( "isActionGroupActive", "d", 'f' );
 const idEventDef EV_ObjManager_IsActionActive( "isActionActive", "s", 'f' );
 const idEventDef EV_ObjManager_SwitchTeamWeapons( "switchTeamWeapons", "ddddb" );
@@ -185,7 +185,7 @@ const idEventDef EV_ObjManager_ClearBotBoundEntities( "clearTeamBotBoundEntities
 const idEventDef EV_ObjManager_SetBotTeamRetreatTime( "setBotTeamRetreatTime", "dd" );
 const idEventDef EV_ObjManager_SetNodeTeam( "setNodeTeam", "sd" );
 const idEventDef EV_ObjManager_SetTeamMinePlantIsPriority( "setTeamMinePlantIsPriority", "db" );
-const idEventDef EV_ObjManager_DisableAASAreaInLocation( "disableAASAreaInLocation", "fv" );
+const idEventDef EV_ObjManager_DisableAASAreaInLocation( "disableAASAreaInLocation", "dv" );
 const idEventDef EV_ObjManager_GameIsOnFinalObjective( "gameIsOnFinalObjective" );
 const idEventDef EV_ObjManager_MapIsTraingingMap( "mapIsTraingingMap" );
 const idEventDef EV_ObjManager_SetActorPrimaryAction( "setActorPrimaryAction", "sbd" );
@@ -597,10 +597,17 @@ void sdObjectiveManagerLocal::WriteInitialReliableMessages( const sdReliableMess
 	if ( scriptObject != NULL ) {
 		assert( !target.SendToAll() );
 
-		sdScriptHelper h1;
-		h1.Push( target.GetClientNum() );
-		h1.Push( target.SendToRepeaterClients() ? 1.f : 0.f );
-		scriptObject->CallNonBlockingScriptEvent( scriptObject->GetFunction( "OnWriteInitialReliableMessages" ), h1 );
+		// The retail 1.5 script declares OnWriteInitialReliableMessages( entity p ) and
+		// passes p on to sendNetworkEvent( entity, string ); the SDK pushed ( clientNum,
+		// isRepeater ), so the call was refused ("Called With Incorrect Number Of
+		// Arguments") and a joining client got no objective state until it changed.
+		// Repeater clients (none in OpenETQW) have no player entity to address.
+		idPlayer* player = target.SendToRepeaterClients() ? NULL : gameLocal.GetClient( target.GetClientNum() );
+		if ( player != NULL ) {
+			sdScriptHelper h1;
+			h1.Push( player->GetScriptObject() );
+			scriptObject->CallNonBlockingScriptEvent( scriptObject->GetFunction( "OnWriteInitialReliableMessages" ), h1 );
+		}
 	}
 
 	{
@@ -719,30 +726,10 @@ sdObjectiveManagerLocal::Event_SendNetworkEvent
 ================
 */
 void sdObjectiveManagerLocal::Event_SendNetworkEvent( idEntity* player, const char* message ) {
-	// script/events.script declares 'sendNetworkEvent( entity p, string message )' and
-	// sdEventDefHelper::ReconcileEventsWithScript rewrites EV_SendNetworkEvent to that signature,
-	// so the arguments arrive as ( entity, string ). The SDK handler took ( clientIndex, isRepeater,
-	// message ) and read its message from an argument that was never passed.
-	if ( EV_SendNetworkEvent.GetNumArgs() != 2 ) {
-		gameLocal.Warning( "sdObjectiveManagerLocal::Event_SendNetworkEvent: '%s' has %d arguments, expected the script signature ( entity, string )", EV_SendNetworkEvent.GetName(), EV_SendNetworkEvent.GetNumArgs() );
+	// see idEntity::GetNetworkEventClient; the script plays the local player's copy itself
+	int clientIndex;
+	if ( !idEntity::GetNetworkEventClient( "sdObjectiveManagerLocal::Event_SendNetworkEvent", player, message, clientIndex ) ) {
 		return;
-	}
-	if ( !message || !*message ) {
-		return;
-	}
-
-	// $null_entity means every client; the script handles that case locally itself
-	int clientIndex = -1;
-	if ( player != NULL ) {
-		idPlayer* target = player->Cast< idPlayer >();
-		if ( target == NULL ) {
-			gameLocal.Warning( "sdObjectiveManagerLocal::Event_SendNetworkEvent: '%s' is not a player", player->GetName() );
-			return;
-		}
-		clientIndex = target->entityNumber;
-		if ( gameLocal.IsLocalPlayer( target ) ) {
-			OnNetworkEvent( message );
-		}
 	}
 
 	sdReliableServerMessage msg( GAME_RELIABLE_SMESSAGE_NETWORKEVENT );
@@ -1212,8 +1199,16 @@ void sdObjectiveManagerLocal::Event_TeamSuicideIfNotNearAction( const char *acti
 			continue;
 		}
 
+		// per bot, and the bot's own team's vehicles within MAX_VEHICLE_RANGE units, as
+		// idBotAI::FindClosestVehicle (this was only reachable once the event definition
+		// matched the handler, see check_event_handlers.py)
+		haveVehicle = false;
 		for( k = 0; k < MAX_VEHICLES; k++ ) {
 			if ( botThreadData.GetGameWorldState()->vehicleInfo[ k ].entNum < MAX_CLIENTS ) {
+				continue;
+			}
+
+			if ( botThreadData.GetGameWorldState()->vehicleInfo[ k ].team != playerInfo.team ) {
 				continue;
 			}
 
@@ -1235,7 +1230,7 @@ void sdObjectiveManagerLocal::Event_TeamSuicideIfNotNearAction( const char *acti
 
 			vec = botThreadData.GetGameWorldState()->vehicleInfo[ k ].origin - playerInfo.origin;
 
-			if ( vec.LengthSqr() > MAX_VEHICLE_RANGE ) {
+			if ( vec.LengthSqr() > Square( MAX_VEHICLE_RANGE ) ) {
 				continue;
 			}
 

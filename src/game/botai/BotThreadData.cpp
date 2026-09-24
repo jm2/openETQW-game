@@ -793,6 +793,7 @@ void idBotThreadData::InitAAS( const idMapFile *mapFile ) {
 
 	pendingAreaChanges.SetNum( 0, false );
 	pendingReachChanges.SetNum( 0, false );
+	pendingAreaDisables.SetNum( 0, false );
 
 	// InitAAS runs on every map load and map restart; release the previous set before allocating new ones
 	FreeVehicleClipModels();
@@ -1701,6 +1702,14 @@ void idBotThreadData::ApplyPendingAreaChanges() {
 	}
 	pendingAreaChanges.SetNum( 0, false );
 
+	for ( int i = 0; i < pendingAreaDisables.Num(); i++ ) {
+		idAAS* aas = botThreadData.GetAAS( pendingAreaDisables[ i ].aasType );
+		if ( aas != NULL ) {
+			aas->SetAreaTravelFlags( pendingAreaDisables[ i ].areaNum, TFL_INVALID );
+		}
+	}
+	pendingAreaDisables.SetNum( 0, false );
+
 	botThread->UnLock();
 }
 
@@ -1778,9 +1787,17 @@ void idBotThreadData::DisableAASAreaInLocation( int aasType, const idVec3& locat
 		return;
 	}
 
-	aas->SetAreaTravelFlags( areaNum, TFL_INVALID );
+	// Changing travel flags deletes routing caches the bot thread may be using, so the
+	// bot thread applies it at the start of its next frame (ApplyPendingAreaChanges),
+	// as EnableArea does. The lookup above only reads the AAS geometry.
+	botThread->Lock();
+	botAreaDisable_t disable;
+	disable.aasType = aasType;
+	disable.areaNum = areaNum;
+	pendingAreaDisables.Append( disable );
+	botThread->UnLock();
 
-	gameLocal.DPrintf( "Disabled areaNum %i at location X: %.0f Y: %.0f Z: %.0f\n", areaNum, location.x, location.y, location.z );
+	gameLocal.DPrintf( "Disabling areaNum %i at location X: %.0f Y: %.0f Z: %.0f\n", areaNum, location.x, location.y, location.z );
 }
 
 /*

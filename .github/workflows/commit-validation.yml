@@ -17,7 +17,9 @@
 name: Commit Validation
 
 on:
+  # branches with a pull request are built by the pull_request event
   push:
+    branches: [main]
   pull_request:
   workflow_dispatch:
     inputs:
@@ -97,6 +99,9 @@ jobs:
 
       - name: No GPL-family code in the game repository
         run: python tools/ci/check_no_gpl.py
+
+      - name: Script event handlers match their event definitions
+        run: python tools/ci/check_event_handlers.py
 
       - name: CI gate self-test (the gates still fail on new gaps)
         run: python tools/ci/selftest.py
@@ -246,6 +251,10 @@ jobs:
           set -euo pipefail
           check=(--build-dir build --os "${CI_OS}" --arch "${CI_ARCH}" --exports "${CI_EXPORTS}"
                  --report .tmp/ci/module-report.json)
+          if [ "${CI_OS}" = linux ]; then
+            # meson.build links the Linux module with full RELRO: keep it that way
+            check+=(--hardening strict)
+          fi
           if [ -z "${CI_CROSS}" ]; then
             # dlopen/LoadLibrary + GetGameAPI lookup; cross builds cannot run here.
             check+=(--load-smoke)

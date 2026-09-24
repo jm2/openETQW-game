@@ -575,6 +575,11 @@ struct botReachChange_t {
 	bool					set;
 };
 
+struct botAreaDisable_t {
+	int						aasType;
+	int						areaNum;
+};
+
 struct botAIOutput_t {
 	botTurnTypes_t			turnType;						//mal: should the bot turn to its viewAngle goal right away, aim, or just move to angles slowly?
 
@@ -857,6 +862,7 @@ private:
 	idBotAI *					removedBotAIs;
 	idList<botAreaChange_t>		pendingAreaChanges;
 	idList<botReachChange_t>	pendingReachChanges;
+	idList<botAreaDisable_t>	pendingAreaDisables;			// disableAASAreaInLocation
 
 	idClipModel*				personalVehicleClipModel;		// icarus and husky
 	idClipModel*				genericVehicleClipModel;		// everything but goliath

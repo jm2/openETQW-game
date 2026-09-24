@@ -1082,6 +1082,21 @@ const idEventDef EV_ScriptMissing_setup( "setup", "", '\0' );
 
 class sdEventDefHelper : public idEventDef {
 public:
+	// what a native event handler receives for an argument of this format
+	static int ArgKind( char format ) {
+		switch ( format ) {
+			case D_EVENT_INTEGER:
+			case D_EVENT_BOOLEAN:
+			case D_EVENT_HANDLE:
+				return D_EVENT_INTEGER;
+			case D_EVENT_ENTITY:
+			case D_EVENT_ENTITY_NULL:
+				return D_EVENT_ENTITY;
+			default:
+				return format;
+		}
+	}
+
 	static void ReconcileEventsWithScript() {
 		if ( !fileSystem ) {
 			return;
@@ -1156,11 +1171,15 @@ public:
 
 				if ( ev != NULL ) {
 					sdEventDefHelper* h = static_cast< sdEventDefHelper* >( ev );
+					// formatspec holds D_EVENT_MAXARGS characters and is not terminated when full
+					char oldFormat[ D_EVENT_MAXARGS + 1 ];
+					int oldNumArgs = ev->GetNumArgs();
+					memcpy( oldFormat, ev->GetArgFormat(), oldNumArgs );
+					oldFormat[ oldNumArgs ] = '\0';
 					h->returnType = retChar;
 					h->numargs = numArgs;
-					int oldFmtLen = (int)strlen( ev->GetArgFormat() );
 					for ( int a = 0; a < numArgs; a++ ) {
-						char oldChar = ( a < oldFmtLen ) ? ev->GetArgFormat()[ a ] : '\0';
+						char oldChar = ( a < oldNumArgs ) ? oldFormat[ a ] : '\0';
 						if ( fmt[ a ] == D_EVENT_FLOAT ) {
 							if ( oldChar == D_EVENT_INTEGER || oldChar == D_EVENT_BOOLEAN ) {
 								h->formatspec[ a ] = D_EVENT_INTEGER;
@@ -1175,7 +1194,23 @@ public:
 							h->formatspec[ a ] = fmt[ a ];
 						}
 					}
-					h->formatspec[ numArgs ] = '\0';
+					if ( numArgs < D_EVENT_MAXARGS ) {
+						h->formatspec[ numArgs ] = '\0';
+					}
+
+					// The native handler was compiled for the old definition. Extra script arguments
+					// are ignored, but fewer, or arguments of another kind, reach it as garbage
+					// (sendNetworkEvent, broadcastToolTip and setPlayerPickupRequestTime did).
+					bool mismatch = numArgs < oldNumArgs;
+					for ( int a = 0; a < numArgs && a < oldNumArgs && !mismatch; a++ ) {
+						mismatch = ArgKind( oldFormat[ a ] ) != ArgKind( h->formatspec[ a ] );
+					}
+					if ( mismatch ) {
+						char newFormat[ D_EVENT_MAXARGS + 1 ];
+						memcpy( newFormat, h->formatspec, numArgs );
+						newFormat[ numArgs ] = '\0';
+						gameLocal.Warning( "script event '%s' ( %s ) in script/events.script does not match its native definition ( %s )", nameToken.c_str(), newFormat, oldFormat );
+					}
 
 					unsigned int bits = 0;
 					h->argsize = 0;
@@ -1218,7 +1253,9 @@ public:
 						for ( int a = 0; a < numArgs; a++ ) {
 							h->formatspec[ a ] = fmt[ a ];
 						}
-						h->formatspec[ numArgs ] = '\0';
+						if ( numArgs < D_EVENT_MAXARGS ) {
+							h->formatspec[ numArgs ] = '\0';
+						}
 						h->allowFromScript = true;
 						h->description = "";
 						h->comments = "";

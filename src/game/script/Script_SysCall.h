@@ -102,7 +102,7 @@ public:
 	void						Event_IsNewFrame( void );
 	void 						Event_GetFrameTime( void );
 	void 						Event_GetTicsPerSecond( void );
-	void						Event_BroadcastToolTip( int index, idEntity* other, const wchar_t* string1, const wchar_t* string2, const wchar_t* string3, const wchar_t* string4 );
+	void						Event_BroadcastToolTip( int index, idEntity* other, const char* string1, const char* string2, const char* string3, const char* string4 );
 	void						Event_DebugLine( const idVec3 &color, const idVec3 &start, const idVec3 &end, const float lifetime );
 	void						Event_DebugArrow( const idVec3 &color, const idVec3 &start, const idVec3 &end, const int size, const float lifetime );
 	void						Event_DebugCircle( const idVec3 &color, const idVec3 &origin, const idVec3 &dir, const float radius, const int numSteps, const float lifetime );

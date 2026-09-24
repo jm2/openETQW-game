@@ -2653,6 +2653,9 @@ void idGameLocal::WriteClientNetworkInfo( idFile* file ) {
 	ClientWriteGameState( file );
 
 	clientNetworkInfo_t& nwInfo = GetNetworkInfo( localClientNum );
+	// the snapshot base checksum (net_debugSnapshotBase) covers these
+	file->WriteInt( nwInfo.numAppliedSnapshots );
+	file->WriteInt( nwInfo.lastAppliedSequence );
 
 	SetSnapShotClient( GetLocalPlayer() );
 	SetSnapShotPlayer( GetLocalPlayer() );
@@ -2798,6 +2801,8 @@ void idGameLocal::ReadClientNetworkInfo( idFile* file ) {
 	SetSnapShotPlayer( GetLocalPlayer() );
 
 	clientNetworkInfo_t& nwInfo = GetNetworkInfo( localClientNum );
+	file->ReadInt( nwInfo.numAppliedSnapshots );
+	file->ReadInt( nwInfo.lastAppliedSequence );
 
 	while ( true ) {
 		int num;
@@ -3392,6 +3397,8 @@ void idGameLocal::HandleNewEntityEvent( const idBitMsg &msg ) {
 	event->Read( msg );
 }
 
+static idCVar net_clientShowNetworkEvents( "net_clientShowNetworkEvents", "0", CVAR_GAME | CVAR_BOOL, "client: print each network event (sendNetworkEvent) the server sends (network debugging)" );
+
 /*
 ================
 idGameLocal::ClientProcessReliableMessage
@@ -3526,6 +3533,10 @@ void idGameLocal::ClientProcessReliableMessage( const idBitMsg &msg ) {
 
 			char buffer[ 512 ];
 			msg.ReadString( buffer, sizeof( buffer ) );
+
+			if ( net_clientShowNetworkEvents.GetBool() ) {
+				Printf( "Client network event: %s '%s'\n", entityId == NETWORKEVENT_RULES_ID ? "rules" : entityId == NETWORKEVENT_OBJECTIVE_ID ? "objectives" : va( "spawn id %d", entityId ), buffer );
+			}
 
 			if ( entityId == NETWORKEVENT_RULES_ID ) {
 				rules->OnNetworkEvent( buffer );

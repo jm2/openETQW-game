@@ -133,7 +133,7 @@ const idEventDef EV_Thread_DoClientSideStuff( "doClientSideStuff", 'b', DOC_TEXT
 const idEventDef EV_Thread_IsNewFrame( "isNewFrame", 'b', DOC_TEXT( "Returns whether this is a forward prediction frame or not." ), 0, NULL );
 const idEventDef EV_Thread_GetFrameTime( "getFrameTime", 'f', DOC_TEXT( "Returns the length of a frame, in seconds." ), 0, NULL );
 const idEventDef EV_Thread_GetTicsPerSecond( "getTicsPerSecond", 'f', DOC_TEXT( "Returns the number of game frames run per second." ), 0, "This always returns 30." );
-const idEventDef EV_Thread_BroadcastToolTip( "broadcastToolTip", '\0', DOC_TEXT( "Sends a message to a specific client to show the specified tooltip, with optional parameters." ), 6, NULL, "d", "tooltip", "Index of tooltip to be shown.", "e", "client", "Client to send the message to.", "w", "parm1", "Optional text to insert into tooltip #1.", "w", "parm2", "Optional text to insert into tooltip #2.", "w", "parm3", "Optional text to insert into tooltip #3.", "w", "parm4", "Optional text to insert into tooltip #4." );
+const idEventDef EV_Thread_BroadcastToolTip( "broadcastToolTip", '\0', DOC_TEXT( "Sends a message to a specific client to show the specified tooltip, with optional parameters." ), 6, NULL, "d", "tooltip", "Index of tooltip to be shown.", "e", "client", "Client to send the message to.", "s", "parm1", "Optional text to insert into tooltip #1.", "s", "parm2", "Optional text to insert into tooltip #2.", "s", "parm3", "Optional text to insert into tooltip #3.", "s", "parm4", "Optional text to insert into tooltip #4." );
 const idEventDef EV_Thread_DebugLine( "debugLine", '\0', DOC_TEXT( "Adds a debug line between the specified points in the world." ), 4, NULL, "v", "color", "RGB components of the color of the line.", "v", "start", "Start position of the line.", "v", "end", "End position of the line", "f", "time", "Lifetime of the line in seconds." );
 const idEventDef EV_Thread_DebugArrow( "debugArrow", '\0', DOC_TEXT( "Adds a debug line, with an arrowhead at the end, between the specified points in the world." ), 5, NULL, "v", "color", "RGB components of the color of the line.", "v", "start", "Start position of the line.", "v", "end", "End position of the line", "d", "size", "Size of the arrowhead.", "f", "time", "Lifetime of the line in seconds." );
 const idEventDef EV_Thread_DebugCircle( "debugCircle", '\0', DOC_TEXT( "Adds a debug circle at the specified point in the world." ), 6, NULL, "v", "color", "RGB components of the color of the circle.", "v", "origin", "Origin of the circle.", "v", "normal", "Normal of the plane on which the circle will lie.", "f", "radius", "Radius of the circle.", "d", "segments", "Number of lines to draw the circle using.", "f", "time", "Lifetime of the circle in seconds." );
@@ -1614,17 +1614,23 @@ void sdSysCallThread::Event_GetTicsPerSecond( void ) {
 sdSysCallThread::Event_BroadcastToolTip
 ================
 */
-void sdSysCallThread::Event_BroadcastToolTip( int index, idEntity* other, const wchar_t* string1, const wchar_t* string2, const wchar_t* string3, const wchar_t* string4 ) {
+void sdSysCallThread::Event_BroadcastToolTip( int index, idEntity* other, const char* string1, const char* string2, const char* string3, const char* string4 ) {
+	// The retail 1.5 script declares the parameters as string (script/events.script), not the
+	// SDK's wstring, so they arrive as narrow strings.
 	if ( gameLocal.isClient ) {
 		return;
 	}
 
+	if ( other == NULL ) {
+		// the interpreter has already warned about the $null_entity
+		return;
+	}
 	idPlayer* otherPlayer = other->Cast< idPlayer >();
 	if ( otherPlayer == NULL ) {
 		gameLocal.Error( "sdSysCallThread::Event_BroadcastToolTip Supplied Entity is not a Player" );
 	}
 
-	const wchar_t* strings[ 4 ];
+	const char* strings[ 4 ];
 
 	strings[ 0 ] = string1;
 	strings[ 1 ] = string2;
@@ -1649,7 +1655,7 @@ void sdSysCallThread::Event_BroadcastToolTip( int index, idEntity* other, const 
 	if ( count > 0 ) {
 		parms = new sdToolTipParms();
 		for ( int i = 0; i < count; i++ ) {
-			parms->Add( strings[ i ] );
+			parms->Add( va( L"%hs", strings[ i ] ) );
 		}
 	}
 

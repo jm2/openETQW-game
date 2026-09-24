@@ -492,7 +492,7 @@ const idEventDef EV_Player_SetSmokeNadeState( "setSmokeNadeState", "e" );
 const idEventDef EV_Player_SetArtyAttackLocation( "setArtyAttackLocation", "vd" );
 const idEventDef EV_Player_SetPlayerKillTarget( "setPlayerKillTarget", "e" );
 const idEventDef EV_Player_SetPlayerRepairTarget( "setPlayerRepairTarget", "e" );
-const idEventDef EV_Player_SetPlayerPickupRequestTime( "setPlayerPickupRequestTime", "e" );
+const idEventDef EV_Player_SetPlayerPickupRequestTime( "setPlayerPickupRequestTime", "" );
 const idEventDef EV_Player_SetPlayerCommandRequestTime( "setPlayerCommandRequestTime" );
 const idEventDef EV_Player_SetTeleporterState( "setTeleporterState", "b" );
 const idEventDef EV_Player_SetRepairDroneState( "setRepairDroneState", "b" );
@@ -13678,13 +13678,12 @@ void idPlayer::Event_SetPlayerRepairTarget( idEntity* repairTarget ) {
 idPlayer::Event_SetPlayerPickupRequestTime
 ============
 */
-void idPlayer::Event_SetPlayerPickupRequestTime( idEntity* pickUpTarget ) {
+void idPlayer::Event_SetPlayerPickupRequestTime( void ) {
+	// The retail 1.5 script declares 'setPlayerPickupRequestTime()' (script/events.script) and
+	// requests a pickup from anyone; the SDK took a target vehicle, which the handler read from
+	// an argument that was never passed.
 	botThreadData.GetGameWorldState()->clientInfo[ entityNumber ].pickupRequestTime = gameLocal.time;
-	if ( pickUpTarget != NULL ) {
-		botThreadData.GetGameWorldState()->clientInfo[ entityNumber ].pickupTargetSpawnID = gameLocal.GetSpawnId( pickUpTarget );
-	} else {
-		botThreadData.GetGameWorldState()->clientInfo[ entityNumber ].pickupTargetSpawnID = -1;
-	}
+	botThreadData.GetGameWorldState()->clientInfo[ entityNumber ].pickupTargetSpawnID = -1;
 }
 
 /*
