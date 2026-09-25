@@ -32,7 +32,7 @@ The release gate, and which of its items are still open, is described in the eng
 
 ## Retail game data is required
 
-The game module needs the data from a full retail ET:QW install patched to 1.5 (`pak000`–`pak008`; English tested). You must own the game. Until 2026-09-25 it was tested only on the unpatched English DVD paks, and some script-event definitions had been changed to fit those older scripts; they are back to the SDK definitions, which the retail 1.5 scripts use. The unpatched DVD data is not supported. The branches of both repositories contain no retail game data, executables or media, and none may be added. One retail image was purged from both histories on 2026-09-24; GitHub still keeps it in pull-request refs until those are removed (see the engine's `STATUS.md`, release gate 5). The engine does not yet refuse to run without a full retail install; that check is one of the release-gate items.
+The game module needs the data from a full retail ET:QW install patched to 1.5 (`pak000`–`pak008`; the checksums are the English edition's). You must own the game. Until 2026-09-25 it was tested only on the unpatched English DVD paks, and some script-event definitions had been changed to fit those older scripts; they are back to the SDK definitions, which the retail 1.5 scripts and game module use. Runtime results on the 1.5 data are in the engine's `STATUS.md`. The unpatched DVD data is not supported. The branches of both repositories contain no retail game data, executables or media, and none may be added. One retail image was purged from both histories on 2026-09-24; GitHub still keeps it in pull-request refs until those are removed (see the engine's `STATUS.md`, release gate 5). The engine does not yet refuse to run without a full retail install; that check is one of the release-gate items.
 
 ## Network play: OpenETQW only
 
@@ -58,7 +58,7 @@ On macOS arm64 this produces `build/libidLib.a` (the SDK idLib, which the engine
 ```sh
 python3 tools/ci/check_spdx.py            # SPDX tags and the provenance allowlist
 python3 tools/ci/check_no_gpl.py          # no GPL-family license markers
-python3 tools/ci/check_event_handlers.py  # script event handlers match their event definitions
+python3 tools/ci/check_event_handlers.py  # event handlers match their definitions, and events.script matches the definitions
 python3 tools/ci/selftest.py              # the checks above still fail on what they exist to catch
 actionlint                                # workflow lint
 ```
@@ -70,7 +70,7 @@ Add `--include-untracked` to `check_spdx.py` and `check_no_gpl.py` to check new 
 - `src/game/`: the game module.
 - `src/idlib/`: the SDK idLib, built as a static library for the game module and the engine.
 - `src/framework/`, `src/decllib/`, `src/bse/`, `src/sdnet/`, `src/renderer/`, `src/sound/`, `src/sys/`, `src/libs/`, `src/cm/`, `src/common/`: SDK interface headers, and a few sources. When the engine configures, it copies the headers it needs, plus `src/decllib/DeclType.cpp` and `src/idlib/BitMsg.cpp`.
-- `src/compiledscript/`: the compiled-script tree from the reconstruction, with the game scripts in `scripts/`. It is not part of the Meson build.
+- `src/compiledscript/`: the compiled-script tree from the reconstruction, with the game scripts in `scripts/`. It is not part of the Meson build. `scripts/events.script` equals the retail 1.5 file and is the reference for `tools/ci/check_event_handlers.py`: keep it.
 - `legal/`: the SDK EULA.
 - `tools/ci/`: license checks, CI helpers and the engine pin (`engine.ref`).
 
