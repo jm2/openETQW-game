@@ -25,10 +25,10 @@ The layout follows openQ4 and openQ4-game. The engine and the game module are bu
 - No GPL code goes in this repository, because it cannot be combined with the SDK-licensed code. `tools/ci/check_no_gpl.py` checks for it.
 - Imported SDK files carry no SPDX tag yet. Their license class is recorded in `tools/ci/spdx_allowlist.txt`, and `tools/ci/check_spdx.py` checks that every file under `src/`, `tools/`, `.github/` and the Meson files is tagged or listed. The charter asks for a `LicenseRef-ETQW-SDK` tag on SDK-derived files; the allowlist stands in for it for now.
 - The `.script` files in `src/compiledscript/scripts/` are SDK text files (the SDK installer ships the same files; a few have edits), so they are under the SDK EULA, like the compiledscript runtime files that match SDK files. Until 2026-09-24, `tools/ci/spdx_allowlist.txt` and the engine's provenance manifest labeled them MIT, which was wrong.
-- This repository's history starts from jmarshall's ET:QW source reconstruction (jmarshall/etqw), which has no license file. Whether his changes can be redistributed is an open owner question.
-- Whether the SDK EULA covers a module built for OpenETQW (it runs with the retail data, not the retail executable) is also an open owner question.
+- This repository's history starts from jmarshall's ET:QW source reconstruction (jmarshall/etqw), which has no license file. Whether his changes can be redistributed is unresolved; the owner deferred the remediation (a licence from him or replacement code) on 2026-09-25, and release gate item 1 stays blocking.
+- Whether the SDK EULA covers a module built for OpenETQW (it runs with the retail data, not the retail executable) is untested. The owner accepted that risk on 2026-09-25, as openQ4 does for Quake 4, with two safeguards: the engine refuses to start without the retail 1.5 data (the engine's `fs_validateOfficialPaks`), and every package carries the licence texts (`meson install` puts `LICENSE`, `EULA_SDK_ETQW.txt` and `legal/EULA SDK ETQW.rtf` in `licenses/openETQW-game`; the engine's install set carries the EULA too). Both are being merged (the engine's `docs/decisions/0002-sdk-eula-risk-and-retail-install-check.md`).
 
-The release gate, and which of its items are still open, is described in the engine repository's `readme.md` and `STATUS.md`. None of the items is cleared yet.
+The release gate, and which of its items are still open, is described in the engine repository's `readme.md` and `STATUS.md`. Item 2 (SDK code in the engine binaries) was approved by the owner on 2026-09-25 as tracked exceptions, on openQ4's precedent, on condition that engine packages carry the SDK EULA; the other items are open.
 
 ## Retail game data is required
 
@@ -68,7 +68,7 @@ Add `--include-untracked` to `check_spdx.py` and `check_no_gpl.py` to check new 
 ## Layout
 
 - `src/game/`: the game module.
-- `src/idlib/`: the SDK idLib, built as a static library for the game module and the engine.
+- `src/idlib/`: the SDK idLib, built as a static library for the game module and the engine. The engine is GPL; linking and compiling this SDK code into it is an owner-approved exception (the engine's `docs/decisions/0001-sdk-code-in-the-engine-build.md`), so engine packages ship the SDK EULA too.
 - `src/framework/`, `src/decllib/`, `src/bse/`, `src/sdnet/`, `src/renderer/`, `src/sound/`, `src/sys/`, `src/libs/`, `src/cm/`, `src/common/`: SDK interface headers, and a few sources. When the engine configures, it copies the headers it needs, plus `src/decllib/DeclType.cpp` and `src/idlib/BitMsg.cpp`.
 - `src/compiledscript/`: the compiled-script tree from the reconstruction, with the game scripts in `scripts/`. It is not part of the Meson build. `scripts/events.script` equals the retail 1.5 file and is the reference for `tools/ci/check_event_handlers.py`: keep it.
 - `legal/`: the SDK EULA.
