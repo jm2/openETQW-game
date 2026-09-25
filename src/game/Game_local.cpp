@@ -11722,7 +11722,7 @@ idGameLocal::EmitSimView
 OpenETQW (M5), with g_simHash: state this tick produced that later ticks read back
 and that a render frame could write into (the engine's docs/frame-path.md, section
 6.9): the view angles after UpdateViewAngles, the tick's logged view origin and
-view-space weapon offset, and the vehicle's last pushed pose. Printed where RunFrame
+view-space weapon offset and orientation, and the vehicle's last pushed pose. Printed where RunFrame
 logs the pose, from the same view player (the watched player when spectating). A
 history slot without a weapon pose prints wlog=-; without a view player nothing was
 logged, and the line says view=-1 and nothing else. A replay compares it across caps.
@@ -11743,8 +11743,10 @@ void idGameLocal::EmitSimView( idPlayer* viewer ) {
 	const idVec3& originLog = unlock.originlog[ framenum & 1 ];
 	idStr weaponLog = "-";
 	if ( unlock.weaponPoseValid[ framenum & 1 ] ) {
+		// the view-space weapon offset and orientation, both of which later draws read
 		const idVec3& w = unlock.weaponOffsetLog[ framenum & 1 ];
-		weaponLog = va( "(%.2f,%.2f,%.2f)", n( w.x ), n( w.y ), n( w.z ) );
+		const idAngles a = unlock.weaponAxisLog[ framenum & 1 ].ToAngles();
+		weaponLog = va( "(%.2f,%.2f,%.2f,%.2f,%.2f,%.2f)", n( w.x ), n( w.y ), n( w.z ), n( a.pitch ), n( a.yaw ), n( a.roll ) );
 	}
 	idVec3 pushedOrigin = vec3_origin;
 	idAngles pushedAngles = ang_zero;
