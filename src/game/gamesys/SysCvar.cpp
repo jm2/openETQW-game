@@ -509,7 +509,7 @@ idCVar g_maxSpectateTime(			"g_maxSpectateTime",			"0",		CVAR_GAME | CVAR_ARCHIV
 
 idCVar g_unlock_updateAngles(		"g_unlock_updateAngles",		"1",		CVAR_GAME | CVAR_PROFILE | CVAR_ARCHIVE | CVAR_BOOL,		"update view angles in fps unlock mode" );
 idCVar g_unlock_updateViewpos(		"g_unlock_updateViewpos",		"1",		CVAR_GAME | CVAR_PROFILE | CVAR_ARCHIVE | CVAR_BOOL,		"update view origin in fps unlock mode" );
-idCVar g_logFramePoses(			"g_logFramePoses",				"0",		CVAR_GAME | CVAR_INTEGER | CVAR_NOCHEAT,	"OpenETQW test diagnostic: print a FRAME_POSE line for every main-view draw with the view, viewmodel, seat and up to this many other players (0 = off, at most 8)" );
+idCVar g_logFramePoses(			"g_logFramePoses",				"0",		CVAR_GAME | CVAR_INTEGER,	"OpenETQW test diagnostic (a cheat: it logs other players' positions whatever their visibility, so it needs net_allowCheats): print a FRAME_POSE line for every main-view draw with the view, viewmodel, seat and up to this many other players (0 = off, at most 8)" );
 idCVar g_unlock_interpolateMoving(	"g_unlock_interpolateMoving",	"1",		CVAR_GAME | CVAR_PROFILE | CVAR_ARCHIVE | CVAR_BOOL,		"interpolate moving objects in fps unlock mode" );
 idCVar g_unlock_viewStyle(			"g_unlock_viewStyle",			"1",		CVAR_GAME | CVAR_PROFILE | CVAR_ARCHIVE | CVAR_INTEGER,		"0: extrapolate view origin, 1: interpolate view origin" );
 
