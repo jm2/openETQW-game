@@ -322,8 +322,11 @@ static void LogFramePose( idPlayer* viewPlayer, const renderView_t* view ) {
 	}
 	AppendRenderPose( line, "veh", proxy != NULL ? proxy->GetModelDefHandle() : -1 );
 
+	// Printf formats into MAX_STRING_CHARS (1024) and cuts the rest, newline included, so
+	// the line is kept to about 250 characters plus at most 8 players of about 75 each
+	const int maxPlayers = Min( g_logFramePoses.GetInteger(), 8 );
 	int logged = 0;
-	for ( int i = 0; i < MAX_CLIENTS && logged < g_logFramePoses.GetInteger(); i++ ) {
+	for ( int i = 0; i < MAX_CLIENTS && logged < maxPlayers; i++ ) {
 		idPlayer* other = gameLocal.GetClient( i );
 		if ( other == NULL || other == viewPlayer ) {
 			continue;
