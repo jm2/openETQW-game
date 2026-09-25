@@ -1757,6 +1757,8 @@ void idGameLocal::Clear( void ) {
 	isPaused = false;
 	cumulativeEventsServiced = 0;
 	unlock.interpFraction = 0.0f;
+	unlock.lastFraction = 0.0f;
+	unlock.lastFractionFrame = -1;
 
 	globalMaterial = NULL;
 	newInfo.Clear();
@@ -6040,6 +6042,14 @@ void idGameLocal::ClientUpdateView( const usercmd_t &cmd, int timeLeft ) {
 	}
 
 	float interpFraction = float( USERCMD_MSEC - timeLeft ) / float( USERCMD_MSEC );
+	// OpenETQW: the presented time does not step back within a tick. When a snapshot
+	// arrives the client nudges its prediction clock, which can move timeLeft back by a
+	// millisecond or two; presenting that would move the view back for one draw.
+	if ( unlock.lastFractionFrame == framenum && interpFraction < unlock.lastFraction ) {
+		interpFraction = unlock.lastFraction;
+	}
+	unlock.lastFraction = interpFraction;
+	unlock.lastFractionFrame = framenum;
 	unlock.interpFraction = interpFraction;
 
 	idEntity* proxy = p->GetProxyEntity();
