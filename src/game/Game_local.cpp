@@ -11726,7 +11726,8 @@ view-space weapon offset and orientation, the vehicle's last pushed pose, and th
 vehicle view last returned (vret; "-" for a view that keeps none). Printed where RunFrame
 logs the pose, from the same view player (the watched player when spectating). A
 history slot without a weapon pose prints wlog=-; without a view player nothing was
-logged, and the line says view=-1 and nothing else. A replay compares it across caps.
+logged, and the line says view=-1 and nothing else. Values are printed in full
+precision. A replay compares it across caps.
 ===============
 */
 void idGameLocal::EmitSimView( idPlayer* viewer ) {
@@ -11737,8 +11738,10 @@ void idGameLocal::EmitSimView( idPlayer* viewer ) {
 		common->Printf( "SIM_VIEW: tick=%d view=-1\n", framenum );
 		return;
 	}
-	auto n = []( float val ) -> float {
-		return ( val > -0.0001f && val < 0.0001f ) ? 0.0f : val;
+	// full precision (%.9g reads back as the same float) so that no difference hides in
+	// rounding; only -0 becomes 0
+	auto n = []( float val ) -> double {
+		return val == 0.0f ? 0.0 : (double)val;
 	};
 	const idAngles viewAngles = viewer->GetViewAngles();
 	const idVec3& originLog = unlock.originlog[ framenum & 1 ];
@@ -11747,7 +11750,7 @@ void idGameLocal::EmitSimView( idPlayer* viewer ) {
 		// the view-space weapon offset and orientation, both of which later draws read
 		const idVec3& w = unlock.weaponOffsetLog[ framenum & 1 ];
 		const idAngles a = unlock.weaponAxisLog[ framenum & 1 ].ToAngles();
-		weaponLog = va( "(%.2f,%.2f,%.2f,%.2f,%.2f,%.2f)", n( w.x ), n( w.y ), n( w.z ), n( a.pitch ), n( a.yaw ), n( a.roll ) );
+		weaponLog = va( "(%.9g,%.9g,%.9g,%.9g,%.9g,%.9g)", n( w.x ), n( w.y ), n( w.z ), n( a.pitch ), n( a.yaw ), n( a.roll ) );
 	}
 	idVec3 pushedOrigin = vec3_origin;
 	idAngles pushedAngles = ang_zero;
@@ -11760,10 +11763,10 @@ void idGameLocal::EmitSimView( idPlayer* viewer ) {
 		idMat3 returnedAxis;
 		if ( transport != NULL && transport->GetViewForPlayer( viewer ).GetLastReturnedAxis( returnedAxis ) ) {
 			const idAngles r = returnedAxis.ToAngles();
-			returnedLog = va( "(%.2f,%.2f,%.2f)", n( r.pitch ), n( r.yaw ), n( r.roll ) );
+			returnedLog = va( "(%.9g,%.9g,%.9g)", n( r.pitch ), n( r.yaw ), n( r.roll ) );
 		}
 	}
-	common->Printf( "SIM_VIEW: tick=%d view=%d ang=(%.2f,%.2f,%.2f) olog=(%.2f,%.2f,%.2f) wlog=%s vpush=(%.2f,%.2f,%.2f) vpang=(%.2f,%.2f,%.2f) vret=%s\n",
+	common->Printf( "SIM_VIEW: tick=%d view=%d ang=(%.9g,%.9g,%.9g) olog=(%.9g,%.9g,%.9g) wlog=%s vpush=(%.9g,%.9g,%.9g) vpang=(%.9g,%.9g,%.9g) vret=%s\n",
 		framenum, viewer->entityNumber,
 		n( viewAngles.pitch ), n( viewAngles.yaw ), n( viewAngles.roll ),
 		n( originLog.x ), n( originLog.y ), n( originLog.z ),
