@@ -19,9 +19,20 @@ built-in integer types, enums and typedefs of them found under src/; any other
 type is a mismatch.  A binding the tool cannot resolve (definition or handler
 not found, format not readable) fails too, so the gate cannot quietly weaken.
 
-At runtime sdEventDefHelper::ReconcileEventsWithScript rewrites definitions
-from script/events.script and warns when a declaration does not fit the
-definition, so the two checks together cover script -> definition -> handler.
+It also checks every declaration in src/compiledscript/scripts/events.script
+(the retail 1.5 events.script) against the native definition of that name, with
+the rule sdEventDefHelper::ReconcileEventsWithScript applies at runtime, made
+strict: the script must declare exactly the definition's arguments, each reaching
+the handler as the same kind (script float may feed an integer argument, entity a
+nullable entity), and the return types must agree (script float for a native
+float or integer, boolean or handle for a native boolean or handle, entity or
+object for an entity or object).  The runtime only warns about fewer arguments;
+the retail 1.5 events.script has no declaration with more, and a definition that
+drops an argument the script passes loses it (setPlayerPickupRequestTime on the
+1.0 DVD scripts).  A declaration without a native definition fails too, and so
+does a missing events.script unless --root names another tree (the selftests).  Together the two checks cover script ->
+definition -> handler without retail data; on the 1.0 DVD scripts they would
+have caught sendNetworkEvent, broadcastToolTip and setPlayerPickupRequestTime.
 
 Exit codes: 0 pass, 1 mismatches found, 2 usage / environment error.
 """
@@ -41,6 +52,16 @@ NEW_STYLE_RE = re.compile(r"\s*'(\\?.)'\s*,\s*(?:DOC_TEXT\(\s*(?:" + STR + r"\s*
 BLOCK_RE = re.compile(r'(?:CLASS|ABSTRACT)_DECLARATION\s*\(\s*\w+\s*,\s*(\w+)\s*\)(.*?)END_CLASS', re.S)
 EVENT_RE = re.compile(r'EVENT\s*\(\s*(\w+)\s*,\s*(\w+)::(\w+)\s*\)')
 COMMENT_RE = re.compile(r'//[^\n]*|/\*.*?\*/', re.S)
+
+RETURN_RE = re.compile(r"\s*,\s*'(\\?.)'")
+# script return type -> the native return characters a handler may use for it
+RETURN_FITS = {'f': 'fd', 'b': 'bh', 'h': 'bh', 'e': 'eEo', 'o': 'eEo', 's': 's', 'w': 'w', 'v': 'v', '\0': '\0'}
+SCRIPT_EVENT_RE = re.compile(r'\bscriptEvent\s+(\w+)\s+(\w+)\s*\(([^)]*)\)\s*;')
+# ReconcileEventsWithScript's format character for each script type ('o' for any other)
+SCRIPT_FORMAT = {'float': 'f', 'boolean': 'b', 'handle': 'h', 'vector': 'v', 'string': 's',
+                 'wstring': 'w', 'entity': 'e', 'object': 'o'}
+# sdEventDefHelper::ArgKind: what a native handler receives for a format character
+ARG_KIND = {'d': 'd', 'b': 'd', 'h': 'd', 'e': 'e', 'E': 'e'}
 
 # what the dispatcher passes for each format character
 FORMAT_KIND = {'d': 'int', 'b': 'int', 'h': 'int', 'f': 'float', 's': 'char*', 'w': 'wchar_t*',
@@ -164,7 +185,87 @@ def handler_parameters(source: Source, cls: str, method: str) -> str | None:
     return None
 
 
-def check(root: Path) -> tuple[list[str], list[str], int]:
+def parse_return(rest: str | None) -> str | None:
+    """The return character of an idEventDef from the text after its name ('\\0' for void)."""
+    rest = (rest or '').strip()
+    if rest == '':
+        return '\0'
+    if rest.startswith('"') or rest.startswith('NULL'):
+        # ( "name", "format" or NULL [, 'r'] )
+        after = rest[len(re.match(STR, rest).group(0)):] if rest.startswith('"') else rest[len('NULL'):]
+        m = RETURN_RE.match(after)
+        return ('\0' if m.group(1) == '\\0' else m.group(1)) if m else '\0'
+    m = NEW_STYLE_RE.match(rest)
+    if not m:
+        return None
+    return '\0' if m.group(1) == '\\0' else m.group(1)
+
+
+def reconcile_mismatch(declared: str, native: str) -> str | None:
+    """Why a script declaration does not fit the native definition, or None: the
+    rule of sdEventDefHelper::ReconcileEventsWithScript, but also failing when the
+    script passes more arguments than the definition takes."""
+    if len(declared) != len(native):
+        return f'declares {len(declared)} argument(s), the native definition takes {len(native)}'
+    for i, (script, old) in enumerate(zip(declared, native)):
+        if script == 'f':
+            new = 'd' if old in 'db' else 'f'
+        elif script == 'e' and old == 'E':
+            new = 'E'
+        else:
+            new = script
+        if ARG_KIND.get(old, old) != ARG_KIND.get(new, new):
+            return f'argument {i + 1} is \'{new}\', the native definition passes \'{old}\''
+    return None
+
+
+def check_script(root: Path, formats: dict[Path, dict[str, tuple[str, str]]], returns: dict[str, set[str]],
+                 required: bool) -> tuple[list[str], list[str], int]:
+    """Every events.script declaration against the native definition of that event name."""
+    events = root / 'src' / 'compiledscript' / 'scripts' / 'events.script'
+    if not events.is_file():
+        if required or (root / 'src' / 'compiledscript').is_dir():
+            return [], [f'{events.relative_to(root)} not found'], 0
+        return [], [], 0
+    text = COMMENT_RE.sub(lambda m: '\n' * m.group(0).count('\n'), events.read_text(errors='replace'))
+    native: dict[str, set[str]] = {}
+    for defs in formats.values():
+        for name, fmt in defs.values():
+            native.setdefault(name, set()).add(fmt)
+    problems: list[str] = []
+    notes: list[str] = []
+    declarations = 0
+    for m in SCRIPT_EVENT_RE.finditer(text):
+        declarations += 1
+        where = f'{events.relative_to(root)}:{text.count(chr(10), 0, m.start()) + 1}'
+        name = m.group(2)
+        params = [p.split() for p in m.group(3).split(',') if p.strip()]
+        declared = ''.join(SCRIPT_FORMAT.get(p[0], 'o') for p in params)
+        declared_return = '\0' if m.group(1) == 'void' else SCRIPT_FORMAT.get(m.group(1), 'o')
+        fmts = native.get(name)
+        if not fmts:
+            problems.append(f'{where}: \'{name}\' ( {declared} ) has no native definition')
+            continue
+        if len(fmts) > 1:
+            notes.append(f'{where}: \'{name}\' has more than one different native definition ({", ".join(sorted(fmts))})')
+            continue
+        fmt = next(iter(fmts))
+        why = reconcile_mismatch(declared, fmt)
+        if why:
+            problems.append(f'{where}: \'{name}\' ( {declared} ) does not match its native definition ( {fmt} ): {why}')
+        rets = returns.get(name, set())
+        if len(rets) == 1 and next(iter(rets)) not in RETURN_FITS[declared_return]:
+            native_return = next(iter(rets))
+            problems.append(f'{where}: \'{name}\' returns {m.group(1)}, but its native definition returns '
+                            f'\'{native_return if native_return != chr(0) else "void"}\'')
+        elif len(rets) != 1:
+            notes.append(f'{where}: cannot read the native return type of \'{name}\'')
+    if declarations == 0:
+        notes.append(f'{events.relative_to(root)}: no scriptEvent declarations found')
+    return problems, notes, declarations
+
+
+def check(root: Path, script_required: bool = False) -> tuple[list[str], list[str], int, int]:
     sources = sorted(p for p in (root / 'src' / 'game').rglob('*') if p.suffix in ('.cpp', '.h'))
     texts = {p: COMMENT_RE.sub(lambda m: '\n' * m.group(0).count('\n'), p.read_text(errors='replace')) for p in sources}
 
@@ -173,6 +274,7 @@ def check(root: Path) -> tuple[list[str], list[str], int]:
 
     # namespace-scope definitions have internal linkage: two files can use the same
     # variable name for different events (EV_GetState), so look in the binding's file first
+    returns: dict[str, set[str | None]] = {}
     formats: dict[Path, dict[str, tuple[str, str]]] = {}
     notes: list[str] = []
     for path, text in texts.items():
@@ -182,6 +284,7 @@ def check(root: Path) -> tuple[list[str], list[str], int]:
                 notes.append(f'{path.relative_to(root)}: cannot read the format of {m.group(1)}')
                 continue
             formats.setdefault(path, {})[m.group(1)] = (m.group(2)[1:-1], fmt)
+            returns.setdefault(m.group(2)[1:-1], set()).add(parse_return(m.group(3)))
 
     def find_format(path: Path, var: str) -> tuple[str, str] | None | str:
         if var in formats.get(path, {}):
@@ -218,7 +321,8 @@ def check(root: Path) -> tuple[list[str], list[str], int]:
                     if kind != FORMAT_KIND.get(fmt[i]):
                         problems.append(f'{where}: {cls}::{method} parameter {i + 1} is {kind}, but {var} '
                                         f'("{name}", "{fmt}") passes {FORMAT_KIND.get(fmt[i], fmt[i])}')
-    return problems, notes, bindings
+    script_problems, script_notes, declarations = check_script(root, formats, returns, script_required)
+    return problems + script_problems, notes + script_notes, bindings, declarations
 
 
 def main(argv: list[str]) -> int:
@@ -228,12 +332,14 @@ def main(argv: list[str]) -> int:
     if not (args.root / 'src' / 'game').is_dir():
         print(f'check_event_handlers: no src/game under {args.root}', file=sys.stderr)
         return 2
-    problems, notes, bindings = check(args.root)
+    # the real tree must have events.script; selftest trees (--root) may leave it out
+    problems, notes, bindings, declarations = check(args.root, script_required=args.root.resolve() == REPO_ROOT)
     for p in problems:
         print(p)
     for n in notes:
         print(f'not checked: {n}')
-    print(f'check_event_handlers: {bindings} bindings, {len(problems)} mismatch(es), {len(notes)} not checked')
+    print(f'check_event_handlers: {bindings} bindings, {declarations} script declarations, '
+          f'{len(problems)} mismatch(es), {len(notes)} not checked')
     return 1 if problems or notes else 0
 
 

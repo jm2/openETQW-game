@@ -492,7 +492,7 @@ const idEventDef EV_Player_SetSmokeNadeState( "setSmokeNadeState", "e" );
 const idEventDef EV_Player_SetArtyAttackLocation( "setArtyAttackLocation", "vd" );
 const idEventDef EV_Player_SetPlayerKillTarget( "setPlayerKillTarget", "e" );
 const idEventDef EV_Player_SetPlayerRepairTarget( "setPlayerRepairTarget", "e" );
-const idEventDef EV_Player_SetPlayerPickupRequestTime( "setPlayerPickupRequestTime", "" );
+const idEventDef EV_Player_SetPlayerPickupRequestTime( "setPlayerPickupRequestTime", "E" );	// the 1.5 script passes $null_entity for "anyone" (player_context.script)
 const idEventDef EV_Player_SetPlayerCommandRequestTime( "setPlayerCommandRequestTime" );
 const idEventDef EV_Player_SetTeleporterState( "setTeleporterState", "b" );
 const idEventDef EV_Player_SetRepairDroneState( "setRepairDroneState", "b" );
@@ -514,7 +514,6 @@ const idEventDef EV_Player_AdjustDeathYaw( "adjustDeathYaw", '\0', DOC_TEXT( "Al
 const idEventDef EV_Player_SetCarryingObjective( "setCarryingObjective", '\0', DOC_TEXT( "Sets flag which controls whether the objective icon is shown by the player's name on the scoreboard." ), 1, NULL, "b", "value", "Whether to set or clear the flag." );
 const idEventDef EV_Player_AddDamageEvent( "addDamageEvent", '\0', DOC_TEXT( "Add a damage event for the player." ), 4, NULL, "d", "time", "Time for event.", "f", "dir", "Direction for the damage event.", "f", "damage", "Amount of damage done.", "b", "update", "Continually update direction." );
 const idEventDef EV_Player_IsInLimbo( "isInLimbo", 'b', DOC_TEXT( "Returns whether the player is currently in the limbo waiting to respawn." ), 0, NULL );
-extern const idEventDef EV_ScriptMissing_isDead;
 
 CLASS_DECLARATION( idActor, idPlayer )
 	EVENT( EV_Player_GetButton,				idPlayer::Event_GetButton )
@@ -677,7 +676,6 @@ CLASS_DECLARATION( idActor, idPlayer )
 	EVENT( EV_Player_SetCarryingObjective,		idPlayer::Event_SetCarryingObjective )
 	EVENT( EV_Player_AddDamageEvent,			idPlayer::Event_AddDamageEvent )
 	EVENT( EV_Player_IsInLimbo,					idPlayer::Event_IsInLimbo )
-	EVENT( EV_ScriptMissing_isDead,				idPlayer::Event_IsDead )
 
 END_CLASS
 
@@ -13678,12 +13676,13 @@ void idPlayer::Event_SetPlayerRepairTarget( idEntity* repairTarget ) {
 idPlayer::Event_SetPlayerPickupRequestTime
 ============
 */
-void idPlayer::Event_SetPlayerPickupRequestTime( void ) {
-	// The retail 1.5 script declares 'setPlayerPickupRequestTime()' (script/events.script) and
-	// requests a pickup from anyone; the SDK took a target vehicle, which the handler read from
-	// an argument that was never passed.
+void idPlayer::Event_SetPlayerPickupRequestTime( idEntity* pickUpTarget ) {
 	botThreadData.GetGameWorldState()->clientInfo[ entityNumber ].pickupRequestTime = gameLocal.time;
-	botThreadData.GetGameWorldState()->clientInfo[ entityNumber ].pickupTargetSpawnID = -1;
+	if ( pickUpTarget != NULL ) {
+		botThreadData.GetGameWorldState()->clientInfo[ entityNumber ].pickupTargetSpawnID = gameLocal.GetSpawnId( pickUpTarget );
+	} else {
+		botThreadData.GetGameWorldState()->clientInfo[ entityNumber ].pickupTargetSpawnID = -1;
+	}
 }
 
 /*
@@ -15224,15 +15223,6 @@ idPlayer::Event_IsInLimbo
 */
 void idPlayer::Event_IsInLimbo( void ) {
 	sdProgram::ReturnBoolean( IsInLimbo() );
-}
-
-/*
-================
-idPlayer::Event_IsDead
-================
-*/
-void idPlayer::Event_IsDead( void ) {
-	sdProgram::ReturnBoolean( IsDead() );
 }
 
 /*

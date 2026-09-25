@@ -1,9 +1,7 @@
 # ETQW compiled scripts
 
-This directory is the self-contained compiled-script project.
+Kept from the reconstruction; not built. The Meson build has no compiled-script target: OpenETQW interprets the scripts from the retail paks, where retail 1.5 ran them as compiled-script modules.
 
-- `scripts/` is the canonical DoomScript input tree used for native script builds.
-- `generated/` is recreated by the top-level `compiledscript_generate` target whenever an input script changes.
-- The CMake project in this directory builds those generated sources and the runtime support code into `compiledscriptx64.dll` (or `compiledscriptx86.dll`) in the workspace root.
-
-Build the top-level `compiledscript` target; it builds the game exporter, runs it headlessly, configures this project, and builds the DLL.
+- `scripts/` matches the retail 1.5 script tree, apart from the `scripts/` include prefix in 7 files (`docs/provenance.md` §2.2 in the engine repository).
+- `scripts/events.script` is the reference for `tools/ci/check_event_handlers.py`, which checks every declaration against the game's native event definitions without retail data.
+- The CMake project and `tools/CompiledScriptCodegen.cpp` are jmarshall's code generator for the compiled-script modules; they are not used.

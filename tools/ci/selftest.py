@@ -22,7 +22,10 @@ silently turn a gate into a no-op:
   or a type it does not know as an integer) where its event definition
   passes an integer fails, as does a binding it cannot resolve; each binding
   uses the definition in its own file; an inherited or inline handler
-  matching its definition passes.
+  matching its definition passes. An events.script declaration with another
+  number of arguments, an argument of another kind or another return type
+  than its native definition fails, as does one with no native definition or
+  a missing events.script.
 
 The copyleft marker strings are assembled from fragments so this file does
 not trip check_no_gpl.py itself.  Exit codes: 0 pass, 1 a case failed.
@@ -303,6 +306,44 @@ def test_event_handlers(scratch: Path) -> None:
     check(code == 1 and "idA::Event_Get parameter 1 is float" in out and "idB::Event_Get" not in out,
           "each binding is checked against the definition in its own file", out)
     check("not checked: " in out and "EV_Missing" in out, "a binding without a definition fails", out)
+
+    def script_tree(name: str, declaration: str) -> tuple[int, str]:
+        root = scratch / f"events-script-{name}"
+        (root / "src" / "game").mkdir(parents=True)
+        (root / "src" / "game" / "Thing.cpp").write_text(
+            'const idEventDef EV_Send( "send", "dbs" );\n'
+            'const idEventDef EV_Tip( "tip", "des" );\n'
+            'const idEventDef EV_Count( "count", NULL, \'f\' );\n'
+            'const idEventDef EV_Pick( "pick", "" );\n', encoding="utf-8")
+        (root / "src" / "compiledscript" / "scripts").mkdir(parents=True)
+        (root / "src" / "compiledscript" / "scripts" / "events.script").write_text(
+            "// events\nscriptEvent void send( float client, boolean repeater, string message );\n" + declaration,
+            encoding="utf-8")
+        return run_tool("check_event_handlers.py", "--root", str(root))
+
+    code, out = script_tree("ok", "scriptEvent void tip( float index, entity p, string text );\n"
+                            "scriptEvent float count();\n")
+    check(code == 0 and "3 script declarations, 0 mismatch(es)" in out,
+          "script declarations that fit the native definitions pass (float -> integer; NULL format with a return)", out)
+    code, out = script_tree("more", "scriptEvent void pick( entity target );\n")
+    check(code == 1 and "'pick' ( e ) does not match" in out and "declares 1 argument(s)" in out,
+          "a native definition that drops an argument the script passes fails", out)
+    code, out = script_tree("return", "scriptEvent vector count();\n")
+    check(code == 1 and "'count' returns vector" in out, "a return type other than the native one fails", out)
+    code, out = script_tree("kind", "scriptEvent void tip( float index, entity p, wstring text );\n")
+    check(code == 1 and "'tip' ( few ) does not match" in out, "a wstring for a native string fails", out)
+    code, out = script_tree("fewer", "scriptEvent void tip( float index, entity p );\n")
+    check(code == 1 and "declares 2 argument(s)" in out, "fewer script arguments than the native definition fails", out)
+    code, out = script_tree("entity", "scriptEvent void tip( entity p, entity q, string text );\n")
+    check(code == 1 and "argument 1 is 'e'" in out, "an entity for a native integer fails", out)
+    code, out = script_tree("missing", "scriptEvent void tip( float index, entity p, string text );\n"
+                            "scriptEvent float dvdOnly();\n")
+    check(code == 1 and "'dvdOnly' (  ) has no native definition" in out, "a declaration without a native definition fails", out)
+    empty = scratch / "events-script-none"
+    (empty / "src" / "game").mkdir(parents=True)
+    (empty / "src" / "compiledscript").mkdir(parents=True)
+    code, out = run_tool("check_event_handlers.py", "--root", str(empty))
+    check(code == 1 and "events.script not found" in out, "a script tree without events.script fails", out)
 
 
 def main() -> int:

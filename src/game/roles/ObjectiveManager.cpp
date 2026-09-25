@@ -597,17 +597,10 @@ void sdObjectiveManagerLocal::WriteInitialReliableMessages( const sdReliableMess
 	if ( scriptObject != NULL ) {
 		assert( !target.SendToAll() );
 
-		// The retail 1.5 script declares OnWriteInitialReliableMessages( entity p ) and
-		// passes p on to sendNetworkEvent( entity, string ); the SDK pushed ( clientNum,
-		// isRepeater ), so the call was refused ("Called With Incorrect Number Of
-		// Arguments") and a joining client got no objective state until it changed.
-		// Repeater clients (none in OpenETQW) have no player entity to address.
-		idPlayer* player = target.SendToRepeaterClients() ? NULL : gameLocal.GetClient( target.GetClientNum() );
-		if ( player != NULL ) {
-			sdScriptHelper h1;
-			h1.Push( player->GetScriptObject() );
-			scriptObject->CallNonBlockingScriptEvent( scriptObject->GetFunction( "OnWriteInitialReliableMessages" ), h1 );
-		}
+		sdScriptHelper h1;
+		h1.Push( target.GetClientNum() );
+		h1.Push( target.SendToRepeaterClients() ? 1.f : 0.f );
+		scriptObject->CallNonBlockingScriptEvent( scriptObject->GetFunction( "OnWriteInitialReliableMessages" ), h1 );
 	}
 
 	{
@@ -725,17 +718,28 @@ void sdObjectiveManagerLocal::OnNetworkEvent( const char* message ) {
 sdObjectiveManagerLocal::Event_SendNetworkEvent
 ================
 */
-void sdObjectiveManagerLocal::Event_SendNetworkEvent( idEntity* player, const char* message ) {
-	// see idEntity::GetNetworkEventClient; the script plays the local player's copy itself
-	int clientIndex;
-	if ( !idEntity::GetNetworkEventClient( "sdObjectiveManagerLocal::Event_SendNetworkEvent", player, message, clientIndex ) ) {
-		return;
+void sdObjectiveManagerLocal::Event_SendNetworkEvent( int clientIndex, bool isRepeaterClient, const char* message ) {
+	if ( !isRepeaterClient ) {
+		if ( clientIndex == -1 ) {
+			if ( gameLocal.GetLocalPlayer() != NULL ) {
+				OnNetworkEvent( message );
+			}
+		} else {
+			idPlayer* player = gameLocal.GetClient( clientIndex );
+			if ( player != NULL && gameLocal.IsLocalPlayer( player ) ) {
+				OnNetworkEvent( message );
+			}
+		}
 	}
 
 	sdReliableServerMessage msg( GAME_RELIABLE_SMESSAGE_NETWORKEVENT );
 	msg.WriteLong( NETWORKEVENT_OBJECTIVE_ID );
 	msg.WriteString( message );
-	msg.Send( sdReliableMessageClientInfo( clientIndex ) );
+	if ( isRepeaterClient ) {
+		msg.Send( sdReliableMessageClientInfoRepeater( clientIndex ) );
+	} else {
+		msg.Send( sdReliableMessageClientInfo( clientIndex ) );
+	}
 }
 
 /*
