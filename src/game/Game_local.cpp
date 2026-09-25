@@ -11716,17 +11716,20 @@ void idGameLocal::EmitSimStateHash( void ) {
 	// angles after UpdateViewAngles, the tick's logged view origin and view-space weapon
 	// offset, and the vehicle's last pushed pose. A replay compares it across frame caps.
 	// All from the active view player, whose view the unlock logs record (the watched
-	// player when spectating). A history slot without a weapon pose prints wlog=-.
+	// player when spectating). A history slot without a weapon pose prints wlog=-, and
+	// without an active view player (a dedicated server, noclip demo playback) nothing
+	// was captured, so the line says view=-1 and nothing else.
 	idPlayer* viewer = GetLocalViewPlayer();
 	if ( viewer == NULL ) {
-		viewer = player;
+		common->Printf( "SIM_VIEW: tick=%d view=-1\n", framenum );
+		return;
 	}
 	idAngles viewAngles = ang_zero;
 	idVec3 originLog = vec3_origin;
 	idVec3 pushedOrigin = vec3_origin;
 	idAngles pushedAngles = ang_zero;
 	idStr weaponLog = "-";
-	if ( viewer != NULL ) {
+	{
 		viewAngles = viewer->GetViewAngles();
 		originLog = unlock.originlog[ framenum & 1 ];
 		if ( unlock.weaponPoseValid[ framenum & 1 ] ) {
@@ -11740,7 +11743,7 @@ void idGameLocal::EmitSimStateHash( void ) {
 		}
 	}
 	common->Printf( "SIM_VIEW: tick=%d view=%d ang=(%.2f,%.2f,%.2f) olog=(%.2f,%.2f,%.2f) wlog=%s vpush=(%.2f,%.2f,%.2f) vpang=(%.2f,%.2f,%.2f)\n",
-		framenum, viewer != NULL ? viewer->entityNumber : -1,
+		framenum, viewer->entityNumber,
 		normalizeFloat( viewAngles.pitch ), normalizeFloat( viewAngles.yaw ), normalizeFloat( viewAngles.roll ),
 		normalizeFloat( originLog.x ), normalizeFloat( originLog.y ), normalizeFloat( originLog.z ),
 		weaponLog.c_str(),
