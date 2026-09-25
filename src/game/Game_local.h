@@ -725,6 +725,8 @@ public:
 		bool					canUnlockFrames;		// tracks when extra view and angles updates are allowed
 		bool					unlockedDraw;			// differenciate between doing draws for unlocked frames and regular draws
 		float					interpFraction;			// sub-tick presentation interpolation fraction [0, 1)
+		float					lastFraction;			// the last presented fraction, and the tick it was for:
+		int						lastFractionFrame;		// the fraction does not step back within a tick
 		idVec3					originlog[2];			// log last two origins
 		idVec3					weaponOffsetLog[2];		// weapon position in view space for the last two full game tics
 		idMat3					weaponAxisLog[2];		// weapon orientation in view space for the last two full game tics
