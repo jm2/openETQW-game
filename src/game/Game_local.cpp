@@ -5951,6 +5951,24 @@ bool idGameLocal::Draw2D( void ) {
 
 /*
 ===============
+idGameLocal::PresentUnlocked
+
+OpenETQW: presents an entity's pose for this draw from ClientUpdateView.
+idEntity::Present does nothing while isNewFrame is false, and it is false when a
+snapshot arrived on this draw: the client then re-ran prediction for frames it had
+already run. The draw's interpolated pose would not reach the renderer, and the
+viewmodel (or an interpolated entity) would stay where the last tick left it.
+===============
+*/
+void idGameLocal::PresentUnlocked( idEntity* ent ) {
+	const bool wasNewFrame = isNewFrame;
+	isNewFrame = true;
+	ent->Present();
+	isNewFrame = wasNewFrame;
+}
+
+/*
+===============
 idGameLocal::ClientUpdateView
 ===============
 */
@@ -6156,7 +6174,7 @@ void idGameLocal::ClientUpdateView( const usercmd_t &cmd, int timeLeft ) {
 		p->weapon->GetRenderEntity()->axis = updatedAxis;
 
 		p->weapon->BecomeActive( TH_UPDATEVISUALS );
-		p->weapon->Present();
+		PresentUnlocked( p->weapon.GetEntity() );
 
 		// update bound GUIs as well
 		for ( rvClientEntity* cent = p->weapon->clientEntities.Next(); cent != NULL; cent = cent->bindNode.Next() ) {
@@ -6189,7 +6207,7 @@ void idGameLocal::ClientUpdateView( const usercmd_t &cmd, int timeLeft ) {
 			float ratio = interpFraction;
 			e->GetRenderEntity()->origin = ( 1.0f - ratio ) * A + ratio * B;
 			e->BecomeActive( TH_UPDATEVISUALS );
-			e->Present();
+			PresentUnlocked( e );
 		}
 	}
 }
