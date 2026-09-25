@@ -1010,76 +1010,6 @@ sdPlayZone::~sdPlayZone( void ) {
 	_paths.Clear();
 }
 
-// Missing script events registered for script compiler compatibility with retail scripts
-const idEventDef EV_ScriptMissing_setName( "setName", "s", '\0' );
-const idEventDef EV_ScriptMissing_activateTargets( "activateTargets", "e", '\0' );
-const idEventDef EV_ScriptMissing_numTargets( "numTargets", "", 'f' );
-const idEventDef EV_ScriptMissing_getTarget( "getTarget", "f", 'e' );
-const idEventDef EV_ScriptMissing_randomTarget( "randomTarget", "s", 'e' );
-const idEventDef EV_ScriptMissing_getLocalAngles( "getLocalAngles", "", 'v' );
-const idEventDef EV_ScriptMissing_restorePosition( "restorePosition", "", '\0' );
-const idEventDef EV_ScriptMissing_playEffectViewSuppress( "playEffectViewSuppress", "ssff", 'h' );
-const idEventDef EV_ScriptMissing_getDeployableObject( "getDeployableObject", "", 'f' );
-const idEventDef EV_ScriptMissing_getNetworkKey( "getNetworkKey", "e", 's' );
-const idEventDef EV_ScriptMissing_fromNetworkKey( "fromNetworkKey", "s", 'e' );
-const idEventDef EV_ScriptMissing_debugln( "debugln", "es", '\0' );
-const idEventDef EV_ScriptMissing_say( "say", "s", '\0' );
-const idEventDef EV_ScriptMissing_fadeIn( "fadeIn", "vf", '\0' );
-const idEventDef EV_ScriptMissing_fadeOut( "fadeOut", "vf", '\0' );
-const idEventDef EV_ScriptMissing_fadeTo( "fadeTo", "vff", '\0' );
-const idEventDef EV_ScriptMissing_setCMIconSort( "setCMIconSort", "ff", '\0' );
-const idEventDef EV_ScriptMissing_getObjectTitle( "getObjectTitle", "f", 's' );
-const idEventDef EV_ScriptMissing_consoleCommand( "consoleCommand", "s", '\0' );
-const idEventDef EV_ScriptMissing_pushEndGameStat( "pushEndGameStat", "ef", '\0' );
-const idEventDef EV_ScriptMissing_startCamera( "startCamera", "", '\0' );
-const idEventDef EV_ScriptMissing_stopCamera( "stopCamera", "", '\0' );
-const idEventDef EV_ScriptMissing_Toggle( "Toggle", "", '\0' );
-const idEventDef EV_ScriptMissing_launchMissiles( "launchMissiles", "ssssff", '\0' );
-const idEventDef EV_ScriptMissing_stopCurrentMove( "stopCurrentMove", "", '\0' );
-const idEventDef EV_ScriptMissing_weaponOutOfAmmo( "weaponOutOfAmmo", "", '\0' );
-const idEventDef EV_ScriptMissing_setLightParm( "setLightParm", "ff", '\0' );
-const idEventDef EV_ScriptMissing_setLightParms( "setLightParms", "ffff", '\0' );
-const idEventDef EV_ScriptMissing_enableSpreadEvals( "enableSpreadEvals", "ff", '\0' );
-const idEventDef EV_ScriptMissing_setConstraintPosition( "setConstraintPosition", "sv", '\0' );
-const idEventDef EV_ScriptMissing_setSyncedAnimWeight( "setSyncedAnimWeight", "fff", '\0' );
-const idEventDef EV_ScriptMissing_preventPain( "preventPain", "f", '\0' );
-const idEventDef EV_ScriptMissing_disablePain( "disablePain", "", '\0' );
-const idEventDef EV_ScriptMissing_enablePain( "enablePain", "", '\0' );
-const idEventDef EV_ScriptMissing_getPainAnim( "getPainAnim", "", 's' );
-const idEventDef EV_ScriptMissing_checkAnim( "checkAnim", "fs", '\0' );
-const idEventDef EV_ScriptMissing_chooseAnim( "chooseAnim", "fs", 's' );
-const idEventDef EV_ScriptMissing_animLength( "animLength", "fs", 'f' );
-const idEventDef EV_ScriptMissing_animDistance( "animDistance", "fs", 'f' );
-const idEventDef EV_ScriptMissing_setNextState( "setNextState", "s", '\0' );
-const idEventDef EV_ScriptMissing_clearAmmo( "clearAmmo", "", '\0' );
-const idEventDef EV_ScriptMissing_resetWeapon( "resetWeapon", "", '\0' );
-const idEventDef EV_ScriptMissing_getActiveWeapon( "getActiveWeapon", "", 's' );
-const idEventDef EV_ScriptMissing_setSwayScale( "setSwayScale", "f", '\0' );
-const idEventDef EV_ScriptMissing_canRevive( "canRevive", "", 'b' );
-extern const idEventDef EV_ScriptMissing_isDead( "isDead", "", 'b' );
-const idEventDef EV_ScriptMissing_getItemIndexByName( "getItemIndexByName", "s", 'f' );
-const idEventDef EV_ScriptMissing_getItemNameByIndex( "getItemNameByIndex", "f", 's' );
-const idEventDef EV_ScriptMissing_randomPath( "randomPath", "", 'e' );
-const idEventDef EV_ScriptMissing_getMoveDelta( "getMoveDelta", "", 'v' );
-const idEventDef EV_ScriptMissing_setDelta( "setDelta", "v", '\0' );
-const idEventDef EV_ScriptMissing_setViewAxis( "setViewAxis", "f", '\0' );
-const idEventDef EV_ScriptMissing_setCompressionScale( "setCompressionScale", "ff", '\0' );
-const idEventDef EV_ScriptMissing_resupply( "resupply", "", 'f' );
-const idEventDef EV_ScriptMissing_updateThrusters( "updateThrusters", "b", 'b' );
-const idEventDef EV_ScriptMissing_setOverDriveScale( "setOverDriveScale", "f", '\0' );
-const idEventDef EV_ScriptMissing_chSetOrigin( "chSetOrigin", "v", '\0' );
-const idEventDef EV_ScriptMissing_chSetLineBackColor( "chSetLineBackColor", "fvf", '\0' );
-const idEventDef EV_ScriptMissing_radarSetLayerJammer( "radarSetLayerJammer", "ff", '\0' );
-const idEventDef EV_ScriptMissing_setObjectiveWorldIcon( "setObjectiveWorldIcon", "ofs", '\0' );
-const idEventDef EV_ScriptMissing_getMaxDeployables( "getMaxDeployables", "", 'f' );
-const idEventDef EV_ScriptMissing_getNumDeployables( "getNumDeployables", "", 'f' );
-const idEventDef EV_ScriptMissing_getDeployable( "getDeployable", "f", 'e' );
-const idEventDef EV_ScriptMissing_uncomplete( "uncomplete", "", '\0' );
-const idEventDef EV_ScriptMissing_getPriority( "getPriority", "", 'f' );
-const idEventDef EV_ScriptMissing_setPriority( "setPriority", "f", '\0' );
-const idEventDef EV_ScriptMissing_applyParachute( "applyParachute", "ef", '\0' );
-const idEventDef EV_ScriptMissing_setup( "setup", "", '\0' );
-
 class sdEventDefHelper : public idEventDef {
 public:
 	// what a native event handler receives for an argument of this format
@@ -1199,8 +1129,9 @@ public:
 					}
 
 					// The native handler was compiled for the old definition. Extra script arguments
-					// are ignored, but fewer, or arguments of another kind, reach it as garbage
-					// (sendNetworkEvent, broadcastToolTip and setPlayerPickupRequestTime did).
+					// are ignored, but fewer, or arguments of another kind, reach it as garbage (the
+					// 1.0 DVD scripts' sendNetworkEvent and broadcastToolTip did). The retail 1.5
+					// declarations all fit; tools/ci/check_event_handlers.py checks that without data.
 					bool mismatch = numArgs < oldNumArgs;
 					for ( int a = 0; a < numArgs && a < oldNumArgs && !mismatch; a++ ) {
 						mismatch = ArgKind( oldFormat[ a ] ) != ArgKind( h->formatspec[ a ] );
@@ -1300,51 +1231,6 @@ public:
 		}
 
 		fileSystem->FreeFile( (void*)buffer );
-	}
-};
-
-class sdSysCallBridge : public idClass {
-public:
-	void Event_ConsoleCommand( const char* cmd ) {
-		if ( cmd && *cmd ) {
-			cmdSystem->BufferCommandText( CMD_EXEC_APPEND, cmd );
-		}
-	}
-	void Event_DebugLn( idEntity* ent, const char* text ) {
-		gameLocal.Printf( "%s\n", text ? text : "" );
-	}
-	void Event_PushEndGameStat( idEntity* ent, float value ) {
-	}
-	void Event_SetShaderParm( float parm, float value ) {
-	}
-
-	static void RegisterSysEvents() {
-		struct sysBinding_t {
-			const char* name;
-			eventCallback_t callback;
-		};
-		sysBinding_t bindings[] = {
-			{ "consoleCommand", reinterpret_cast<eventCallback_t>( &sdSysCallBridge::Event_ConsoleCommand ) },
-			{ "debugln", reinterpret_cast<eventCallback_t>( &sdSysCallBridge::Event_DebugLn ) },
-			{ "pushEndGameStat", reinterpret_cast<eventCallback_t>( &sdSysCallBridge::Event_PushEndGameStat ) },
-			{ "setShaderParm", reinterpret_cast<eventCallback_t>( &sdSysCallBridge::Event_SetShaderParm ) },
-		};
-
-		idTypeInfo* threadType = idClass::GetClass( "idThread" );
-		idTypeInfo* sysThreadType = idClass::GetClass( "sdSysCallThread" );
-
-		for ( size_t i = 0; i < sizeof( bindings ) / sizeof( bindings[ 0 ] ); i++ ) {
-			const idEventDef* ev = idEventDef::FindEvent( bindings[ i ].name );
-			if ( ev ) {
-				int num = ev->GetEventNum();
-				if ( threadType && threadType->eventMap && num < idEventDef::NumEventCommands() ) {
-					threadType->eventMap[ num ] = bindings[ i ].callback;
-				}
-				if ( sysThreadType && sysThreadType->eventMap && num < idEventDef::NumEventCommands() ) {
-					sysThreadType->eventMap[ num ] = bindings[ i ].callback;
-				}
-			}
-		}
 	}
 };
 
@@ -1891,7 +1777,6 @@ void idGameLocal::LoadScript( void ) {
 
 	if ( program == NULL ) {
 		sdEventDefHelper::ReconcileEventsWithScript();
-		sdSysCallBridge::RegisterSysEvents();
 		program = new idProgram();
 		program->Init();
 	}
@@ -2362,7 +2247,6 @@ void idGameLocal::Init( void ) {
 	sdEventDefHelper::ReconcileEventsWithScript();
 	idEvent::Init();
 	idClass::InitClasses();
-	sdSysCallBridge::RegisterSysEvents();
 
 	InitConsoleCommands();
 

@@ -2030,17 +2030,28 @@ void sdGameRules::OnNetworkEvent( const char* message ) {
 sdGameRules::Event_SendNetworkEvent
 ================
 */
-void sdGameRules::Event_SendNetworkEvent( idEntity* player, const char* message ) {
-	// see idEntity::GetNetworkEventClient
-	int clientIndex;
-	if ( !idEntity::GetNetworkEventClient( "sdGameRules::Event_SendNetworkEvent", player, message, clientIndex ) ) {
-		return;
+void sdGameRules::Event_SendNetworkEvent( int clientIndex, bool isRepeaterClient, const char* message ) {
+	if ( !isRepeaterClient ) {
+		if ( clientIndex == -1 ) {
+			if ( gameLocal.GetLocalPlayer() != NULL ) {
+				OnNetworkEvent( message );
+			}
+		} else {
+			idPlayer* player = gameLocal.GetClient( clientIndex );
+			if ( player != NULL && gameLocal.IsLocalPlayer( player ) ) {
+				OnNetworkEvent( message );
+			}
+		}
 	}
 
 	sdReliableServerMessage msg( GAME_RELIABLE_SMESSAGE_NETWORKEVENT );
 	msg.WriteLong( NETWORKEVENT_RULES_ID );
 	msg.WriteString( message );
-	msg.Send( sdReliableMessageClientInfo( clientIndex ) );
+	if ( isRepeaterClient ) {
+		msg.Send( sdReliableMessageClientInfoRepeater( clientIndex ) );
+	} else {
+		msg.Send( sdReliableMessageClientInfo( clientIndex ) );
+	}
 }
 
 /*

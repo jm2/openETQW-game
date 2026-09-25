@@ -2912,7 +2912,10 @@ void idBotThreadData::LoadActions( const idMapFile *mapFile ) {
 			}
 
 			actionLoader->activeForever = mapEnt->epairs.GetBool( "activeForever", "0" );
-			actionLoader->validClasses = mapEnt->epairs.GetInt( "validClasses", "0" ); // class bitmask: 1 soldier, 2 medic, 4 engineer, 8 fieldops, 16 covertops
+			// retail 1.5 reads this as a bool, like the SDK (the Mac, Linux and Windows 1.5 game
+			// modules all store 0 or 1), so any tagged action is soldier-only; the class tests
+			// treat it as a bitmask (BotAI_Goals.cpp)
+			actionLoader->validClasses = mapEnt->epairs.GetBool( "validClasses", "0" );
 			actionLoader->active = mapEnt->epairs.GetBool( "active", "0" );
 			actionLoader->radius = mapEnt->epairs.GetInt( "radius", "120.0f" );
 

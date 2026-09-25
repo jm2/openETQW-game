@@ -1364,7 +1364,7 @@ public:
 	void					Event_SetArtyAttackLocation( const idVec3& vector, int artyType );
 	void					Event_SetPlayerKillTarget( idEntity* killTarget );
 	void					Event_SetPlayerRepairTarget( idEntity* repairTarget );
-	void					Event_SetPlayerPickupRequestTime( void );
+	void					Event_SetPlayerPickupRequestTime( idEntity* pickUpTarget );
 	void					Event_SetPlayerCommandRequestTime( void );
 	void					Event_SetTeleporterState( bool destroy );
 	void					Event_SetForceShieldState( bool destroy, idEntity* self );
@@ -1389,7 +1389,6 @@ public:
 	void					Event_SetCarryingObjective( bool isCarrying );
 	void					Event_AddDamageEvent( int time, float angle, float damage, bool updateDirection );
 	void					Event_IsInLimbo( void );
-	void					Event_IsDead( void );
 };
 
 #endif /* !__GAME_PLAYER_H__ */
