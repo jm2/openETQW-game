@@ -11722,7 +11722,8 @@ idGameLocal::EmitSimView
 OpenETQW (M5), with g_simHash: state this tick produced that later ticks read back
 and that a render frame could write into (the engine's docs/frame-path.md, section
 6.9): the view angles after UpdateViewAngles, the tick's logged view origin and
-view-space weapon offset and orientation, and the vehicle's last pushed pose. Printed where RunFrame
+view-space weapon offset and orientation, the vehicle's last pushed pose, and the axis the
+vehicle view last returned (vret; "-" for a view that keeps none). Printed where RunFrame
 logs the pose, from the same view player (the watched player when spectating). A
 history slot without a weapon pose prints wlog=-; without a view player nothing was
 logged, and the line says view=-1 and nothing else. A replay compares it across caps.
@@ -11751,15 +11752,23 @@ void idGameLocal::EmitSimView( idPlayer* viewer ) {
 	idVec3 pushedOrigin = vec3_origin;
 	idAngles pushedAngles = ang_zero;
 	idEntity* proxy = viewer->GetProxyEntity();
+	idStr returnedLog = "-";
 	if ( proxy != NULL ) {
 		pushedOrigin = proxy->GetLastPushedOrigin();
 		pushedAngles = proxy->GetLastPushedAxis().ToAngles();
+		sdTransport* transport = proxy->Cast< sdTransport >();
+		idMat3 returnedAxis;
+		if ( transport != NULL && transport->GetViewForPlayer( viewer ).GetLastReturnedAxis( returnedAxis ) ) {
+			const idAngles r = returnedAxis.ToAngles();
+			returnedLog = va( "(%.2f,%.2f,%.2f)", n( r.pitch ), n( r.yaw ), n( r.roll ) );
+		}
 	}
-	common->Printf( "SIM_VIEW: tick=%d view=%d ang=(%.2f,%.2f,%.2f) olog=(%.2f,%.2f,%.2f) wlog=%s vpush=(%.2f,%.2f,%.2f) vpang=(%.2f,%.2f,%.2f)\n",
+	common->Printf( "SIM_VIEW: tick=%d view=%d ang=(%.2f,%.2f,%.2f) olog=(%.2f,%.2f,%.2f) wlog=%s vpush=(%.2f,%.2f,%.2f) vpang=(%.2f,%.2f,%.2f) vret=%s\n",
 		framenum, viewer->entityNumber,
 		n( viewAngles.pitch ), n( viewAngles.yaw ), n( viewAngles.roll ),
 		n( originLog.x ), n( originLog.y ), n( originLog.z ),
 		weaponLog.c_str(),
 		n( pushedOrigin.x ), n( pushedOrigin.y ), n( pushedOrigin.z ),
-		n( pushedAngles.pitch ), n( pushedAngles.yaw ), n( pushedAngles.roll ) );
+		n( pushedAngles.pitch ), n( pushedAngles.yaw ), n( pushedAngles.roll ),
+		returnedLog.c_str() );
 }
