@@ -11715,26 +11715,35 @@ void idGameLocal::EmitSimStateHash( void ) {
 	// render frame could have written into (docs/frame-path.md, section 6.9): the view
 	// angles after UpdateViewAngles, the tick's logged view origin and view-space weapon
 	// offset, and the vehicle's last pushed pose. A replay compares it across frame caps.
+	// All from the active view player, whose view the unlock logs record (the watched
+	// player when spectating). A history slot without a weapon pose prints wlog=-.
+	idPlayer* viewer = GetLocalViewPlayer();
+	if ( viewer == NULL ) {
+		viewer = player;
+	}
 	idAngles viewAngles = ang_zero;
 	idVec3 originLog = vec3_origin;
-	idVec3 weaponLog = vec3_origin;
 	idVec3 pushedOrigin = vec3_origin;
 	idAngles pushedAngles = ang_zero;
-	if ( player != NULL ) {
-		viewAngles = player->GetViewAngles();
+	idStr weaponLog = "-";
+	if ( viewer != NULL ) {
+		viewAngles = viewer->GetViewAngles();
 		originLog = unlock.originlog[ framenum & 1 ];
-		weaponLog = unlock.weaponOffsetLog[ framenum & 1 ];
-		idEntity* proxy = player->GetProxyEntity();
+		if ( unlock.weaponPoseValid[ framenum & 1 ] ) {
+			const idVec3& w = unlock.weaponOffsetLog[ framenum & 1 ];
+			weaponLog = va( "(%.2f,%.2f,%.2f)", normalizeFloat( w.x ), normalizeFloat( w.y ), normalizeFloat( w.z ) );
+		}
+		idEntity* proxy = viewer->GetProxyEntity();
 		if ( proxy != NULL ) {
 			pushedOrigin = proxy->GetLastPushedOrigin();
 			pushedAngles = proxy->GetLastPushedAxis().ToAngles();
 		}
 	}
-	common->Printf( "SIM_VIEW: tick=%d ang=(%.2f,%.2f,%.2f) olog=(%.2f,%.2f,%.2f) wlog=(%.2f,%.2f,%.2f) vpush=(%.2f,%.2f,%.2f) vpang=(%.2f,%.2f,%.2f)\n",
-		framenum,
+	common->Printf( "SIM_VIEW: tick=%d view=%d ang=(%.2f,%.2f,%.2f) olog=(%.2f,%.2f,%.2f) wlog=%s vpush=(%.2f,%.2f,%.2f) vpang=(%.2f,%.2f,%.2f)\n",
+		framenum, viewer != NULL ? viewer->entityNumber : -1,
 		normalizeFloat( viewAngles.pitch ), normalizeFloat( viewAngles.yaw ), normalizeFloat( viewAngles.roll ),
 		normalizeFloat( originLog.x ), normalizeFloat( originLog.y ), normalizeFloat( originLog.z ),
-		normalizeFloat( weaponLog.x ), normalizeFloat( weaponLog.y ), normalizeFloat( weaponLog.z ),
+		weaponLog.c_str(),
 		normalizeFloat( pushedOrigin.x ), normalizeFloat( pushedOrigin.y ), normalizeFloat( pushedOrigin.z ),
 		normalizeFloat( pushedAngles.pitch ), normalizeFloat( pushedAngles.yaw ), normalizeFloat( pushedAngles.roll ) );
 }
