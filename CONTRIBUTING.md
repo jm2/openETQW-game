@@ -26,11 +26,11 @@ get CI back: both stay private until the owner decides to publish.
    repository against this branch:
    `ETQW_DATA_PATH="$HOME/etqw_data" meson test -C build -j 1`
    (replace `$HOME/etqw_data` with the root of a full retail ET:QW install patched to 1.5:
-   `base/` must hold `pak000`–`pak008.pk4` and `zpak_english000`–`003`; the unpatched DVD set is
-   not supported). Check that the retail-data tests ran rather than skipped: a run that skips
-   them does not meet this gate. Put the result in the PR with the host, OS, architecture,
-   commit and data set. The tests use fixed
-   UDP ports, so run one suite at a time on a host.
+   `base/` must hold `pak000`–`pak008.pk4`; the language paks, such as `zpak_english000`–`003`,
+   are optional (they carry the dialogue); the unpatched DVD set is not supported). Check that
+   the retail-data tests ran rather than skipped: a run that skips them does not meet this gate.
+   Put the result in the PR with the host, OS, architecture, commit and data set. The tests use
+   fixed UDP ports, so run one suite at a time on a host.
 3. **Independent review.** Someone other than the author (a person or a separate review
    session) reads the diff and the raw test output, not only the summary.
 4. **CodeRabbit.** CodeRabbit reviews each PR. It currently allows about one review per
