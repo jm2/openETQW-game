@@ -22,9 +22,10 @@ silently turn a gate into a no-op:
   or a type it does not know as an integer) where its event definition
   passes an integer fails, as does a binding it cannot resolve; each binding
   uses the definition in its own file; an inherited or inline handler
-  matching its definition passes. An events.script declaration with fewer
-  arguments than, or an argument of another kind from, its native definition
-  fails, as does one with no native definition or a missing events.script.
+  matching its definition passes. An events.script declaration with another
+  number of arguments, an argument of another kind or another return type
+  than its native definition fails, as does one with no native definition or
+  a missing events.script.
 
 The copyleft marker strings are assembled from fragments so this file does
 not trip check_no_gpl.py itself.  Exit codes: 0 pass, 1 a case failed.
@@ -311,16 +312,24 @@ def test_event_handlers(scratch: Path) -> None:
         (root / "src" / "game").mkdir(parents=True)
         (root / "src" / "game" / "Thing.cpp").write_text(
             'const idEventDef EV_Send( "send", "dbs" );\n'
-            'const idEventDef EV_Tip( "tip", "des" );\n', encoding="utf-8")
+            'const idEventDef EV_Tip( "tip", "des" );\n'
+            'const idEventDef EV_Count( "count", NULL, \'f\' );\n'
+            'const idEventDef EV_Pick( "pick", "" );\n', encoding="utf-8")
         (root / "src" / "compiledscript" / "scripts").mkdir(parents=True)
         (root / "src" / "compiledscript" / "scripts" / "events.script").write_text(
             "// events\nscriptEvent void send( float client, boolean repeater, string message );\n" + declaration,
             encoding="utf-8")
         return run_tool("check_event_handlers.py", "--root", str(root))
 
-    code, out = script_tree("ok", "scriptEvent void tip( float index, entity p, string text, float extra );\n")
-    check(code == 0 and "2 script declarations, 0 mismatch(es)" in out,
-          "script declarations that fit the native definitions pass (float -> integer, extra arguments)", out)
+    code, out = script_tree("ok", "scriptEvent void tip( float index, entity p, string text );\n"
+                            "scriptEvent float count();\n")
+    check(code == 0 and "3 script declarations, 0 mismatch(es)" in out,
+          "script declarations that fit the native definitions pass (float -> integer; NULL format with a return)", out)
+    code, out = script_tree("more", "scriptEvent void pick( entity target );\n")
+    check(code == 1 and "'pick' ( e ) does not match" in out and "declares 1 argument(s)" in out,
+          "a native definition that drops an argument the script passes fails", out)
+    code, out = script_tree("return", "scriptEvent vector count();\n")
+    check(code == 1 and "'count' returns vector" in out, "a return type other than the native one fails", out)
     code, out = script_tree("kind", "scriptEvent void tip( float index, entity p, wstring text );\n")
     check(code == 1 and "'tip' ( few ) does not match" in out, "a wstring for a native string fails", out)
     code, out = script_tree("fewer", "scriptEvent void tip( float index, entity p );\n")

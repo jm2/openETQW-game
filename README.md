@@ -32,7 +32,7 @@ The release gate, and which of its items are still open, is described in the eng
 
 ## Retail game data is required
 
-The game module needs the data from a full retail ET:QW install patched to 1.5. You must own the game. So far it has been tested only with the unpatched English DVD paks (`pak000`–`pak004`, `zpak_english000`), not with the 1.5 patch paks. The branches of both repositories contain no retail game data, executables or media, and none may be added. One retail image was purged from both histories on 2026-09-24; GitHub still keeps it in pull-request refs until those are removed (see the engine's `STATUS.md`, release gate 5). The engine does not yet refuse to run without a full retail install; that check is one of the release-gate items.
+The game module needs the data from a full retail ET:QW install patched to 1.5 (`pak000`–`pak008`; English tested). You must own the game. Until 2026-09-25 it was tested only on the unpatched English DVD paks, and some script-event definitions had been changed to fit those older scripts; they are back to the SDK definitions, which the retail 1.5 scripts use. The unpatched DVD data is not supported. The branches of both repositories contain no retail game data, executables or media, and none may be added. One retail image was purged from both histories on 2026-09-24; GitHub still keeps it in pull-request refs until those are removed (see the engine's `STATUS.md`, release gate 5). The engine does not yet refuse to run without a full retail install; that check is one of the release-gate items.
 
 ## Network play: OpenETQW only
 

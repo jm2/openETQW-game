@@ -492,7 +492,7 @@ const idEventDef EV_Player_SetSmokeNadeState( "setSmokeNadeState", "e" );
 const idEventDef EV_Player_SetArtyAttackLocation( "setArtyAttackLocation", "vd" );
 const idEventDef EV_Player_SetPlayerKillTarget( "setPlayerKillTarget", "e" );
 const idEventDef EV_Player_SetPlayerRepairTarget( "setPlayerRepairTarget", "e" );
-const idEventDef EV_Player_SetPlayerPickupRequestTime( "setPlayerPickupRequestTime", "e" );
+const idEventDef EV_Player_SetPlayerPickupRequestTime( "setPlayerPickupRequestTime", "E" );	// the 1.5 script passes $null_entity for "anyone" (player_context.script)
 const idEventDef EV_Player_SetPlayerCommandRequestTime( "setPlayerCommandRequestTime" );
 const idEventDef EV_Player_SetTeleporterState( "setTeleporterState", "b" );
 const idEventDef EV_Player_SetRepairDroneState( "setRepairDroneState", "b" );

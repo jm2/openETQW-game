@@ -1117,7 +1117,9 @@ public:
 								h->formatspec[ a ] = D_EVENT_FLOAT;
 							}
 						} else if ( fmt[ a ] == D_EVENT_HANDLE ) {
-							h->formatspec[ a ] = ( oldChar == D_EVENT_INTEGER ) ? D_EVENT_INTEGER : D_EVENT_HANDLE;
+							// a script handle stays a handle: the compiler types 'h' as the script's
+							// handle type, and it reaches an integer parameter as an integer
+							h->formatspec[ a ] = D_EVENT_HANDLE;
 						} else if ( oldChar == D_EVENT_ENTITY_NULL && fmt[ a ] == D_EVENT_ENTITY ) {
 							h->formatspec[ a ] = D_EVENT_ENTITY_NULL;
 						} else {
