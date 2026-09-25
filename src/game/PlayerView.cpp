@@ -280,6 +280,71 @@ bool idPlayerView::SkipWorldRender( void ) {
 
 /*
 ==================
+LogFramePose
+
+g_logFramePoses N (OpenETQW test diagnostic): one FRAME_POSE line for every main-view
+draw, printed just before RenderScene so it shows what is drawn: the view, the viewmodel,
+the seat and up to N other players. Entity poses come from the render world's copies of
+the entity definitions, not from the entities, because an entity that skipped Present
+still draws its last pushed definition. Read-only.
+==================
+*/
+static void AppendRenderPose( idStr& line, const char* key, qhandle_t handle ) {
+	const renderEntity_t* re = ( handle >= 0 ) ? gameRenderWorld->GetRenderEntity( handle ) : NULL;
+	if ( re == NULL ) {
+		line += va( " %s=-", key );
+		return;
+	}
+	const idAngles a = re->axis.ToAngles();
+	line += va( " %s=%.3f,%.3f,%.3f,%.3f,%.3f,%.3f", key, re->origin.x, re->origin.y, re->origin.z, a.pitch, a.yaw, a.roll );
+}
+
+static void LogFramePose( idPlayer* viewPlayer, const renderView_t* view ) {
+	static int drawSerial = 0;
+	// the engine's monotonic high-resolution clock (mach_absolute_time, CLOCK_MONOTONIC)
+	const long long nowUsec = static_cast< long long >( sys->GetClockTicks() * 1000000.0 / sys->ClockTicksPerSecond() );
+	const bool unlocked = gameLocal.unlock.unlockedDraw;
+	const idAngles viewAngles = view->viewaxis.ToAngles();
+
+	idStr line = va( "FRAME_POSE: n=%d us=%lld cap=%d gt=%d fn=%d ud=%d cu=%d fr=%.4f vp=%d view=%.3f,%.3f,%.3f,%.3f,%.3f,%.3f",
+		drawSerial++, nowUsec, cvarSystem->GetCVarInteger( "com_maxFPS" ), gameLocal.time, gameLocal.framenum,
+		unlocked ? 1 : 0, gameLocal.unlock.canUnlockFrames ? 1 : 0, unlocked ? gameLocal.unlock.interpFraction : -1.0f,
+		viewPlayer != NULL ? viewPlayer->entityNumber : -1,
+		view->vieworg.x, view->vieworg.y, view->vieworg.z, viewAngles.pitch, viewAngles.yaw, viewAngles.roll );
+
+	const idWeapon* weapon = viewPlayer != NULL ? viewPlayer->GetWeapon() : NULL;
+	AppendRenderPose( line, "wpn", weapon != NULL ? const_cast< idWeapon* >( weapon )->GetModelDefHandle() : -1 );
+	idEntity* proxy = viewPlayer != NULL ? viewPlayer->GetProxyEntity() : NULL;
+	if ( proxy != NULL ) {
+		line += va( " seat=%d:%d", proxy->entityNumber, viewPlayer->GetProxyPositionId() );
+	} else {
+		line += " seat=-";
+	}
+	AppendRenderPose( line, "veh", proxy != NULL ? proxy->GetModelDefHandle() : -1 );
+
+	int logged = 0;
+	for ( int i = 0; i < MAX_CLIENTS && logged < g_logFramePoses.GetInteger(); i++ ) {
+		idPlayer* other = gameLocal.GetClient( i );
+		if ( other == NULL || other == viewPlayer ) {
+			continue;
+		}
+		const qhandle_t handle = other->GetModelDefHandle();
+		const renderEntity_t* re = ( handle >= 0 ) ? gameRenderWorld->GetRenderEntity( handle ) : NULL;
+		idEntity* otherProxy = other->GetProxyEntity();
+		if ( re == NULL ) {
+			line += va( " c%d=-:aor=%d:hid=%d:veh=%d", i, other->aorFlags, other->IsHidden() ? 1 : 0,
+				otherProxy != NULL ? otherProxy->entityNumber : -1 );
+		} else {
+			line += va( " c%d=%.3f,%.3f,%.3f,%.3f:aor=%d:hid=%d:veh=%d", i, re->origin.x, re->origin.y, re->origin.z,
+				re->axis.ToAngles().yaw, other->aorFlags, other->IsHidden() ? 1 : 0, otherProxy != NULL ? otherProxy->entityNumber : -1 );
+		}
+		logged++;
+	}
+	gameLocal.Printf( "%s\n", line.c_str() );
+}
+
+/*
+==================
 idPlayerView::SingleView
 ==================
 */
@@ -345,6 +410,10 @@ void idPlayerView::SingleView( idPlayer* viewPlayer, const renderView_t* view ) 
 		gameRenderWorld->UpdatePortalOccTestView( view->viewID );
 
 		UpdateOcclusionQueries( view );
+
+		if ( g_logFramePoses.GetInteger() > 0 ) {
+			LogFramePose( viewPlayer, view );
+		}
 
 		// draw the game
 		gameRenderWorld->RenderScene( view );
