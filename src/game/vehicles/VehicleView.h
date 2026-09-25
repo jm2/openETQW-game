@@ -50,6 +50,10 @@ public:
 
 	virtual const idAngles			GetRequiredViewAngles( const idVec3& aimPosition ) const;
 
+	// OpenETQW (M5): the axis a damped view last returned, which the next tick's view
+	// clamp reads back (free-pivot seats); false for views that keep none
+	virtual bool					GetLastReturnedAxis( idMat3& axis ) const { return false; }
+
 public:
 	static void						Startup( void );
 	static void						Shutdown( void );
@@ -100,6 +104,8 @@ public:
 	virtual void					CalculateViewPos( idPlayer* player, idVec3& origin, idMat3& axis, bool fullUpdate );
 
 	virtual const idAngles			GetRequiredViewAngles( const idVec3& aimPosition ) const;
+
+	virtual bool					GetLastReturnedAxis( idMat3& axis ) const { axis = lastReturnedAxis; return true; }
 
 protected:
 	virtual void					GetDampingPos( idVec3& pos ) const;
