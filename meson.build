@@ -301,3 +301,8 @@ game_module = shared_library(
   link_depends: game_link_depends,
   install: true,
 )
+
+# Licence texts for every package (owner decision, 2026-09-25): the SDK EULA must
+# accompany each copy (EULA section 5); LICENSE explains the split and names the RTF
+# as the authoritative text.
+install_data('LICENSE', 'EULA_SDK_ETQW.txt', 'legal' / 'EULA SDK ETQW.rtf', install_dir: 'licenses' / 'openETQW-game')

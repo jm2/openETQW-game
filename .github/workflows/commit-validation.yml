@@ -270,6 +270,9 @@ jobs:
             build/game_*.so
             build/game_*.dylib
             build/game_*.dll
+            LICENSE
+            EULA_SDK_ETQW.txt
+            legal/EULA SDK ETQW.rtf
             build/meson-logs/meson-log.txt
             .tmp/ci/
           if-no-files-found: warn
