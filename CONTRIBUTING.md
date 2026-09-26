@@ -25,9 +25,12 @@ get CI back: both stay private until the owner decides to publish.
    or the network gets the engine's full Meson suite with retail data, run in the engine
    repository against this branch:
    `ETQW_DATA_PATH="$HOME/etqw_data" meson test -C build -j 1`
-   (replace `$HOME/etqw_data` with the directory that contains `base/pak000.pk4`).
-   Put the result in the PR with the host, OS, architecture and commit. The tests use fixed
-   UDP ports, so run one suite at a time on a host.
+   (replace `$HOME/etqw_data` with the root of a full retail ET:QW install patched to 1.5:
+   `base/` must hold `pak000`–`pak008.pk4`; the language paks, such as `zpak_english000`–`003`,
+   are optional (they carry the dialogue); the unpatched DVD set is not supported). Check that
+   the retail-data tests ran rather than skipped: a run that skips them does not meet this gate.
+   Put the result in the PR with the host, OS, architecture, commit and data set. The tests use
+   fixed UDP ports, so run one suite at a time on a host.
 3. **Independent review.** Someone other than the author (a person or a separate review
    session) reads the diff and the raw test output, not only the summary.
 4. **CodeRabbit.** CodeRabbit reviews each PR. It currently allows about one review per
@@ -66,7 +69,8 @@ is now `24f58bf` (was `285eaa1`), engine `main` is `84a224b` (was `2104090`).
   no longer exist. Engine commit IDs quoted in older engine docs are pre-rewrite IDs too.
 - GitHub still keeps `refs/pull/1/head` in each repository, pointing at the old history
   (game `9b3a02b`, engine `53d0172`). Removing it needs GitHub Support or new
-  repositories; that is an open owner decision.
+  repositories. The owner deferred it on 2026-09-25 and expects to recreate the repositories;
+  when that happens, check that no ref reaches the purged bitmap.
 
 ## What never goes in
 - Retail game data, retail executables, PDBs, raw disassembly or decompiler output, and
