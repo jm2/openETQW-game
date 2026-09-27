@@ -5246,7 +5246,7 @@ void idGameLocal::RunFrame( const usercmd_t *clientCmds, int elapsedTime ) {
 				} else if ( tick >= 71 && tick <= 90 ) {
 					usercmds[ p->entityNumber ].buttons.btn.attack = 1;
 				} else if ( tick == 91 ) {
-					cmdSystem->BufferCommandText( CMD_EXEC_NOW, va( "enterVehicle %d", p->entityNumber ) );
+					cmdSystem->BufferCommandText( CMD_EXEC_NOW, va( "enterVehicle %d vehicle_titan", p->entityNumber ) );
 				} else if ( tick >= 92 && tick <= 104 ) {
 					usercmds[ p->entityNumber ].forwardmove = 127;
 				} else if ( tick == 105 ) {
