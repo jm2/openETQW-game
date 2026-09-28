@@ -36,11 +36,7 @@
 	#pragma warning( disable : 4750 )			// function using _alloca inlined in a loop
 
 	#ifndef WINVER
-#if defined( ID_DEDICATED ) || defined( GAME_DLL )
-		#define WINVER 0x0500
-#else
-		#define WINVER 0x0501
-#endif
+		#define WINVER 0x0A00				// Windows 10, the oldest the port supports (SDL3, Vulkan 1.3)
 	#endif
 
 	#ifndef _WIN32_WINNT
