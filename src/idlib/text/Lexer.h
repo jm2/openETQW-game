@@ -306,7 +306,6 @@ ID_INLINE int idLexer::GetLineNum( void ) const {
 }
 
 ID_INLINE void idLexer::SetFlags( int flags ) {
-	assert( !loaded );		// all flags must be set before loading the file
 	this->flags = flags;
 }
 
