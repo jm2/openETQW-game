@@ -353,6 +353,7 @@ void sdUserGroupManagerLocal::Init( void ) {
 
 	userGroups.Clear();
 	userGroups.Alloc().SetName( "<DEFAULT>" );
+	defaultGroup = 0;
 
 	configs.Clear();
 	votes.Clear();
