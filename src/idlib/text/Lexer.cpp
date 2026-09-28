@@ -254,6 +254,7 @@ idLexer::SetPunctuations
 ================
 */
 void idLexer::SetPunctuations( const punctuation_t *p ) {
+	assert( !loaded );		// punctuations must be set before loading the file
 #ifdef PUNCTABLE
 	if ( p != NULL ) {
 		CreatePunctuationTable( p );
