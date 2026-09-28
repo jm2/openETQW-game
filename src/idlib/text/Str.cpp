@@ -224,7 +224,9 @@ idStr::FreeData
 void idStr::FreeData( void ) {
 	bool	staticBuffer = alloced < 0;
 	if ( data && !staticBuffer ) {
-		stringDataAllocator->Free( data );
+		if ( stringDataAllocator ) {
+			stringDataAllocator->Free( data );
+		}
 		data = baseBuffer;
 		alloced = -STR_ALLOC_BASE;
 		len = 0;
