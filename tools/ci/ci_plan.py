@@ -95,6 +95,7 @@ MSVC_CONTRACT = (
     "never run on a hosted runner; the engine and its tests build and pass locally with MSVC "
     "(VS 2026, MSVC 19.51, since 2026-09-28)"
 )
+LINUX_SANITIZER_CONTRACT = "never run on a hosted runner; the engine tests have not run under ASan+UBSan on Linux"
 
 TABLES: dict[str, list[Leg]] = {
     "build": [
@@ -134,7 +135,7 @@ TABLES: dict[str, list[Leg]] = {
             "apple-clang", "clang", "clang++", buildtype="debugoptimized", sanitize="address,undefined"),
         Leg("linux-x64-clang-asan-ubsan", "Linux x64 ASan+UBSan (Clang)", "ubuntu-24.04", "linux", "x64", "clang",
             "clang", "clang++", buildtype="debugoptimized", sanitize="address,undefined",
-            experimental=True, reason=LINUX_CONTRACT),
+            experimental=True, reason=LINUX_SANITIZER_CONTRACT),
     ],
 }
 
