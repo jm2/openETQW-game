@@ -8,7 +8,7 @@ project(
   default_options: [
     'c_std=c11',
     'cpp_std=c++17',
-    'b_vscrt=static_from_buildtype',
+    'b_vscrt=from_buildtype',
   ],
 )
 

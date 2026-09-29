@@ -4020,7 +4020,8 @@ void idGameLocal::MapClear( bool clearClients ) {
 		}
 		listEmpty = true;
 		for( int i = ( clearClients ? 0 : MAX_CLIENTS ); i < MAX_GENTITIES; i++ ) {
-			if ( !entities[ i ] ) {
+			// the client physics entity goes after the client entities, below
+			if ( !entities[ i ] || i == ENTITYNUM_CLIENT ) {
 				continue;
 			}
 			listEmpty = false;
@@ -4032,6 +4033,21 @@ void idGameLocal::MapClear( bool clearClients ) {
 			assert( !entities[ i ] );
 			spawnIds[ i ] = -1;
 		}
+	}
+
+	// Client moveables and parabolic client projectiles use the client physics
+	// entity (entities[ ENTITYNUM_CLIENT ]) as their physics object's 'self', and
+	// ~idPhysics_Base dereferences 'self'.  Delete them while it still exists.
+	for( int i = 0; i < MAX_CENTITIES; i++ ) {
+		delete clientEntities[ i ];
+		assert( !clientEntities[ i ] );
+		clientSpawnIds[ i ] = -INITIAL_SPAWN_COUNT;
+	}
+
+	if ( entities[ ENTITYNUM_CLIENT ] ) {
+		entities[ ENTITYNUM_CLIENT ]->ProcessEvent( &EV_Remove );
+		assert( !entities[ ENTITYNUM_CLIENT ] );
+		spawnIds[ ENTITYNUM_CLIENT ] = -1;
 	}
 
 	entityHash.Clear( 1024, MAX_GENTITIES );
@@ -4062,12 +4078,6 @@ void idGameLocal::MapClear( bool clearClients ) {
 	if ( editEntities ) {
 		delete editEntities;
 		editEntities = NULL;
-	}
-
-	for( int i = 0; i < MAX_CENTITIES; i++ ) {
-		delete clientEntities[ i ];
-		assert( !clientEntities[ i ] );
-		clientSpawnIds[ i ] = -INITIAL_SPAWN_COUNT;
 	}
 
 	if ( debugLogFile != NULL ) {

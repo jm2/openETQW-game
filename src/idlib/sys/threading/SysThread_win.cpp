@@ -149,7 +149,9 @@ void sdSysThread::SetName( threadHandle_t& handle, const char* name ) {
 
 	if ( info.dwThreadID != 0 ) {
 		__try {
-			::RaiseException( 0x406D1388, 0, sizeof( info ) / sizeof( DWORD ), (ULONG_PTR *)&info );
+			// RaiseException copies nNumberOfArguments ULONG_PTRs, so the count is
+			// in ULONG_PTR units: sizeof( DWORD ) reads 24 bytes past 'info' on x64.
+			::RaiseException( 0x406D1388, 0, sizeof( info ) / sizeof( ULONG_PTR ), (ULONG_PTR *)&info );
 		}
 		__except( EXCEPTION_CONTINUE_EXECUTION ) {
 		}

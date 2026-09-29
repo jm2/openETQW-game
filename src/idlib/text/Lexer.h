@@ -305,8 +305,10 @@ ID_INLINE int idLexer::GetLineNum( void ) const {
 	return this->line;
 }
 
+// May be called on a loaded source: idParser::SetFlags passes new flags to every
+// lexer on its script stack, and the decl parsers set theirs right after loading.
+// Flags only affect how later tokens are read.
 ID_INLINE void idLexer::SetFlags( int flags ) {
-	assert( !loaded );		// all flags must be set before loading the file
 	this->flags = flags;
 }
 

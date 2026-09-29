@@ -43,10 +43,6 @@ public:
 	typedef char CharType;
 	typedef idStr StrType;
 	static const CharType terminator;
-
-	static CharType* StrnCpy( CharType* dest, const CharType * source, size_t count ) {
-		return strncpy( dest, source, count );
-	}
 };
 
 
@@ -56,10 +52,6 @@ public:
 	typedef wchar_t					CharType;
 	typedef idWStr					StrType;
 	static const CharType terminator;
-
-	static CharType* StrnCpy( CharType* dest, const CharType * source, size_t count ) {
-		return wcsncpy( dest, source, count );
-	}
 };
 
 
@@ -176,12 +168,13 @@ ID_INLINE void sdStringBuilder< StrType, CharAllocator >::EnsureAlloced( int amo
 	newbuffer = Allocator::Alloc( alloced );
 
 	if ( data != NULL ) {
-		if ( len ) {
-			Traits::StrnCpy( newbuffer, data, len );
-			newbuffer[ len ] = '\0';
-		} else {
-			newbuffer[ 0 ] = '\0';
-		}
+		// Copy exactly the len characters held; this is not a strncpy/wcsncpy job
+		// (no NUL search, no zero padding).  MSVC 19.51 at /O2 also miscompiles the
+		// inlined strncpy( newbuffer, data, len ) for a builder on the stack: it
+		// loads the int len as a QWORD, so the count's high half is 'alloced' and
+		// strncpy zero-pads gigabytes past newbuffer.
+		memcpy( newbuffer, data, len * sizeof( CharType ) );
+		newbuffer[ len ] = '\0';
 	}
 
 	if( data != &baseBuffer[ 0 ] ) {
