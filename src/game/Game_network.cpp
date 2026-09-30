@@ -3798,6 +3798,7 @@ void idGameLocal::ClientPrediction( const usercmd_t* clientCmds, const usercmd_t
 	} else {
 		unlock.canUnlockFrames = false;
 	}
+	LatchSeatPresentation( localPlayer );
 
 	unlock.unlockedDraw = false;
 	interpolateEntities.Clear();

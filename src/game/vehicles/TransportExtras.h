@@ -50,6 +50,7 @@ public:
 	void							AddView( const positionViewMode_t& parms );
 	const sdVehicleView&			GetViewParms( void ) const;
 	sdVehicleView&					GetViewParms( void );
+	const sdVehicleView*			GetView( int index ) const { return views[ index ]; }	// OpenETQW (M5 step 13): listSeatViews; 0 <= index < GetNumViewModes()
 	void							CycleCamera( void );
 
 	bool							GetTakesDamage( void ) const { return takesDamage; }

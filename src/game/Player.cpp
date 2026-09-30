@@ -22,6 +22,7 @@ static char THIS_FILE[] = __FILE__;
 #include "vehicles/Transport.h"
 #include "vehicles/VehicleView.h"
 #include "vehicles/JetPack.h"
+#include "vehicles/SeatGate.h"
 #include "vehicles/VehicleWeapon.h"
 #include "Projectile.h"
 #include "WorldSpawn.h"
@@ -8790,6 +8791,77 @@ bool idPlayer::IsFPSUnlock( void ) {
 	}
 
 	if ( viewPlayer->GetProxyEntity() != NULL ) {
+		return false;
+	}
+
+	if ( !viewPlayer->playerFlags.noclip ) {
+		if ( viewPlayer->remoteCamera.IsValid() ) {
+			return false;
+		}
+
+		if ( gameLocal.GetCamera() ) {
+			return false;
+		}
+	}
+
+	if ( ( viewPlayer == localPlayer ) && gameLocal.localPlayerProperties.GetDeployMenu() && gameLocal.localPlayerProperties.GetDeployMenu()->Active() ) {
+		return false;
+	}
+	
+	if ( pm_thirdPerson.GetBool() ) {
+		return false;
+	}
+	
+	if ( this == localViewPlayer ) {
+		if ( viewPlayer->IsDead() ) {
+			return false;
+		} else if ( viewPlayer->IsInLimbo() ) {
+			return false;
+		}
+	}
+
+	if ( localViewPlayer->IsProne() ) {
+		return false;
+	}
+
+	return true;
+}
+
+/*
+=================
+idPlayer::IsSeatPresentationAllowed
+
+OpenETQW (M5 step 13, decision D10): whether the seat the local view is in may get a
+presentation-only view (step 14). IsFPSUnlock stays as retail 1.5 has it (no per-frame
+view in any vehicle seat); this is a separate predicate. Its checks are IsFPSUnlock's,
+copied in the same order, except the proxy check: in its place the seat gate
+(sdSeatGate::AllowsSeat) requires a transport seat that is not teleporting, a recipe for
+its view class and a key listed in g_unlock_vehicleSeats. On foot it is always false.
+Keep the copied checks in step with IsFPSUnlock above.
+=================
+*/
+bool idPlayer::IsSeatPresentationAllowed( void ) {
+	idPlayer* viewPlayer = GetViewClient();
+	idPlayer* localPlayer = gameLocal.GetLocalPlayer();
+	idPlayer* localViewPlayer = gameLocal.GetLocalViewPlayer();
+
+	if ( this != localPlayer ) {
+		return false;
+	}
+	
+	if ( localViewPlayer == NULL ) {
+		return false;
+	}
+
+	if ( gameLocal.GetActiveViewer() != this ) {
+		return false;
+	}
+
+	if ( teleportEntity.IsValid() ) {
+		return false;
+	}
+
+	if ( !sdSeatGate::AllowsSeat( viewPlayer ) ) {
 		return false;
 	}
 

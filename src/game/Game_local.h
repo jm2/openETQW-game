@@ -741,6 +741,14 @@ public:
 		idMat3					weaponAxis;
 		idVec3					weaponGUIOrigin;
 		idMat3					weaponGUIAxis;
+		// OpenETQW (M5 step 13): the seat gate (idPlayer::IsSeatPresentationAllowed), latched
+		// with canUnlockFrames at each tick entry, and the seat it was taken for (-1 each
+		// without a proxy); RecheckSeatPresentation compares them at draw time. No reader
+		// yet: step 14's seat view is the first.
+		bool					seatAllowed;
+		int						seatProxySpawnId;
+		int						seatPositionId;
+		int						seatViewMode;
 	} unlock;
 
 	int						cumulativeEventsServiced;
@@ -883,6 +891,10 @@ public:
 	void					EmitVehicleTrace( void );
 	void					RunVehicleDeterminismSchedule( usercmd_t* cmds );
 	void					EmitSimView( idPlayer* viewer );
+	void					LatchSeatPresentation( idPlayer* localPlayer );	// vehicles/SeatGate.cpp
+	bool					RecheckSeatPresentation( void );
+	void					EmitSeatGate( void );
+	void					RunSeatGateSchedule( usercmd_t* cmds );
 	virtual void			WriteClientNetworkInfo( idFile* file );
 	virtual void			ReadClientNetworkInfo( idFile* file );
 	virtual void			WriteUserInfo( idBitMsg& msg, const idDict& info );

@@ -610,6 +610,7 @@ public:
 	void						ClearDeathSound( void ) { health = NO_DEATH_SOUND; }
 
 	bool						IsFPSUnlock( void );
+	bool						IsSeatPresentationAllowed( void );	// OpenETQW (M5 step 13): IsFPSUnlock's checks, with the seat gate for its proxy check
 
 	bool						IsCarryingObjective( void ) const { return playerFlags.carryingObjective; }
 

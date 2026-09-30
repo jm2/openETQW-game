@@ -1648,6 +1648,10 @@ void idGameLocal::Clear( void ) {
 	unlock.interpFraction = 0.0f;
 	unlock.lastFraction = 0.0f;
 	unlock.lastFractionFrame = -1;
+	unlock.seatAllowed = false;
+	unlock.seatProxySpawnId = -1;
+	unlock.seatPositionId = -1;
+	unlock.seatViewMode = -1;
 
 	globalMaterial = NULL;
 	newInfo.Clear();
@@ -5139,7 +5143,7 @@ idCVar g_fpuExceptions( "g_fpuExceptions", "0", CVAR_BOOL | CVAR_GAME | CVAR_NOC
 
 idCVar g_debugStatsSetup( "g_debugStatsSetup", "0", CVAR_GAME | CVAR_BOOL | CVAR_NOCHEAT, "prints any problems with calculating a client rank when they connect to a server" );
 idCVar g_simHash( "g_simHash", "0", CVAR_GAME | CVAR_BOOL, "emit authoritative simulation state hash (SIM_HASH line) every tick; off by default, tests that need it set it explicitly" );
-idCVar g_determinismTest( "g_determinismTest", "0", CVAR_GAME | CVAR_INTEGER, "execute a tick-indexed determinism test input stream: 1 on foot, then a titan; 2 a ground vehicle, then an aircraft (M5 step 5a)" );
+idCVar g_determinismTest( "g_determinismTest", "0", CVAR_GAME | CVAR_INTEGER, "execute a tick-indexed determinism test input stream: 1 on foot, then a titan; 2 a ground vehicle, then an aircraft (M5 step 5a); 3 a tour of vehicle seats for the seat gate (M5 step 13)" );
 
 /*
 ================
@@ -5153,6 +5157,7 @@ void idGameLocal::RunFrame( const usercmd_t *clientCmds, int elapsedTime ) {
 	} else {
 		unlock.canUnlockFrames = false;
 	}
+	LatchSeatPresentation( localPlayer );
 
 	unlock.unlockedDraw = false;
 	interpolateEntities.Clear();
@@ -5239,6 +5244,8 @@ void idGameLocal::RunFrame( const usercmd_t *clientCmds, int elapsedTime ) {
 
 		if ( g_determinismTest.GetInteger() == 2 ) {
 			RunVehicleDeterminismSchedule( usercmds );
+		} else if ( g_determinismTest.GetInteger() == 3 ) {
+			RunSeatGateSchedule( usercmds );
 		} else if ( g_determinismTest.GetInteger() == 1 ) {
 			int tick = framenum;
 			idPlayer* p = GetLocalPlayer();
@@ -5445,6 +5452,7 @@ void idGameLocal::RunFrame( const usercmd_t *clientCmds, int elapsedTime ) {
 
 	EmitSimStateHash();
 	EmitVehicleTrace();
+	EmitSeatGate();
 
 	demoManager.EndDemoFrame();
 
@@ -11714,6 +11722,83 @@ void idGameLocal::RunVehicleDeterminismSchedule( usercmd_t* cmds ) {
 	} else if ( tick == 306 ) {
 		cmdSystem->BufferCommandText( CMD_EXEC_NOW, va( "exitVehicle %d", p->entityNumber ) );
 	} else if ( tick >= 310 ) {
+		cmdSystem->BufferCommandText( CMD_EXEC_APPEND, "quit\n" );
+	}
+}
+
+/*
+===============
+idGameLocal::RunSeatGateSchedule
+
+OpenETQW (M5 step 13), g_determinismTest 3: a tick-indexed tour of vehicle seats for
+the engine's seat-gate test. The player enters the badger from on foot (the tour's only
+entry from on foot), cycles its camera twice, swaps seat and cycles again; then moves to
+the icarus (a jetpack) and cycles its camera, and to the titan, swaps seat and cycles;
+listSeatViews prints every vehicle's seats at tick 121, and the player gets out at 125.
+Each move between vehicles is an exit and an entry in the same tick, so no on-foot tick
+lies between seats, and never an entry from inside another vehicle:
+PlacePlayerInPosition binds the player to the new seat before SetProxyEntity calls the
+old vehicle's OnExit. As in schedule 2, the schedule replaces the live input from tick
+21 on (no moves, no buttons but run, the view angles of tick 21), so that input the
+client happens to send cannot change the run.
+===============
+*/
+void idGameLocal::RunSeatGateSchedule( usercmd_t* cmds ) {
+	const int tick = framenum;
+	idPlayer* p = GetLocalPlayer();
+	if ( p == NULL ) {
+		p = GetClient( 0 );
+	}
+	if ( p == NULL ) {
+		return;
+	}
+	usercmd_t& cmd = cmds[ p->entityNumber ];
+
+	static short baseAngles[ 3 ];
+	static bool baseAnglesValid = false;
+	if ( tick <= 20 ) {
+		baseAnglesValid = false;
+	} else {
+		if ( !baseAnglesValid ) {
+			baseAngles[ 0 ] = cmd.angles[ 0 ];
+			baseAngles[ 1 ] = cmd.angles[ 1 ];
+			baseAngles[ 2 ] = cmd.angles[ 2 ];
+			baseAnglesValid = true;
+		}
+		cmd.forwardmove = 0;
+		cmd.rightmove = 0;
+		cmd.upmove = 0;
+		cmd.buttons.btnValue = 0;
+		cmd.buttons.btn.run = true;				// as a client with always-run sends it
+		cmd.impulse = 0;
+		cmd.angles[ 0 ] = baseAngles[ 0 ];
+		cmd.angles[ 1 ] = baseAngles[ 1 ];
+		cmd.angles[ 2 ] = baseAngles[ 2 ];
+	}
+
+	if ( tick <= 20 ) {
+		if ( p->IsSpectating() ) {
+			p->SetGameTeam( &sdTeamManager::GetInstance().GetTeam( "gdf" ) );
+			p->SpawnFromSpawnSpot();
+		}
+	} else if ( tick == 21 ) {
+		cmdSystem->BufferCommandText( CMD_EXEC_NOW, va( "enterVehicle %d vehicle_badger", p->entityNumber ) );
+	} else if ( tick == 31 || tick == 41 || tick == 61 || tick == 81 || tick == 111 ) {
+		p->CycleVehicleCameraMode();
+	} else if ( tick == 51 || tick == 101 ) {
+		cmdSystem->BufferCommandText( CMD_EXEC_NOW, va( "swapVehicleSeat %d", p->entityNumber ) );
+	} else if ( tick == 71 || tick == 91 ) {
+		cmdSystem->BufferCommandText( CMD_EXEC_NOW, va( "exitVehicle %d", p->entityNumber ) );
+		if ( p->GetProxyEntity() == NULL ) {
+			cmdSystem->BufferCommandText( CMD_EXEC_NOW, va( "enterVehicle %d %s", p->entityNumber, tick == 71 ? "vehicle_icarus" : "vehicle_titan" ) );
+		} else {
+			Warning( "g_determinismTest 3: tick %d: the exit failed; not entering the next vehicle from inside this one", tick );
+		}
+	} else if ( tick == 121 ) {
+		cmdSystem->BufferCommandText( CMD_EXEC_NOW, "listSeatViews" );
+	} else if ( tick == 125 ) {
+		cmdSystem->BufferCommandText( CMD_EXEC_NOW, va( "exitVehicle %d", p->entityNumber ) );
+	} else if ( tick >= 130 ) {
 		cmdSystem->BufferCommandText( CMD_EXEC_APPEND, "quit\n" );
 	}
 }
