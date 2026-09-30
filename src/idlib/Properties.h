@@ -67,7 +67,10 @@ namespace sdProperties {
 		ValueType							value;
 
 	public:		
-		sdPropertyValue() {}
+		// value-initialized: operator= compares the old value before assigning, and
+		// reading an indeterminate int there is undefined behaviour (clang -O2 removed
+		// the 'handle' branch of sdGlobalPropertiesNameSpace::Init on macOS)
+		sdPropertyValue() : value() {}
 
 		sdPropertyValue( typename Traits::ConstParameter ref ) :
 			value( ref ), onChange( 1 ), onValidate( 1 ) {}
