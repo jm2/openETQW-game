@@ -3107,8 +3107,6 @@ void idGameLocal::Error( const char *fmt, ... ) const {
 	idStr::vsnPrintf( text, sizeof( text ), fmt, argptr );
 	va_end( argptr );
 
-	assert( false );
-
 	if ( program != NULL ) {
 		if ( program->OnError( text ) ) {
 			return;
