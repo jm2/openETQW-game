@@ -1648,10 +1648,6 @@ void idGameLocal::Clear( void ) {
 	unlock.interpFraction = 0.0f;
 	unlock.lastFraction = 0.0f;
 	unlock.lastFractionFrame = -1;
-	unlock.seatAllowed = false;
-	unlock.seatProxySpawnId = -1;
-	unlock.seatPositionId = -1;
-	unlock.seatViewMode = -1;
 
 	globalMaterial = NULL;
 	newInfo.Clear();
@@ -1692,6 +1688,11 @@ void idGameLocal::Clear( void ) {
 	memset( &unlock, 0, sizeof( unlock ) );
 	unlock.minAngles.Set( -180.0f, -180.0f, -180.0f );
 	unlock.maxAngles.Set( 180.0f, 180.0f, 180.0f );
+	// OpenETQW (M5 step 13): after the memset, which would leave a seat that reads as seat 0, view 0
+	unlock.seatAllowed = false;
+	unlock.seatProxySpawnId = -1;
+	unlock.seatPositionId = -1;
+	unlock.seatViewMode = -1;
 
 	nextBotPopulationCheck = 0;
 	
@@ -11734,7 +11735,8 @@ OpenETQW (M5 step 13), g_determinismTest 3: a tick-indexed tour of vehicle seats
 the engine's seat-gate test. The player enters the badger from on foot (the tour's only
 entry from on foot), cycles its camera twice, swaps seat and cycles again; then moves to
 the icarus (a jetpack) and cycles its camera, and to the titan, swaps seat and cycles;
-listSeatViews prints every vehicle's seats at tick 121, and the player gets out at 125.
+listSeatViews prints the seats of the first vehicle of each vehicle script at tick 121,
+and the player gets out at 125.
 Each move between vehicles is an exit and an entry in the same tick, so no on-foot tick
 lies between seats, and never an entry from inside another vehicle:
 PlacePlayerInPosition binds the player to the new seat before SetProxyEntity calls the

@@ -143,12 +143,12 @@ static bool GlobMatch( const char* pattern, int patternLength, const char* text,
 	int star = -1;
 	int resume = 0;
 	while ( t < textLength ) {
-		if ( p < patternLength && ( pattern[ p ] == '?' || idStr::ToLower( pattern[ p ] ) == idStr::ToLower( text[ t ] ) ) ) {
-			p++;
-			t++;
-		} else if ( p < patternLength && pattern[ p ] == '*' ) {
+		if ( p < patternLength && pattern[ p ] == '*' ) {		// a wildcard, even against a '*' in the text
 			star = p++;
 			resume = t;
+		} else if ( p < patternLength && ( pattern[ p ] == '?' || idStr::ToLower( pattern[ p ] ) == idStr::ToLower( text[ t ] ) ) ) {
+			p++;
+			t++;
 		} else if ( star >= 0 ) {
 			p = star + 1;
 			t = ++resume;
