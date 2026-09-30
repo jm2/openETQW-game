@@ -45,6 +45,7 @@ idCVar* idCVar::staticVars;
 #include "vehicles/VehicleView.h"
 #include "vehicles/Pathing.h"
 #include "vehicles/Transport.h"
+#include "vehicles/VehicleControl.h"
 #include "vehicles/VehicleWeapon.h"
 #include "vehicles/SoundControl.h"
 #include "../framework/declManager.h"
@@ -5138,7 +5139,7 @@ idCVar g_fpuExceptions( "g_fpuExceptions", "0", CVAR_BOOL | CVAR_GAME | CVAR_NOC
 
 idCVar g_debugStatsSetup( "g_debugStatsSetup", "0", CVAR_GAME | CVAR_BOOL | CVAR_NOCHEAT, "prints any problems with calculating a client rank when they connect to a server" );
 idCVar g_simHash( "g_simHash", "0", CVAR_GAME | CVAR_BOOL, "emit authoritative simulation state hash (SIM_HASH line) every tick; off by default, tests that need it set it explicitly" );
-idCVar g_determinismTest( "g_determinismTest", "0", CVAR_GAME | CVAR_BOOL, "execute tick-indexed determinism test input stream" );
+idCVar g_determinismTest( "g_determinismTest", "0", CVAR_GAME | CVAR_INTEGER, "execute a tick-indexed determinism test input stream: 1 on foot, then a titan; 2 a ground vehicle, then an aircraft (M5 step 5a)" );
 
 /*
 ================
@@ -5236,7 +5237,9 @@ void idGameLocal::RunFrame( const usercmd_t *clientCmds, int elapsedTime ) {
 		// set the user commands for this frame
 		memcpy( usercmds, clientCmds, MAX_CLIENTS * sizeof( usercmds[ 0 ] ) );
 
-		if ( g_determinismTest.GetBool() ) {
+		if ( g_determinismTest.GetInteger() == 2 ) {
+			RunVehicleDeterminismSchedule( usercmds );
+		} else if ( g_determinismTest.GetInteger() == 1 ) {
 			int tick = framenum;
 			idPlayer* p = GetLocalPlayer();
 			if ( !p ) {
@@ -5441,6 +5444,7 @@ void idGameLocal::RunFrame( const usercmd_t *clientCmds, int elapsedTime ) {
 #endif // GAME_FPU_EXCEPTIONS
 
 	EmitSimStateHash();
+	EmitVehicleTrace();
 
 	demoManager.EndDemoFrame();
 
@@ -11609,6 +11613,166 @@ void idGameLocal::EmitSimStateHash( void ) {
 		pHealth,
 		gdfObj, stroggObj, gameState,
 		eventCount );
+}
+
+/*
+===============
+idGameLocal::RunVehicleDeterminismSchedule
+
+OpenETQW (M5 step 5a), g_determinismTest 2: a tick-indexed input stream for the
+vehicle physics guard. A ground vehicle is driven with throttle, steering both
+ways, a brake, a reverse and a wall contact, then an aircraft is spawned and flown
+with collective and injected view angles. Kept apart from schedule 1 so that its
+SIM_HASH values and view-leak ranges do not move. Every step is keyed to the tick,
+so any render rate replays it identically.
+===============
+*/
+void idGameLocal::RunVehicleDeterminismSchedule( usercmd_t* cmds ) {
+	const int tick = framenum;
+	idPlayer* p = GetLocalPlayer();
+	if ( p == NULL ) {
+		p = GetClient( 0 );
+	}
+	if ( p == NULL ) {
+		return;
+	}
+	usercmd_t& cmd = cmds[ p->entityNumber ];
+
+	// From its first scripted tick the schedule replaces the live input rather than
+	// adding to it, so that any input the client happens to send cannot change the
+	// trace: moves, buttons and impulses are the schedule's own, and the view angles
+	// are those of tick 21 plus what the schedule injects. Timing and sequence
+	// fields (gameFrame, gameTime, duplicateCount, flags) are kept.
+	static short baseAngles[ 3 ];
+	static bool baseAnglesValid = false;
+	if ( tick <= 20 ) {
+		baseAnglesValid = false;
+	} else {
+		if ( !baseAnglesValid ) {
+			baseAngles[ 0 ] = cmd.angles[ 0 ];
+			baseAngles[ 1 ] = cmd.angles[ 1 ];
+			baseAngles[ 2 ] = cmd.angles[ 2 ];
+			baseAnglesValid = true;
+		}
+		cmd.forwardmove = 0;
+		cmd.rightmove = 0;
+		cmd.upmove = 0;
+		cmd.buttons.btnValue = 0;
+		cmd.buttons.btn.run = true;				// as a client with always-run sends it
+		cmd.impulse = 0;
+		cmd.angles[ 0 ] = baseAngles[ 0 ];
+		cmd.angles[ 1 ] = baseAngles[ 1 ];
+		cmd.angles[ 2 ] = baseAngles[ 2 ];
+	}
+
+	if ( tick <= 20 ) {
+		if ( p->IsSpectating() ) {
+			p->SetGameTeam( &sdTeamManager::GetInstance().GetTeam( "gdf" ) );
+			p->SpawnFromSpawnSpot();
+		}
+	} else if ( tick == 21 ) {
+		cmdSystem->BufferCommandText( CMD_EXEC_NOW, va( "enterVehicle %d vehicle_badger", p->entityNumber ) );
+	} else if ( tick <= 60 ) {
+		cmd.forwardmove = 127;						// throttle
+	} else if ( tick <= 80 ) {
+		cmd.forwardmove = 127;
+		cmd.rightmove = 127;						// steer right
+	} else if ( tick <= 95 ) {
+		cmd.forwardmove = 127;
+		cmd.rightmove = -127;						// steer left
+	} else if ( tick <= 135 ) {
+		cmd.forwardmove = -127;						// brake, then reverse
+	} else if ( tick <= 175 ) {
+		cmd.forwardmove = 127;						// forward again
+	} else if ( tick == 176 ) {
+		cmdSystem->BufferCommandText( CMD_EXEC_NOW, va( "exitVehicle %d", p->entityNumber ) );
+	} else if ( tick == 180 ) {
+		// no aircraft stands on valley at warmup: an anansi on the badger's start spot
+		idDict args;
+		args.Set( "classname", "vehicle_anansi" );
+		args.SetVector( "origin", idVec3( 8964.94f, -10349.27f, 1440.0f ) );
+		args.SetFloat( "angle", 67.0f );
+		if ( !SpawnEntityDef( args, true ) ) {
+			Warning( "g_determinismTest 2: could not spawn vehicle_anansi" );
+		}
+	} else if ( tick == 182 ) {
+		cmdSystem->BufferCommandText( CMD_EXEC_NOW, va( "enterVehicle %d vehicle_anansi", p->entityNumber ) );
+	} else if ( tick < 182 ) {
+		// on foot between the vehicles: no input
+	} else if ( tick <= 215 ) {
+		cmd.forwardmove = 127;						// a helicopter's forward input is its collective: lift off
+	} else if ( tick <= 250 ) {
+		cmd.forwardmove = 40;
+		cmd.angles[ PITCH ] += ANGLE2SHORT( 0.4f * ( tick - 215 ) );	// nose down, a ramp: forward flight
+	} else if ( tick <= 285 ) {
+		cmd.forwardmove = 40;
+		cmd.rightmove = 127;						// yaw input
+		cmd.angles[ PITCH ] += ANGLE2SHORT( 14.0f );
+		cmd.angles[ YAW ] += ANGLE2SHORT( 0.8f * ( tick - 250 ) );		// and a roll, a ramp
+	} else if ( tick <= 305 ) {
+		cmd.forwardmove = -127;						// collective down
+	} else if ( tick == 306 ) {
+		cmdSystem->BufferCommandText( CMD_EXEC_NOW, va( "exitVehicle %d", p->entityNumber ) );
+	} else if ( tick >= 310 ) {
+		cmdSystem->BufferCommandText( CMD_EXEC_APPEND, "quit\n" );
+	}
+}
+
+/*
+===============
+idGameLocal::EmitVehicleTrace
+
+OpenETQW (M5 step 5a), with g_simHash: each tick, the whole physics and control
+state of every occupied rigid-body transport, in full precision, for the vehicle
+physics guard (docs/vehicle-responsiveness.md stage 0). SIM_HASH hashes only a
+vehicle's origin and linear velocity, to 0.01, so a change in handling would pass
+it; these lines are compared across render caps and against a recorded golden.
+Spawn order is deterministic for a map and build, so the entity number identifies
+a vehicle across runs.
+===============
+*/
+void idGameLocal::EmitVehicleTrace( void ) {
+	if ( !g_simHash.GetBool() ) {
+		return;
+	}
+	for ( idEntity* ent = spawnedEntities.Next(); ent != NULL; ent = ent->spawnNode.Next() ) {
+		sdTransport_RB* transport = ent->Cast< sdTransport_RB >();
+		if ( transport == NULL ) {
+			continue;
+		}
+		const sdTransportPositionManager& seats = transport->GetPositionManager();
+		bool occupied = false;
+		for ( int i = 0; i < seats.NumPositions() && !occupied; i++ ) {
+			const sdVehiclePosition* seat = seats.PositionForId( i );
+			occupied = seat != NULL && seat->GetPlayer() != NULL;
+		}
+		if ( !occupied ) {
+			continue;
+		}
+		const sdPhysics_RigidBodyMultiple* phys = transport->GetRBPhysics();
+		const idVec3& org = phys->GetOrigin();
+		const idQuat quat = phys->GetAxis().ToQuat();
+		const idVec3& lin = phys->GetLinearVelocity();
+		const idVec3& ang = phys->GetAngularVelocity();
+
+		idStr control = "none";
+		const sdVehicleControlBase* vc = transport->GetVehicleControl();
+		if ( const sdWheeledVehicleControl* wheeled = dynamic_cast< const sdWheeledVehicleControl* >( vc ) ) {
+			control = va( "wheeled dir=%.9g", wheeled->GetDesiredDirection() );
+		} else if ( const sdAirVehicleControl* air = dynamic_cast< const sdAirVehicleControl* >( vc ) ) {
+			const idAngles& cmd = air->GetOldCmdAngles();
+			control = va( "air collective=%.9g cmdang=(%.9g,%.9g,%.9g)", air->GetCollective(), cmd.pitch, cmd.yaw, cmd.roll );
+		} else if ( vc != NULL ) {
+			control = "other";
+		}
+
+		common->Printf( "VEH_TRACE: tick=%d ent=%d class=%s org=(%.9g,%.9g,%.9g) quat=(%.9g,%.9g,%.9g,%.9g)"
+			" lin=(%.9g,%.9g,%.9g) ang=(%.9g,%.9g,%.9g) rest=%d coll=%d ctl=%s\n",
+			framenum, transport->entityNumber, transport->spawnArgs.GetString( "classname" ),
+			org.x, org.y, org.z, quat.x, quat.y, quat.z, quat.w,
+			lin.x, lin.y, lin.z, ang.x, ang.y, ang.z,
+			phys->IsAtRest() ? 1 : 0, phys->GetLastCollision().time, control.c_str() );
+	}
 }
 
 /*

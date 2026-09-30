@@ -271,6 +271,9 @@ public:
 	virtual bool			TeleportOntoRamp( void ) const { return true; }
 	virtual bool			TeleportOntoRampOriented( void ) const { return true; }
 
+	// OpenETQW (M5 step 5a): the steering state VEH_TRACE records
+	float					GetDesiredDirection( void ) const { return desiredDirection; }
+
 protected:
 	virtual void			SetupInput();
 
@@ -486,6 +489,10 @@ public:
 
 	virtual void			SetDeathThroeHealth( int amount ) { spiralHealth = amount; }
 	virtual int				GetMinDisplayHealth( void ) const { return spiralHealth; }
+
+	// OpenETQW (M5 step 5a): the control state VEH_TRACE records
+	float					GetCollective( void ) const { return collective; }
+	const idAngles&			GetOldCmdAngles( void ) const { return oldCmdAngles; }
 
 	virtual void			OnPlayerEntered( idPlayer* player, int position, int oldPosition );
 	virtual void			OnPlayerExited( idPlayer* player, int position );
