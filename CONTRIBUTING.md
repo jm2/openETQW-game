@@ -36,7 +36,7 @@ get CI back: both stay private until the owner decides to publish.
    suite): the vehicle replay's `VEH_TRACE` must match the engine's `tests/golden/vehicle-physics/<toolchain>.txt`
    bit-exactly, or, on a toolchain with no golden, the reference golden at fixed precision (the
    test says which). A golden changes only on purpose, with the reason in its header:
-   the engine's `tests/test_vehicle_physics_golden.py --regenerate --reason "..."`, and the PR says why.
+   `python3 tests/test_vehicle_physics_golden.py --regenerate --reason "..."` in the engine, and the PR says why.
 3. **Independent review.** Someone other than the author (a person or a separate review
    session) reads the diff and the raw test output, not only the summary.
 4. **CodeRabbit.** CodeRabbit reviews each PR. It currently allows about one review per
