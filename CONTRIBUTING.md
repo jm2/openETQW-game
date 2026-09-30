@@ -31,6 +31,12 @@ get CI back: both stay private until the owner decides to publish.
    the retail-data tests ran rather than skipped: a run that skips them does not meet this gate.
    Put the result in the PR with the host, OS, architecture, commit and data set. The tests use
    fixed UDP ports, so run one suite at a time on a host.
+   **Vehicle or physics changes** (anything under `src/game/vehicles` or `src/game/physics` in this
+   repository) must also pass `vehicle-physics-golden` (M5 step 5a; it is part of the full
+   suite): the vehicle replay's `VEH_TRACE` must match the engine's `tests/golden/vehicle-physics/<toolchain>.txt`
+   bit-exactly, or, on a toolchain with no golden, the reference golden at fixed precision (the
+   test says which). A golden changes only on purpose, with the reason in its header:
+   the engine's `tests/test_vehicle_physics_golden.py --regenerate --reason "..."`, and the PR says why.
 3. **Independent review.** Someone other than the author (a person or a separate review
    session) reads the diff and the raw test output, not only the summary.
 4. **CodeRabbit.** CodeRabbit reviews each PR. It currently allows about one review per
