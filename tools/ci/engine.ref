@@ -7,4 +7,4 @@
 #   python3 tools/ci/bump_engine.py --from-local ../openETQW   (or --remote <branch>, or <sha>)
 # Keep this a full 40-character commit SHA that exists on the engine remote.
 repository jm2/openETQW
-commit 820a820cfccc7cc231aa4d5745e669dd1fc7d7db
+commit cba54bb744f1e7a060579b323d6ff5862e52597e
