@@ -37,6 +37,10 @@ get CI back: both stay private until the owner decides to publish.
    bit-exactly, or, on a toolchain with no golden, the reference golden at fixed precision (the
    test says which). A golden changes only on purpose, with the reason in its header:
    `python3 tests/test_vehicle_physics_golden.py --regenerate --reason "..."` in the engine, and the PR says why.
+   **Seat gate changes** (`src/game/vehicles/SeatGate.*`, `idPlayer::IsSeatPresentationAllowed`, or the
+   seat latch in `Game_local.cpp` and `Game_network.cpp`) must also pass the engine's `seat-gate` (M5
+   step 13; part of the full suite): an excluded seat never unlocks, keys match, and the gate changes
+   no `SIM_HASH`, `VEH_TRACE` or `SIM_VIEW` value (the weapon-log entry leak that step 6 removes aside).
 3. **Independent review.** Someone other than the author (a person or a separate review
    session) reads the diff and the raw test output, not only the summary.
 4. **CodeRabbit.** CodeRabbit reviews each PR. It currently allows about one review per

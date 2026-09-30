@@ -512,6 +512,11 @@ idCVar g_unlock_updateViewpos(		"g_unlock_updateViewpos",		"1",		CVAR_GAME | CVA
 idCVar g_logFramePoses(			"g_logFramePoses",				"0",		CVAR_GAME | CVAR_INTEGER,	"OpenETQW test diagnostic (a cheat: it logs other players' positions whatever their visibility, so it needs net_allowCheats): print a FRAME_POSE line for every main-view draw with the view, viewmodel, seat and up to this many other players (0 = off, at most 8)" );
 idCVar g_unlock_interpolateMoving(	"g_unlock_interpolateMoving",	"1",		CVAR_GAME | CVAR_PROFILE | CVAR_ARCHIVE | CVAR_BOOL,		"interpolate moving objects in fps unlock mode" );
 idCVar g_unlock_viewStyle(			"g_unlock_viewStyle",			"1",		CVAR_GAME | CVAR_PROFILE | CVAR_ARCHIVE | CVAR_INTEGER,		"0: extrapolate view origin, 1: interpolate view origin" );
+// OpenETQW (M5 step 13): the vehicle seat gate (vehicles/SeatGate.h). The default is the word
+// 'default', not an empty list: the CVar is archived, and an archived empty string would keep a
+// player off the built-in list as it grows.
+idCVar g_unlock_vehicleSeats(		"g_unlock_vehicleSeats",		"default",	CVAR_GAME | CVAR_PROFILE | CVAR_ARCHIVE,	"vehicle seats that may get a per-frame view once one exists for their view class (none does yet): comma-separated items, each 'default' (the built-in list, empty so far), '*' (every seat) or script:position:viewType with * and ? wildcards in each field; listSeatViews prints the keys" );
+idCVar g_seatGateTestRecipe(		"g_seatGateTestRecipe",			"",			CVAR_GAME | CVAR_CHEAT,	"OpenETQW test diagnostic (a cheat): comma-separated vehicle view classes the seat gate treats as having a test-only recipe, which opens the gate and is never presented; never the jetpack" );
 
 idCVar g_voteWait(					"g_voteWait",					"2.5",		CVAR_GAME | CVAR_ARCHIVE | CVAR_FLOAT | CVAR_RANKLOCKED,		"Delay (in minutes) before player may perform a callvote again" );
 

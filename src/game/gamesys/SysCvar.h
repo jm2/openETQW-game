@@ -405,6 +405,8 @@ extern idCVar	g_unlock_updateAngles;
 extern idCVar	g_unlock_interpolateMoving; 
 extern idCVar	g_logFramePoses;
 extern idCVar	g_unlock_viewStyle;
+extern idCVar	g_unlock_vehicleSeats;
+extern idCVar	g_seatGateTestRecipe;
 
 extern idCVar	gui_storeTextInfo;
 

@@ -47,6 +47,7 @@ static char THIS_FILE[] = __FILE__;
 #include "../roles/ObjectiveManager.h"
 #include "../decls/DeclDeployableObject.h"
 #include "../vehicles/Transport.h"
+#include "../vehicles/SeatGate.h"
 #include "../misc/DefenceTurret.h"
 #include "../script/Script_ScriptObject.h"
 #include "../script/Script_Helper.h"
@@ -3674,6 +3675,7 @@ void idGameLocal::InitConsoleCommands( void ) {
 	cmdSystem->AddCommand( "exitVehicle",				Cmd_ExitVehicle_f,				CMD_FL_GAME,		"ejects player from vehicle" );
 	cmdSystem->AddCommand( "swapVehicleSeat",			Cmd_SwapVehicleSeat_f,			CMD_FL_GAME,		"swaps vehicle seat for player" );
 	cmdSystem->AddCommand( "deployStatus",				Cmd_DeployStatus_f,				CMD_FL_GAME,		"prints deployable status" );
+	cmdSystem->AddCommand( "listSeatViews",				sdSeatGate::ListSeatViews_f,	CMD_FL_GAME|CMD_FL_CHEAT,	"prints each vehicle seat's view classes, flags, clamps, eye joint and seat-gate key: listSeatViews [all|<filter>]" );
 }
 
 /*
@@ -3692,5 +3694,6 @@ void idGameLocal::ShutdownConsoleCommands( void ) {
 	cmdSystem->RemoveCommand( "exitVehicle" );
 	cmdSystem->RemoveCommand( "swapVehicleSeat" );
 	cmdSystem->RemoveCommand( "deployStatus" );
+	cmdSystem->RemoveCommand( "listSeatViews" );
 	cmdSystem->RemoveFlaggedCommands( CMD_FL_GAME );
 }
