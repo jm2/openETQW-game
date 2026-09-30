@@ -880,6 +880,8 @@ public:
 	virtual void			ClientUpdateView( const usercmd_t &cmd, int timeLeft );
 	void					PresentUnlocked( idEntity* ent );
 	void					EmitSimStateHash( void );
+	void					EmitVehicleTrace( void );
+	void					RunVehicleDeterminismSchedule( usercmd_t* cmds );
 	void					EmitSimView( idPlayer* viewer );
 	virtual void			WriteClientNetworkInfo( idFile* file );
 	virtual void			ReadClientNetworkInfo( idFile* file );
