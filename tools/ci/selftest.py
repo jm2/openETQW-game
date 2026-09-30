@@ -156,12 +156,12 @@ def test_plan() -> None:
     forced = ci_plan.plan(["build"], True, "", "on", "")
     check(arm <= ids(forced, "build"), "OPENETQW_CI_ARM_RUNNERS=on runs ARM64 legs in a private repo")
     selected = ci_plan.plan(["build", "sanitizer"], True, "macos", "auto", "")
-    check(ids(selected, "build") == {"macos-arm64", "macos-x64"} and ids(selected, "sanitizer") == {"macos-arm64-asan-ubsan"},
+    check(ids(selected, "build") == {"macos-arm64"} and ids(selected, "sanitizer") == {"macos-arm64-asan-ubsan"},
           "dispatch prefix selection spans tables")
     none = ci_plan.plan(["build"], False, "", "auto", "none")
     check(not any(e["experimental"] for e in none["build"][0]), "experimental override 'none' makes every leg required")
-    only = ci_plan.plan(["build"], False, "", "auto", "macos-x64")
-    check([e["id"] for e in only["build"][0] if e["experimental"]] == ["macos-x64"], "experimental override replaces the set")
+    only = ci_plan.plan(["build"], False, "", "auto", "windows-x64")
+    check([e["id"] for e in only["build"][0] if e["experimental"]] == ["windows-x64"], "experimental override replaces the set")
     for bad in (("build", "nothing-matches", ""), ("build", "", "no-such-leg"), ("nope", "", "")):
         try:
             ci_plan.plan([bad[0]], False, bad[1], "auto", bad[2])
