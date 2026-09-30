@@ -48,6 +48,7 @@ static char THIS_FILE[] = __FILE__;
 #include "../decls/DeclDeployableObject.h"
 #include "../vehicles/Transport.h"
 #include "../vehicles/SeatGate.h"
+#include "../vehicles/VehicleView.h"
 #include "../misc/DefenceTurret.h"
 #include "../script/Script_ScriptObject.h"
 #include "../script/Script_Helper.h"
@@ -1218,6 +1219,52 @@ void Cmd_SwapVehicleSeat_f( const idCmdArgs &args ) {
 		gameLocal.Printf( "SWAP_SEAT: client %d in %s now in seat %d\n",
 			clientNum, proxy->name.c_str(), player->GetProxyPositionId() );
 	}
+}
+
+/*
+==================
+Cmd_CycleVehicleCamera_f
+
+OpenETQW (M5 step 6): cycles a player's vehicle camera to the seat's next view, as the
+camera-mode key does (idPlayer::CycleVehicleCameraMode); the server sends the new mode to
+the clients. The engine's vehicle-view-net test needs it: no valley seat's first view is
+a smooth one. A network client cannot cycle a camera.
+==================
+*/
+void Cmd_CycleVehicleCamera_f( const idCmdArgs &args ) {
+	if ( args.Argc() < 2 ) {
+		gameLocal.Printf( "usage: cycleVehicleCamera <clientNum>\n" );
+		return;
+	}
+	int clientNum = atoi( args.Argv( 1 ) );
+	if ( clientNum < 0 || clientNum >= MAX_CLIENTS || gameLocal.entities[ clientNum ] == NULL ) {
+		gameLocal.Printf( "CYCLE_CAMERA: invalid client %d\n", clientNum );
+		return;
+	}
+	idPlayer* player = gameLocal.entities[ clientNum ]->Cast< idPlayer >();
+	if ( !player ) {
+		gameLocal.Printf( "CYCLE_CAMERA: entity %d is not a player\n", clientNum );
+		return;
+	}
+	idEntity* proxy = player->GetProxyEntity();
+	sdTransport* vehicle = proxy != NULL ? proxy->Cast< sdTransport >() : NULL;
+	if ( !vehicle ) {
+		gameLocal.Printf( "CYCLE_CAMERA: client %d is not in a vehicle\n", clientNum );
+		return;
+	}
+	if ( gameLocal.isClient ) {
+		gameLocal.Printf( "CYCLE_CAMERA: failed for client %d (only the server cycles cameras)\n", clientNum );
+		return;
+	}
+	const int oldMode = player->GetProxyViewMode();
+	player->CycleVehicleCameraMode();
+	seatInfo_t seat;
+	if ( !sdSeatGate::FindSeat( player, seat ) ) {
+		gameLocal.Printf( "CYCLE_CAMERA: client %d in %s: no view\n", clientNum, proxy->name.c_str() );
+		return;
+	}
+	gameLocal.Printf( "CYCLE_CAMERA: client %d in %s seat %d camera mode %d -> %d (%s)\n",
+		clientNum, proxy->name.c_str(), seat.positionId, oldMode, seat.viewMode, seat.view->GetTypeName() );
 }
 
 /*
@@ -3674,6 +3721,7 @@ void idGameLocal::InitConsoleCommands( void ) {
 	cmdSystem->AddCommand( "enterVehicle",				Cmd_EnterVehicle_f,				CMD_FL_GAME,		"places player in vehicle" );
 	cmdSystem->AddCommand( "exitVehicle",				Cmd_ExitVehicle_f,				CMD_FL_GAME,		"ejects player from vehicle" );
 	cmdSystem->AddCommand( "swapVehicleSeat",			Cmd_SwapVehicleSeat_f,			CMD_FL_GAME,		"swaps vehicle seat for player" );
+	cmdSystem->AddCommand( "cycleVehicleCamera",		Cmd_CycleVehicleCamera_f,		CMD_FL_GAME,		"cycles a player's vehicle camera to the seat's next view" );
 	cmdSystem->AddCommand( "deployStatus",				Cmd_DeployStatus_f,				CMD_FL_GAME,		"prints deployable status" );
 	cmdSystem->AddCommand( "listSeatViews",				sdSeatGate::ListSeatViews_f,	CMD_FL_GAME|CMD_FL_CHEAT,	"prints each vehicle seat's view classes, flags, clamps, eye joint and seat-gate key: listSeatViews [all|<filter>]" );
 }
@@ -3693,6 +3741,7 @@ void idGameLocal::ShutdownConsoleCommands( void ) {
 	cmdSystem->RemoveCommand( "enterVehicle" );
 	cmdSystem->RemoveCommand( "exitVehicle" );
 	cmdSystem->RemoveCommand( "swapVehicleSeat" );
+	cmdSystem->RemoveCommand( "cycleVehicleCamera" );
 	cmdSystem->RemoveCommand( "deployStatus" );
 	cmdSystem->RemoveCommand( "listSeatViews" );
 	cmdSystem->RemoveFlaggedCommands( CMD_FL_GAME );

@@ -3906,6 +3906,10 @@ void idGameLocal::ClientPrediction( const usercmd_t* clientCmds, const usercmd_t
 
 		idEntity::ClearEntityCaches();
 
+		// OpenETQW (M5 step 6), with g_logVehicleViews: the local player's view in a vehicle
+		// as this predicted tick starts (new=0 when it is predicted again)
+		EmitVehicleViewState( "pre" );
+
 		if ( !isNewFrame ) {
 			idEntity* nextEnt;
 			for( ent = activeNetworkEntities.Next(); ent != NULL; ent = nextEnt ) {
@@ -3990,6 +3994,8 @@ void idGameLocal::ClientPrediction( const usercmd_t* clientCmds, const usercmd_t
 					unlock.weaponPoseValid[ index ] = false;
 				}
 			}
+			// OpenETQW (M5 step 6), with g_logVehicleViews: the view as the tick logs its pose
+			EmitVehicleViewState( "post" );
 
 			if ( bse != NULL ) {
 				bse->EndFrame();

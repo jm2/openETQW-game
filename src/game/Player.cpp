@@ -23,6 +23,7 @@ static char THIS_FILE[] = __FILE__;
 #include "vehicles/VehicleView.h"
 #include "vehicles/JetPack.h"
 #include "vehicles/SeatGate.h"
+#include "vehicles/VehicleViewProbe.h"
 #include "vehicles/VehicleWeapon.h"
 #include "Projectile.h"
 #include "WorldSpawn.h"
@@ -15252,9 +15253,18 @@ void idPlayer::GetAORView( idVec3& origin, idMat3& axis ) {
 		}
 	}
 
+	// OpenETQW (M5 step 6), with g_logVehicleViews: AOR_VIEW, this calculation for a player
+	// in a vehicle, with the view before and after it (vehicles/VehicleViewProbe.h)
+	vehicleViewPose_t logBefore;
+	const bool logView = sdVehicleViewProbe::Sample( this, logBefore );
+
 	CalculateFirstPersonView( false );
 	origin	= firstPersonViewOrigin;
 	axis	= firstPersonViewAxis;
+
+	if ( logView ) {
+		sdVehicleViewProbe::LogAORView( this, logBefore, origin, axis );
+	}
 }
 
 /*

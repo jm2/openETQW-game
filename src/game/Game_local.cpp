@@ -5338,6 +5338,10 @@ void idGameLocal::RunFrame( const usercmd_t *clientCmds, int elapsedTime ) {
 		// sort the active entity list
 		SortActiveEntityList();
 
+		// OpenETQW (M5 step 6), with g_logVehicleViews: the views of players in vehicles as
+		// the tick starts, after whatever ran since the last tick (AoR, snapshots, events)
+		EmitVehicleViewState( "pre" );
+
 		int num = 0;
 		for ( ent = activeEntities.Next(); ent != NULL; ent = ent->activeNode.Next() ) {
 			sdProfileHelper_ScopeTimer( "EntityThink", ent->spawnArgs.GetString( "classname" ), g_profileEntityThink.GetBool() );
@@ -5393,6 +5397,9 @@ void idGameLocal::RunFrame( const usercmd_t *clientCmds, int elapsedTime ) {
 		// the replay's per-tick view state, from the view player that was just logged
 		// (before event servicing can change the viewer or its proxy)
 		EmitSimView( viewPlayer );
+		// OpenETQW (M5 step 6), with g_logVehicleViews: the views of players in vehicles as
+		// the tick logs its pose, before the AoR calls of antilag and snapshots
+		EmitVehicleViewState( "post" );
 
 		// service any pending events
 		idEvent::ServiceEvents();
