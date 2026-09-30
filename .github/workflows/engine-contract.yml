@@ -169,6 +169,29 @@ jobs:
           echo "Failed to install ${packages[*]}" >&2
           exit 1
 
+      # the engine's configure needs zlib even for its unit tests alone; as the
+      # engine's own workflows do (.github/actions/prepare there)
+      - name: Install Windows dependencies (vcpkg zlib)
+        if: matrix.os == 'windows'
+        shell: pwsh
+        env:
+          VCPKG_TRIPLET: ${{ matrix.arch }}-windows
+        run: |
+          $ErrorActionPreference = "Stop"
+          $PSNativeCommandUseErrorActionPreference = $true
+          $root = $env:VCPKG_INSTALLATION_ROOT
+          if (-not $root -or -not (Test-Path (Join-Path $root "vcpkg.exe"))) {
+            $root = Join-Path $env:RUNNER_TEMP "vcpkg"
+            git clone --depth 1 https://github.com/microsoft/vcpkg.git $root
+            & (Join-Path $root "bootstrap-vcpkg.bat") -disableMetrics
+          }
+          & (Join-Path $root "vcpkg.exe") install --triplet $env:VCPKG_TRIPLET --clean-after-build zlib pkgconf
+          $installed = (Join-Path $root "installed/$env:VCPKG_TRIPLET") -replace '\\', '/'
+          "PKG_CONFIG=$installed/tools/pkgconf/pkgconf.exe" >> $env:GITHUB_ENV
+          "PKG_CONFIG_PATH=$installed/lib/pkgconfig;$installed/share/pkgconfig" >> $env:GITHUB_ENV
+          "CMAKE_PREFIX_PATH=$installed" >> $env:GITHUB_ENV
+          ($installed + "/bin") -replace '/', '\' >> $env:GITHUB_PATH
+
       - name: Fetch engine
         id: engine
         env:

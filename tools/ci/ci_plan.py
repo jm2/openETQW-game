@@ -86,14 +86,16 @@ LINUX_ARM64_GAME = (
     "the ARM64 build"
 )
 MSVC_ARM64_GAME = "Windows ARM64 never exercised (hosted windows-11-arm runner)"
-LINUX_CONTRACT = "engine unit tests and idLib have never been built on Linux"
-LINUX_ARM64_CONTRACT = (
-    LINUX_CONTRACT + "; src/idlib/Lib.cpp AssertFailed() uses x86 inline asm 'int $0x03' under __linux__"
+LINUX_CONTRACT = (
+    "never run on a hosted runner; the engine and its tests build and pass locally on Linux "
+    "(Fedora 44, GCC 16, since 2026-09-26)"
 )
+LINUX_ARM64_CONTRACT = "never run on a hosted runner; the engine has not been built on Linux ARM64"
 MSVC_CONTRACT = (
-    "engine sources do not build on Windows yet (engine CI records the blockers) and idLib hits "
-    "/Zc:strictStrings (string literal to char*) under the game's /permissive-"
+    "never run on a hosted runner; the engine and its tests build and pass locally with MSVC "
+    "(VS 2026, MSVC 19.51, since 2026-09-28)"
 )
+LINUX_SANITIZER_CONTRACT = "never run on a hosted runner; the engine tests have not run under ASan+UBSan on Linux"
 
 TABLES: dict[str, list[Leg]] = {
     "build": [
@@ -108,7 +110,7 @@ TABLES: dict[str, list[Leg]] = {
             "gcc", "g++", cross="linux-arm64-gcc.ini"),
         Leg("macos-arm64", "macOS arm64 (Apple Clang)", "macos-15", "macos", "arm64", "apple-clang", "clang", "clang++"),
         Leg("macos-x64", "macOS Intel x64 (Apple Clang)", "macos-15-intel", "macos", "x64", "apple-clang", "clang", "clang++"),
-        Leg("windows-x64", "Windows x64 (MSVC)", "windows-2025", "windows", "x64", "msvc", "cl", "cl"),
+        Leg("windows-x64", "Windows x64 (MSVC)", "windows-2025-vs2026", "windows", "x64", "msvc", "cl", "cl"),
         Leg("windows-arm64", "Windows ARM64 (MSVC)", "windows-11-arm", "windows", "arm64", "msvc", "cl", "cl",
             python_arch="arm64", experimental=True, reason=MSVC_ARM64_GAME),
     ],
@@ -127,13 +129,13 @@ TABLES: dict[str, list[Leg]] = {
             experimental=True, reason=LINUX_ARM64_CONTRACT),
         Leg("macos-arm64", "macOS arm64 (Apple Clang)", "macos-15", "macos", "arm64", "apple-clang", "clang", "clang++"),
         Leg("macos-x64", "macOS Intel x64 (Apple Clang)", "macos-15-intel", "macos", "x64", "apple-clang", "clang", "clang++"),
-        Leg("windows-x64", "Windows x64 (MSVC)", "windows-2025", "windows", "x64", "msvc", "cl", "cl",
+        Leg("windows-x64", "Windows x64 (MSVC)", "windows-2025-vs2026", "windows", "x64", "msvc", "cl", "cl",
             experimental=True, reason=MSVC_CONTRACT),
         Leg("macos-arm64-asan-ubsan", "macOS arm64 ASan+UBSan (Apple Clang)", "macos-15", "macos", "arm64",
             "apple-clang", "clang", "clang++", buildtype="debugoptimized", sanitize="address,undefined"),
         Leg("linux-x64-clang-asan-ubsan", "Linux x64 ASan+UBSan (Clang)", "ubuntu-24.04", "linux", "x64", "clang",
             "clang", "clang++", buildtype="debugoptimized", sanitize="address,undefined",
-            experimental=True, reason=LINUX_CONTRACT),
+            experimental=True, reason=LINUX_SANITIZER_CONTRACT),
     ],
 }
 
