@@ -11637,6 +11637,34 @@ void idGameLocal::RunVehicleDeterminismSchedule( usercmd_t* cmds ) {
 		return;
 	}
 	usercmd_t& cmd = cmds[ p->entityNumber ];
+
+	// From its first scripted tick the schedule replaces the live input rather than
+	// adding to it, so that any input the client happens to send cannot change the
+	// trace: moves, buttons and impulses are the schedule's own, and the view angles
+	// are those of tick 21 plus what the schedule injects. Timing and sequence
+	// fields (gameFrame, gameTime, duplicateCount, flags) are kept.
+	static short baseAngles[ 3 ];
+	static bool baseAnglesValid = false;
+	if ( tick <= 20 ) {
+		baseAnglesValid = false;
+	} else {
+		if ( !baseAnglesValid ) {
+			baseAngles[ 0 ] = cmd.angles[ 0 ];
+			baseAngles[ 1 ] = cmd.angles[ 1 ];
+			baseAngles[ 2 ] = cmd.angles[ 2 ];
+			baseAnglesValid = true;
+		}
+		cmd.forwardmove = 0;
+		cmd.rightmove = 0;
+		cmd.upmove = 0;
+		cmd.buttons.btnValue = 0;
+		cmd.buttons.btn.run = true;				// as a client with always-run sends it
+		cmd.impulse = 0;
+		cmd.angles[ 0 ] = baseAngles[ 0 ];
+		cmd.angles[ 1 ] = baseAngles[ 1 ];
+		cmd.angles[ 2 ] = baseAngles[ 2 ];
+	}
+
 	if ( tick <= 20 ) {
 		if ( p->IsSpectating() ) {
 			p->SetGameTeam( &sdTeamManager::GetInstance().GetTeam( "gdf" ) );
