@@ -485,37 +485,6 @@ void sdDampedVehicleView::CalcThirdPersonView( const idVec3& fpOrigin, const idM
 
 /*
 ================
-sdDampedVehicleView::sdDampedVehicleView
-================
-*/
-sdDampedVehicleView::sdDampedVehicleView() {
-	dampedPoseValid[ 0 ] = dampedPoseValid[ 1 ] = false;
-	dampedFrameLog[ 0 ] = dampedFrameLog[ 1 ] = 0;
-	dampedOriginLog[ 0 ] = dampedOriginLog[ 1 ] = vec3_zero;
-	dampedQuatLog[ 0 ] = idQuat( 0.0f, 0.0f, 0.0f, 1.0f );
-	dampedQuatLog[ 1 ] = idQuat( 0.0f, 0.0f, 0.0f, 1.0f );
-}
-
-/*
-================
-sdDampedVehicleView::ResetViewHistory
-================
-*/
-void sdDampedVehicleView::ResetViewHistory( idPlayer* player ) {
-	dampedPoseValid[ 0 ] = dampedPoseValid[ 1 ] = false;
-	if ( player != NULL ) {
-		int curr = gameLocal.framenum & 1;
-		int prev = ( gameLocal.framenum + 1 ) & 1;
-		dampedOriginLog[ 0 ] = dampedOriginLog[ 1 ] = player->vehicleEyeOrigin;
-		dampedQuatLog[ 0 ] = dampedQuatLog[ 1 ] = player->vehicleEyeAxis.ToQuat();
-		dampedFrameLog[ curr ] = gameLocal.framenum;
-		dampedFrameLog[ prev ] = gameLocal.framenum - 1;
-		dampedPoseValid[ 0 ] = dampedPoseValid[ 1 ] = true;
-	}
-}
-
-/*
-================
 sdDampedVehicleView::CalculateViewPos
 ================
 */
@@ -528,43 +497,14 @@ void sdDampedVehicleView::CalculateViewPos( idPlayer* player, idVec3& origin, id
 			freshEntry = true;
 		}
 
+
 		// damping
 		DampEyeAxes( player->vehicleEyeAxis, player->vehicleEyeAxis );
 		GetDampingPos( player->vehicleEyeOrigin );
-
-		int index = gameLocal.framenum & 1;
-		int prev = ( gameLocal.framenum + 1 ) & 1;
-		dampedOriginLog[ index ] = player->vehicleEyeOrigin;
-		dampedQuatLog[ index ] = player->vehicleEyeAxis.ToQuat();
-		dampedFrameLog[ index ] = gameLocal.framenum;
-		if ( !dampedPoseValid[ prev ] ) {
-			dampedOriginLog[ prev ] = dampedOriginLog[ index ];
-			dampedQuatLog[ prev ] = dampedQuatLog[ index ];
-			dampedFrameLog[ prev ] = gameLocal.framenum - 1;
-			dampedPoseValid[ prev ] = true;
-		}
-		dampedPoseValid[ index ] = true;
-	}
-
-	idVec3 eyeOrigin = player->vehicleEyeOrigin;
-	idMat3 eyeAxis = player->vehicleEyeAxis;
-
-	if ( !fullUpdate && gameLocal.unlock.unlockedDraw ) {
-		int curr = gameLocal.framenum & 1;
-		int prev = ( gameLocal.framenum + 1 ) & 1;
-		if ( dampedPoseValid[ curr ] && dampedPoseValid[ prev ] &&
-			 ( gameLocal.framenum - dampedFrameLog[ prev ] == 1 ) ) {
-			float interpFraction = idMath::ClampFloat( 0.0f, 1.0f, gameLocal.unlock.interpFraction );
-			eyeOrigin.Lerp( dampedOriginLog[ prev ], dampedOriginLog[ curr ], interpFraction );
-			idQuat q;
-			q.Slerp( dampedQuatLog[ prev ], dampedQuatLog[ curr ], interpFraction );
-			q.Normalize();
-			eyeAxis = q.ToMat3();
-		}
 	}
 
 	// axis
-	CalcViewAxes( eyeAxis, axis, player->clientViewAngles );
+	CalcViewAxes( player->vehicleEyeAxis, axis, player->clientViewAngles );
 
 	if ( fullUpdate ) {
 		// clamp the final result
@@ -574,7 +514,8 @@ void sdDampedVehicleView::CalculateViewPos( idPlayer* player, idVec3& origin, id
 	}
 
 	// origin
-	CalcViewOrigin( eyeAxis, eyeOrigin, origin, player->clientViewAngles );
+	CalcViewOrigin( player->vehicleEyeAxis, player->vehicleEyeOrigin, origin, player->clientViewAngles );
+
 
 	if ( viewMode.thirdPerson ) {
 		CalcThirdPersonView( origin, axis );
@@ -590,8 +531,9 @@ sdDampedVehicleView::OnPlayerSwitched
 */
 void sdDampedVehicleView::OnPlayerSwitched( idPlayer* player, bool newPosition ) {
 	GetDampingAxis( player->vehicleEyeAxis );
-	ResetViewHistory( player );
+	
 	sdVehicleView::OnPlayerSwitched( player, newPosition );
+
 	lastReturnedAxis = player->firstPersonViewAxis;
 }
 
@@ -807,47 +749,17 @@ void sdDampedVehicleView_FreePivot::CalculateViewPos( idPlayer* player, idVec3& 
 		// damping
 		DampEyeAxes( player->vehicleEyeAxis, player->vehicleEyeAxis );
 		GetDampingPos( player->vehicleEyeOrigin );
-
-		int index = gameLocal.framenum & 1;
-		int prev = ( gameLocal.framenum + 1 ) & 1;
-		dampedOriginLog[ index ] = player->vehicleEyeOrigin;
-		dampedQuatLog[ index ] = player->vehicleEyeAxis.ToQuat();
-		dampedFrameLog[ index ] = gameLocal.framenum;
-		if ( !dampedPoseValid[ prev ] ) {
-			dampedOriginLog[ prev ] = dampedOriginLog[ index ];
-			dampedQuatLog[ prev ] = dampedQuatLog[ index ];
-			dampedFrameLog[ prev ] = gameLocal.framenum - 1;
-			dampedPoseValid[ prev ] = true;
-		}
-		dampedPoseValid[ index ] = true;
-	}
-
-	idVec3 eyeOrigin = player->vehicleEyeOrigin;
-	idMat3 eyeAxis = player->vehicleEyeAxis;
-
-	if ( !fullUpdate && gameLocal.unlock.unlockedDraw ) {
-		int curr = gameLocal.framenum & 1;
-		int prev = ( gameLocal.framenum + 1 ) & 1;
-		if ( dampedPoseValid[ curr ] && dampedPoseValid[ prev ] &&
-			 ( gameLocal.framenum - dampedFrameLog[ prev ] == 1 ) ) {
-			float interpFraction = idMath::ClampFloat( 0.0f, 1.0f, gameLocal.unlock.interpFraction );
-			eyeOrigin.Lerp( dampedOriginLog[ prev ], dampedOriginLog[ curr ], interpFraction );
-			idQuat q;
-			q.Slerp( dampedQuatLog[ prev ], dampedQuatLog[ curr ], interpFraction );
-			q.Normalize();
-			eyeAxis = q.ToMat3();
-		}
 	}
 
 	// axis
-	CalcViewAxes( eyeAxis, axis, player->clientViewAngles );
+	CalcViewAxes( player->vehicleEyeAxis, axis, player->clientViewAngles );
 
 	if ( fullUpdate ) {
 		ClampFinalAxis( axis, mat3_identity, player->vehicleEyeAxis );
 	}
 
 	// origin
-	CalcViewOrigin( axis, eyeOrigin, origin, ang_zero );
+	CalcViewOrigin( axis, player->vehicleEyeOrigin, origin, ang_zero );
 
 	if ( viewMode.thirdPerson ) {
 		CalcThirdPersonView( origin, axis );

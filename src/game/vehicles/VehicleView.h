@@ -92,14 +92,12 @@ private:
 
 class sdDampedVehicleView : public sdVehicleView {
 public:
-									sdDampedVehicleView();
 	virtual							~sdDampedVehicleView() { }
 
 	virtual const char*				GetTypeName() const { return TypeName(); }
 	static const char*				TypeName() { return "standard"; }
 
 	virtual void					OnPlayerSwitched( idPlayer* player, bool newPosition );
-	virtual void					ResetViewHistory( idPlayer* player );
 
 	virtual void					CalculateViewPos( idPlayer* player, idVec3& origin, idMat3& axis, bool fullUpdate );
 
@@ -129,11 +127,6 @@ protected:
 	idVec3							eyeBaseOffset;
 
 	idMat3							lastReturnedAxis;
-
-	idVec3							dampedOriginLog[2];
-	idQuat							dampedQuatLog[2];
-	int								dampedFrameLog[2];
-	bool							dampedPoseValid[2];
 };
 
 
