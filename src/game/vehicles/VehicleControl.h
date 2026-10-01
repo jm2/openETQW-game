@@ -578,7 +578,10 @@ protected:
 		float				collective;
 		float				collectiveDefault;
 	};
-	static const int		PREDICTED_CONTROL_FRAMES = 64;	// a power of two; net_clientMaxPrediction is 30 ticks
+	// a power of two. net_clientMaxPrediction defaults to 30 ticks, but a player may raise it;
+	// a client 64 or more ticks ahead finds the snapshot tick's slot overwritten, and the frame
+	// check then leaves the tick on retail's path, never on stale state
+	static const int		PREDICTED_CONTROL_FRAMES = 64;
 	predictedControl_t		predictedControl[ PREDICTED_CONTROL_FRAMES ];
 
 	// careening input parms

@@ -1810,6 +1810,7 @@ void sdAirVehicleControl::Init( sdTransport* transport ) {
 
 	oldCmdAngles.Zero();
 	// empty slots: framenum is never negative, so no framenum - 1 is -2
+	compile_time_assert( ( PREDICTED_CONTROL_FRAMES & ( PREDICTED_CONTROL_FRAMES - 1 ) ) == 0 );
 	for ( int i = 0; i < PREDICTED_CONTROL_FRAMES; i++ ) {
 		predictedControl[ i ].frame				= -2;
 		predictedControl[ i ].oldCmdAngles		= oldCmdAngles;
