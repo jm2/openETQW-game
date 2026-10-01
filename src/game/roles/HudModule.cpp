@@ -537,58 +537,62 @@ void sdDeployMenu::Update( void ) {
 
 			int spawnID = WORLD_SPAWN_ID;
 
-			if ( GetDeployMode() ) {
-				// rotate mode
+			// RegisterLoggedDecal returns -1 once its slots are all in use: no arrows
+			// then, as the grid below skips a cell without its decal
+			if ( decalInfoArrows != NULL ) {
+				if ( GetDeployMode() ) {
+					// rotate mode
 
-				idMat3 rotationOffset;
-				idAngles::YawToMat3( 120.0f, rotationOffset );
+					idMat3 rotationOffset;
+					idAngles::YawToMat3( 120.0f, rotationOffset );
 
-				// forward arrow
-				winding += idVec5( idVec3( moveArrowBounds.GetMins().x, moveArrowBounds.GetMins().y, moveArrowBounds.GetMins().z - depth ), idVec2( 0.5f, 0.0f ) );
-				winding += idVec5( idVec3( moveArrowBounds.GetMins().x, moveArrowBounds.GetMaxs().y, moveArrowBounds.GetMins().z - depth ), idVec2( 0.5f, 0.5f ) );
-				winding += idVec5( idVec3( moveArrowBounds.GetMaxs().x, moveArrowBounds.GetMaxs().y, moveArrowBounds.GetMins().z - depth ), idVec2( 1.0f, 0.5f ) );
-				winding += idVec5( idVec3( moveArrowBounds.GetMaxs().x, moveArrowBounds.GetMins().y, moveArrowBounds.GetMins().z - depth ), idVec2( 1.0f, 0.0f ) );
+					// forward arrow
+					winding += idVec5( idVec3( moveArrowBounds.GetMins().x, moveArrowBounds.GetMins().y, moveArrowBounds.GetMins().z - depth ), idVec2( 0.5f, 0.0f ) );
+					winding += idVec5( idVec3( moveArrowBounds.GetMins().x, moveArrowBounds.GetMaxs().y, moveArrowBounds.GetMins().z - depth ), idVec2( 0.5f, 0.5f ) );
+					winding += idVec5( idVec3( moveArrowBounds.GetMaxs().x, moveArrowBounds.GetMaxs().y, moveArrowBounds.GetMins().z - depth ), idVec2( 1.0f, 0.5f ) );
+					winding += idVec5( idVec3( moveArrowBounds.GetMaxs().x, moveArrowBounds.GetMins().y, moveArrowBounds.GetMins().z - depth ), idVec2( 1.0f, 0.0f ) );
 
-				winding.Rotate( mainBounds.GetCenter(), rotationStart );
-				idVec3 offset = rotationStart[ 0 ] * ( 16.f * idMath::Sin( ( gameLocal.time / 500.f ) ) );
-				for ( int i = 0; i < winding.GetNumPoints(); i++ ) {
-					winding[ i ].ToVec3() += offset;
+					winding.Rotate( mainBounds.GetCenter(), rotationStart );
+					idVec3 offset = rotationStart[ 0 ] * ( 16.f * idMath::Sin( ( gameLocal.time / 500.f ) ) );
+					for ( int i = 0; i < winding.GetNumPoints(); i++ ) {
+						winding[ i ].ToVec3() += offset;
+					}
+					gameRenderWorld->AddToProjectedDecal( winding, top + idVec3( 0.0f, 0.0f, 64.0f + depth ), true, idVec4( 0.87f, 0.59f, 0.f, 1.f ), decalInfoArrows->renderEntity.hModel, spawnID, megaTextureMaterials.Begin(), megaTextureMaterials.Num() );
+
+					// rotate arrows
+					winding.Clear();
+					winding += idVec5( idVec3( rotateArrowBounds.GetMins().x, rotateArrowBounds.GetMins().y, rotateArrowBounds.GetMins().z - depth ), idVec2( 0.0f, 0.0f ) );
+					winding += idVec5( idVec3( rotateArrowBounds.GetMins().x, rotateArrowBounds.GetMaxs().y, rotateArrowBounds.GetMins().z - depth ), idVec2( 0.0f, 1.0f ) );
+					winding += idVec5( idVec3( rotateArrowBounds.GetMaxs().x, rotateArrowBounds.GetMaxs().y, rotateArrowBounds.GetMins().z - depth ), idVec2( 0.5f, 1.0f ) );
+					winding += idVec5( idVec3( rotateArrowBounds.GetMaxs().x, rotateArrowBounds.GetMins().y, rotateArrowBounds.GetMins().z - depth ), idVec2( 0.5f, 0.0f ) );
+
+					winding.Rotate( mainBounds.GetCenter(), rotationStart * rotationOffset );
+					gameRenderWorld->AddToProjectedDecal( winding, top + idVec3( 0.0f, 0.0f, 64.0f + depth ), true, colorWhite, decalInfoArrows->renderEntity.hModel, spawnID, megaTextureMaterials.Begin(), megaTextureMaterials.Num() );
+
+					winding.Rotate( mainBounds.GetCenter(), rotationOffset );
+					gameRenderWorld->AddToProjectedDecal( winding, top + idVec3( 0.0f, 0.0f, 64.0f + depth ), true, colorWhite, decalInfoArrows->renderEntity.hModel, spawnID, megaTextureMaterials.Begin(), megaTextureMaterials.Num() );
+				} else {
+					// move mode
+
+					idMat3 rotationOffset;
+					idAngles::YawToMat3( 90.0f, rotationOffset );
+
+					winding += idVec5( idVec3( moveArrowBounds.GetMins().x, moveArrowBounds.GetMins().y, moveArrowBounds.GetMins().z - depth ), idVec2( 0.5f, 0.0f ) );
+					winding += idVec5( idVec3( moveArrowBounds.GetMins().x, moveArrowBounds.GetMaxs().y, moveArrowBounds.GetMins().z - depth ), idVec2( 0.5f, 0.5f ) );
+					winding += idVec5( idVec3( moveArrowBounds.GetMaxs().x, moveArrowBounds.GetMaxs().y, moveArrowBounds.GetMins().z - depth ), idVec2( 1.0f, 0.5f ) );
+					winding += idVec5( idVec3( moveArrowBounds.GetMaxs().x, moveArrowBounds.GetMins().y, moveArrowBounds.GetMins().z - depth ), idVec2( 1.0f, 0.0f ) );
+
+					gameRenderWorld->AddToProjectedDecal( winding, top + idVec3( 0.0f, 0.0f, 64.0f + depth ), true, colorWhite, decalInfoArrows->renderEntity.hModel, spawnID, megaTextureMaterials.Begin(), megaTextureMaterials.Num() );
+
+					winding.Rotate( mainBounds.GetCenter(), rotationOffset );
+					gameRenderWorld->AddToProjectedDecal( winding, top + idVec3( 0.0f, 0.0f, 64.0f + depth ), true, colorWhite, decalInfoArrows->renderEntity.hModel, spawnID, megaTextureMaterials.Begin(), megaTextureMaterials.Num() );
+
+					winding.Rotate( mainBounds.GetCenter(), rotationOffset );
+					gameRenderWorld->AddToProjectedDecal( winding, top + idVec3( 0.0f, 0.0f, 64.0f + depth ), true, colorWhite, decalInfoArrows->renderEntity.hModel, spawnID, megaTextureMaterials.Begin(), megaTextureMaterials.Num() );
+
+					winding.Rotate( mainBounds.GetCenter(), rotationOffset );
+					gameRenderWorld->AddToProjectedDecal( winding, top + idVec3( 0.0f, 0.0f, 64.0f + depth ), true, colorWhite, decalInfoArrows->renderEntity.hModel, spawnID, megaTextureMaterials.Begin(), megaTextureMaterials.Num() );
 				}
-				gameRenderWorld->AddToProjectedDecal( winding, top + idVec3( 0.0f, 0.0f, 64.0f + depth ), true, idVec4( 0.87f, 0.59f, 0.f, 1.f ), decalInfoArrows->renderEntity.hModel, spawnID, megaTextureMaterials.Begin(), megaTextureMaterials.Num() );
-
-				// rotate arrows
-				winding.Clear();
-				winding += idVec5( idVec3( rotateArrowBounds.GetMins().x, rotateArrowBounds.GetMins().y, rotateArrowBounds.GetMins().z - depth ), idVec2( 0.0f, 0.0f ) );
-				winding += idVec5( idVec3( rotateArrowBounds.GetMins().x, rotateArrowBounds.GetMaxs().y, rotateArrowBounds.GetMins().z - depth ), idVec2( 0.0f, 1.0f ) );
-				winding += idVec5( idVec3( rotateArrowBounds.GetMaxs().x, rotateArrowBounds.GetMaxs().y, rotateArrowBounds.GetMins().z - depth ), idVec2( 0.5f, 1.0f ) );
-				winding += idVec5( idVec3( rotateArrowBounds.GetMaxs().x, rotateArrowBounds.GetMins().y, rotateArrowBounds.GetMins().z - depth ), idVec2( 0.5f, 0.0f ) );
-
-				winding.Rotate( mainBounds.GetCenter(), rotationStart * rotationOffset );
-				gameRenderWorld->AddToProjectedDecal( winding, top + idVec3( 0.0f, 0.0f, 64.0f + depth ), true, colorWhite, decalInfoArrows->renderEntity.hModel, spawnID, megaTextureMaterials.Begin(), megaTextureMaterials.Num() );
-
-				winding.Rotate( mainBounds.GetCenter(), rotationOffset );
-				gameRenderWorld->AddToProjectedDecal( winding, top + idVec3( 0.0f, 0.0f, 64.0f + depth ), true, colorWhite, decalInfoArrows->renderEntity.hModel, spawnID, megaTextureMaterials.Begin(), megaTextureMaterials.Num() );
-			} else {
-				// move mode
-
-				idMat3 rotationOffset;
-				idAngles::YawToMat3( 90.0f, rotationOffset );
-
-				winding += idVec5( idVec3( moveArrowBounds.GetMins().x, moveArrowBounds.GetMins().y, moveArrowBounds.GetMins().z - depth ), idVec2( 0.5f, 0.0f ) );
-				winding += idVec5( idVec3( moveArrowBounds.GetMins().x, moveArrowBounds.GetMaxs().y, moveArrowBounds.GetMins().z - depth ), idVec2( 0.5f, 0.5f ) );
-				winding += idVec5( idVec3( moveArrowBounds.GetMaxs().x, moveArrowBounds.GetMaxs().y, moveArrowBounds.GetMins().z - depth ), idVec2( 1.0f, 0.5f ) );
-				winding += idVec5( idVec3( moveArrowBounds.GetMaxs().x, moveArrowBounds.GetMins().y, moveArrowBounds.GetMins().z - depth ), idVec2( 1.0f, 0.0f ) );
-
-				gameRenderWorld->AddToProjectedDecal( winding, top + idVec3( 0.0f, 0.0f, 64.0f + depth ), true, colorWhite, decalInfoArrows->renderEntity.hModel, spawnID, megaTextureMaterials.Begin(), megaTextureMaterials.Num() );
-
-				winding.Rotate( mainBounds.GetCenter(), rotationOffset );
-				gameRenderWorld->AddToProjectedDecal( winding, top + idVec3( 0.0f, 0.0f, 64.0f + depth ), true, colorWhite, decalInfoArrows->renderEntity.hModel, spawnID, megaTextureMaterials.Begin(), megaTextureMaterials.Num() );
-
-				winding.Rotate( mainBounds.GetCenter(), rotationOffset );
-				gameRenderWorld->AddToProjectedDecal( winding, top + idVec3( 0.0f, 0.0f, 64.0f + depth ), true, colorWhite, decalInfoArrows->renderEntity.hModel, spawnID, megaTextureMaterials.Begin(), megaTextureMaterials.Num() );
-
-				winding.Rotate( mainBounds.GetCenter(), rotationOffset );
-				gameRenderWorld->AddToProjectedDecal( winding, top + idVec3( 0.0f, 0.0f, 64.0f + depth ), true, colorWhite, decalInfoArrows->renderEntity.hModel, spawnID, megaTextureMaterials.Begin(), megaTextureMaterials.Num() );
 			}
 
 			// the grid
