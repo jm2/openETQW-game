@@ -1809,8 +1809,12 @@ void sdAirVehicleControl::Init( sdTransport* transport ) {
 	height								= -1.f;
 
 	oldCmdAngles.Zero();
+	// empty slots: framenum is never negative, so no framenum - 1 is -2
 	for ( int i = 0; i < PREDICTED_CONTROL_FRAMES; i++ ) {
-		predictedControl[ i ].frame = -1;
+		predictedControl[ i ].frame				= -2;
+		predictedControl[ i ].oldCmdAngles		= oldCmdAngles;
+		predictedControl[ i ].collective		= collective;
+		predictedControl[ i ].collectiveDefault	= collectiveDefault;
 	}
 
 	careenHeight						= args.GetFloat( "careen_height", "512" );
