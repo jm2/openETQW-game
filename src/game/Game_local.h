@@ -755,7 +755,8 @@ public:
 		int						seatViewMode;
 		// OpenETQW (M5 step 6): who and which seat (proxy, position, view mode) the last
 		// originlog entry was logged for (-1 each after Clear); a change of seat for the same
-		// view player resets the history at the pose log (ResetOriginLogOnSeatChange)
+		// view player resets the history at the pose log (ResetOriginLogOnSeatChange). Since
+		// M5 step 7 ClientUpdateView presents no viewer but originlogViewer
 		int						originlogViewer;
 		int						originlogProxySpawnId;
 		int						originlogPositionId;
@@ -763,8 +764,8 @@ public:
 		// OpenETQW (M5 step 7; owner decision E3; compat-ledger 058): the view player's
 		// renderView origin and axis as RunFrame's pose log saved them, and who, which seat
 		// (proxy, position, view mode) and which remote camera they were saved for (-1 each
-		// after Clear and MapClear, and without a view player). RestoreTickView puts them
-		// back at the next tick's entry, so that the tick never reads a render-only frame's view
+		// after Clear, after a map's shutdown, and without a view player). RestoreTickView puts
+		// them back at the next tick's entry, so that the tick never reads a render-only frame's view
 		idVec3					tickViewOrigin;
 		idMat3					tickViewAxis;
 		int						tickViewPlayer;
@@ -772,6 +773,9 @@ public:
 		int						tickViewPositionId;
 		int						tickViewMode;
 		int						tickViewCamera;
+		// OpenETQW (M5 step 7): the spawn id of the active viewer canUnlockFrames was latched
+		// for (-1 without one, and after Clear); ClientUpdateView presents no other viewer
+		int						latchedViewer;
 	} unlock;
 
 	int						cumulativeEventsServiced;
@@ -917,8 +921,10 @@ public:
 	void					LatchSeatPresentation( idPlayer* localPlayer );	// vehicles/SeatGate.cpp
 	void					ResetOriginLogOnSeatChange( idPlayer* viewPlayer );
 	void					SaveTickView( idPlayer* viewPlayer );		// vehicles/SeatGate.cpp
-	int						TickViewChanged( idPlayer* viewPlayer );
-	int						RestoreTickView( void );
+	idPlayer*				TickViewPlayer( void );
+	int						TickViewChanged( void );
+	int						RestoreTickView( bool renderFramesRan );
+	void					LatchUnlockViewer( void );
 	void					EmitTickView( int atEntry );
 	bool					RecheckSeatPresentation( void );
 	void					EmitSeatGate( void );

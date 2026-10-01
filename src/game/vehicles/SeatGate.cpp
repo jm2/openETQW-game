@@ -949,27 +949,49 @@ void idGameLocal::SaveTickView( idPlayer* viewPlayer ) {
 
 /*
 ================
-idGameLocal::TickViewChanged
+idGameLocal::TickViewPlayer
 
-OpenETQW (M5 step 7): whether viewPlayer's renderView origin and axis differ, in any bit,
-from the ones SaveTickView saved: 1 if they do, 0 if not. -1 when there is nothing to
-compare with: no view was saved (the first tick, or no view player at the last pose log),
-or viewPlayer, its proxy, position or view mode, or its remote camera is not the one saved.
+OpenETQW (M5 step 7): the player SaveTickView saved a view for, while it still exists and
+its proxy, position, view mode and remote camera are the ones saved; NULL otherwise, and
+when no view was saved (the first tick, no view player at the last pose log, or the map
+was cleared).
 ================
 */
-int idGameLocal::TickViewChanged( idPlayer* viewPlayer ) {
-	if ( viewPlayer == NULL || unlock.tickViewPlayer == -1 || GetSpawnId( viewPlayer ) != unlock.tickViewPlayer ) {
-		return -1;
+idPlayer* idGameLocal::TickViewPlayer( void ) {
+	if ( unlock.tickViewPlayer == -1 ) {
+		return NULL;
+	}
+	idEntity* ent = EntityForSpawnId( unlock.tickViewPlayer );
+	idPlayer* player = ent != NULL ? ent->Cast< idPlayer >() : NULL;
+	if ( player == NULL ) {
+		return NULL;
 	}
 	int proxySpawnId;
 	int positionId;
 	int viewMode;
-	SeatIdentity( viewPlayer, proxySpawnId, positionId, viewMode );
+	SeatIdentity( player, proxySpawnId, positionId, viewMode );
 	if ( proxySpawnId != unlock.tickViewProxySpawnId || positionId != unlock.tickViewPositionId ||
-		viewMode != unlock.tickViewMode || RemoteCameraId( viewPlayer ) != unlock.tickViewCamera ) {
+		viewMode != unlock.tickViewMode || RemoteCameraId( player ) != unlock.tickViewCamera ) {
+		return NULL;
+	}
+	return player;
+}
+
+/*
+================
+idGameLocal::TickViewChanged
+
+OpenETQW (M5 step 7): whether the renderView origin and axis of the player SaveTickView
+saved a view for differ, in any bit, from the saved ones: 1 if they do, 0 if not, -1 when
+there is nothing to compare with (TickViewPlayer is NULL).
+================
+*/
+int idGameLocal::TickViewChanged( void ) {
+	idPlayer* player = TickViewPlayer();
+	if ( player == NULL ) {
 		return -1;
 	}
-	const renderView_t* view = viewPlayer->GetRenderView();
+	const renderView_t* view = player->GetRenderView();
 	return ( view->vieworg.Compare( unlock.tickViewOrigin ) && view->viewaxis.Compare( unlock.tickViewAxis ) ) ? 0 : 1;
 }
 
@@ -980,27 +1002,29 @@ idGameLocal::RestoreTickView
 OpenETQW (M5 step 7; owner decision E3, 2026-10-01; compat-ledger 058): called at each
 tick's entry in RunFrame, so only on an authoritative game, the listen host and single
 player; a network client never runs RunFrame, and its renderView is left as it was.
-Between ticks ClientUpdateView writes the view player's renderView origin and axis for
-each render-only frame, and SDK scripts read renderView in UpdateScript, before
-CalculateView writes the tick's view (player_context.script's ContextWaypoint,
-landmine.script, lightningpistol.script; the engine's docs/frame-path.md 6.9), so the
-tick would read the last render frame's view. This puts back the view the last tick's
-pose log saved (SaveTickView). Nothing is put back when the view player, its seat or its
-remote camera changed since: SetProxyEntity and SetRemoteCamera run CalculateView when
-they change, between ticks too (a console enterVehicle), so the view is then newer tick
-state than the saved one, and another player's view was never saved. The next
+Between ticks ClientUpdateView writes, for each render-only frame, the renderView origin
+and axis of one player only: the viewer canUnlockFrames was latched for, when it is also
+the one whose pose the last tick logged, that is the player SaveTickView saved a view for.
+SDK scripts read renderView in UpdateScript, before CalculateView writes the tick's view
+(player_context.script's ContextWaypoint, landmine.script, lightningpistol.script; the
+engine's docs/frame-path.md 6.9), so the tick would read the last render frame's view.
+When a render-only frame was prepared since the last tick (renderFramesRan), this puts
+back the saved view on that player, even if the viewer changed since. Nothing is put back
+when no render-only frame ran, so no other writer is ever undone, or when that player's
+proxy, position, view mode or remote camera changed since:
+SetProxyEntity and SetRemoteCamera run CalculateView when they change, between ticks too
+(a console enterVehicle), so its view is then newer tick state. The next
 CalculateRenderView then copies the saved view, not the last render frame's, into
 renderView's lastViewOrg and lastViewAxis (the renderer's view movement and occlusion
 velocity: presentation only), as with com_unlockFPS 0. Returns TickViewChanged's result
-from before: 1 when a view other than the saved one reached the tick's entry and was put
-back.
+from before: 1 when a view other than the saved one reached the tick's entry (put back
+when a render-only frame ran).
 ================
 */
-int idGameLocal::RestoreTickView( void ) {
-	idPlayer* viewPlayer = GetLocalViewPlayer();
-	const int atEntry = TickViewChanged( viewPlayer );
-	if ( atEntry == 1 ) {
-		renderView_t* view = viewPlayer->GetRenderView();
+int idGameLocal::RestoreTickView( bool renderFramesRan ) {
+	const int atEntry = TickViewChanged();
+	if ( atEntry == 1 && renderFramesRan ) {
+		renderView_t* view = TickViewPlayer()->GetRenderView();
 		view->vieworg = unlock.tickViewOrigin;
 		view->viewaxis = unlock.tickViewAxis;
 	}
@@ -1012,20 +1036,37 @@ int idGameLocal::RestoreTickView( void ) {
 idGameLocal::EmitTickView
 
 OpenETQW (M5 step 7), with g_simHash: each tick, as the entity Think loop starts, the
-view player's renderView against the view the last tick's pose log saved
+renderView of the player the last tick's pose log saved a view for, against that view
 (TickViewChanged: 1 differs, 0 the same, -1 nothing to compare with). entry is the
 comparison at the tick's entry, before RestoreTickView, and think the one now. entry=1
-is a render-only frame's view that reached the tick and was put back; think=1 would be
-Think starting on a view other than the tick's. The replay tests check that no tick
-prints think=1, that render-only frames lead to entry=1, and that a schedule without
-them (com_unlockFPS 0) prints no entry=1.
+is a render-only frame's view that reached the tick, and RestoreTickView put it back;
+think=1 would be Think starting on a view other than the tick's (a writer between ticks
+other than a render-only frame, which the put-back leaves alone). The replay tests check
+that no tick prints think=1, that render-only frames lead to entry=1, and that a schedule
+without them (com_unlockFPS 0) prints no entry=1.
 ================
 */
 void idGameLocal::EmitTickView( int atEntry ) {
 	if ( !g_simHash.GetBool() ) {
 		return;
 	}
-	common->Printf( "TICK_VIEW: tick=%d entry=%d think=%d\n", framenum, atEntry, TickViewChanged( GetLocalViewPlayer() ) );
+	common->Printf( "TICK_VIEW: tick=%d entry=%d think=%d\n", framenum, atEntry, TickViewChanged() );
+}
+
+/*
+================
+idGameLocal::LatchUnlockViewer
+
+OpenETQW (M5 step 7): at each tick's entry, next to canUnlockFrames (RunFrame,
+ClientPrediction), the active viewer it was taken for. ClientUpdateView runs its on-foot
+blocks, which write the viewer's renderView, only for that viewer (and only when it is the
+one whose pose the tick logged): like the draw-time proxy guard (compat-ledger 056), since
+IsFPSUnlock is evaluated only at the tick.
+================
+*/
+void idGameLocal::LatchUnlockViewer( void ) {
+	idPlayer* viewer = GetActiveViewer();
+	unlock.latchedViewer = viewer != NULL ? GetSpawnId( viewer ) : -1;
 }
 
 /*
