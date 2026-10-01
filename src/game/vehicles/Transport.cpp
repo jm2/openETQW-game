@@ -2819,7 +2819,6 @@ void sdTransport::PlacePlayerInPosition( idPlayer *other, sdVehiclePosition &pos
 
 	other->SetProxyEntity( this, position.GetPositionId() );
 	other->ResetPredictionErrorDecay();
-	GetViewForPlayer( other ).ResetViewHistory( other );
 
 	const char* fsmName = position.GetAttachAnim();
 	other->SetAnimState( ANIMCHANNEL_LEGS, va( "Legs_%s", fsmName ), 4 );

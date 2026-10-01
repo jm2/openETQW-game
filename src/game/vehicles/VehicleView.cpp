@@ -1075,22 +1075,8 @@ sdSmoothVehicleView::CalculateViewPos
 */
 void sdSmoothVehicleView::CalculateViewPos( idPlayer* player, idVec3& origin, idMat3& axis, bool fullUpdate ) {
 	if ( !fullUpdate ) {
-		int curr = gameLocal.framenum & 1;
-		int prev = ( gameLocal.framenum + 1 ) & 1;
-		if ( smoothPoseValid[ curr ] && smoothPoseValid[ prev ] &&
-			 ( gameLocal.framenum - smoothFrameLog[ prev ] == 1 ) ) {
-			float interpFraction = idMath::ClampFloat( 0.0f, 1.0f, gameLocal.unlock.interpFraction );
-			origin.Lerp( smoothOriginLog[ prev ], smoothOriginLog[ curr ], interpFraction );
-			idQuat q;
-			q.Slerp( smoothQuatLog[ prev ], smoothQuatLog[ curr ], interpFraction );
-			q.Normalize();
-			axis = q.ToMat3();
-		} else {
-			origin = thirdPersonViewOrigin;
-			axis = thirdPersonViewAxes;
-		}
-		thirdPersonViewOrigin = origin;
-		thirdPersonViewAxes = axis;
+		origin = thirdPersonViewOrigin;
+		axis = thirdPersonViewAxes;
 		return;
 	}
 
@@ -1263,35 +1249,7 @@ void sdSmoothVehicleView::CalculateViewPos( idPlayer* player, idVec3& origin, id
 	thirdPersonViewOrigin = origin;
 	thirdPersonViewAxes = axis;
 
-	int index = gameLocal.framenum & 1;
-	int prev = ( gameLocal.framenum + 1 ) & 1;
-	smoothOriginLog[ index ] = origin;
-	smoothQuatLog[ index ] = axis.ToQuat();
-	smoothFrameLog[ index ] = gameLocal.framenum;
-	if ( !smoothPoseValid[ prev ] ) {
-		smoothOriginLog[ prev ] = smoothOriginLog[ index ];
-		smoothQuatLog[ prev ] = smoothQuatLog[ index ];
-		smoothFrameLog[ prev ] = gameLocal.framenum - 1;
-		smoothPoseValid[ prev ] = true;
-	}
-	smoothPoseValid[ index ] = true;
-
 	firstFrame = false;
-}
-
-/*
-================
-sdSmoothVehicleView::ResetViewHistory
-================
-*/
-void sdSmoothVehicleView::ResetViewHistory( idPlayer* player ) {
-	int curr = gameLocal.framenum & 1;
-	int prev = ( gameLocal.framenum + 1 ) & 1;
-	smoothOriginLog[ 0 ] = smoothOriginLog[ 1 ] = thirdPersonViewOrigin;
-	smoothQuatLog[ 0 ] = smoothQuatLog[ 1 ] = thirdPersonViewAxes.ToQuat();
-	smoothFrameLog[ curr ] = gameLocal.framenum;
-	smoothFrameLog[ prev ] = gameLocal.framenum - 1;
-	smoothPoseValid[ 0 ] = smoothPoseValid[ 1 ] = true;
 }
 
 /*
@@ -1325,8 +1283,6 @@ void sdSmoothVehicleView::OnPlayerSwitched( idPlayer* player, bool newPosition )
 	previousCameraDistance = viewMode.cameraDistance;
 	previousOwnerOrigin.Zero();
 	previousCameraHeightDelta = 0.0f;
-
-	ResetViewHistory( player );
 }
 
 
@@ -1453,7 +1409,8 @@ sdSmoothVehicleView_Locked::CalculateViewPos
 */
 void sdSmoothVehicleView_Locked::CalculateViewPos( idPlayer* player, idVec3& origin, idMat3& axis, bool fullUpdate ) {
 	if ( !fullUpdate ) {
-		sdSmoothVehicleView::CalculateViewPos( player, origin, axis, fullUpdate );
+		origin = thirdPersonViewOrigin;
+		axis = thirdPersonViewAxes;
 		return;
 	}
 
