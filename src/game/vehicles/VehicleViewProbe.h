@@ -3,10 +3,12 @@
 // OpenETQW (M5 step 6): the vehicle view probe, g_logVehicleViews, a test diagnostic for
 // the engine's vehicle-view-net test. For each player in a vehicle (an sdTransport seat) it
 // prints the view state at the start and the end of each tick (VIEW_STATE) and around each
-// area-of-relevance view calculation, idPlayer::GetAORView (AOR_VIEW), which the server's
-// antilag and snapshots and a client's snapshots call between ticks. The test compares
-// them to show whether those calls return the tick's view and leave it unchanged. It is
-// read-only, and with the CVar off it prints nothing.
+// area-of-relevance view calculation, idPlayer::GetAORView (AOR_VIEW). The server's antilag
+// and snapshot writes and a client's snapshot reads call it between ticks; a client
+// moveable's Think (rvClientMoveable::Think, through SetupClientAoR) calls it inside a
+// tick, in single player too. The test compares them to show whether those calls return
+// the tick's view and leave it unchanged. It is read-only, and with the CVar off it
+// prints nothing.
 
 #ifndef __GAME_VEHICLES_VEHICLEVIEWPROBE_H__
 #define __GAME_VEHICLES_VEHICLEVIEWPROBE_H__

@@ -3994,8 +3994,6 @@ void idGameLocal::ClientPrediction( const usercmd_t* clientCmds, const usercmd_t
 					unlock.weaponPoseValid[ index ] = false;
 				}
 			}
-			// OpenETQW (M5 step 6), with g_logVehicleViews: the view as the tick logs its pose
-			EmitVehicleViewState( "post" );
 
 			if ( bse != NULL ) {
 				bse->EndFrame();
@@ -4014,6 +4012,11 @@ void idGameLocal::ClientPrediction( const usercmd_t* clientCmds, const usercmd_t
 			// delete clip models without references for real
 			clip.ActuallyDeleteClipModels();
 		}
+
+		// OpenETQW (M5 step 6), with g_logVehicleViews: the local player's view as this
+		// predicted tick ends, for every predicted tick like at=pre (new=1: a new tick,
+		// which logged its pose above; new=0: a tick predicted again)
+		EmitVehicleViewState( "post" );
 
 		demoManager.EndDemoFrame();
 

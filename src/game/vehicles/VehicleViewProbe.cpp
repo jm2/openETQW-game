@@ -146,10 +146,11 @@ static void LogViewState( const idPlayer* player, const char* at ) {
 idGameLocal::EmitVehicleViewState
 
 OpenETQW (M5 step 6), with g_logVehicleViews: VIEW_STATE, the view (pose=) of each player
-in a vehicle at the start of a tick, before entity Think (at=pre), and where the tick
-logs its pose (at=post). A server prints every client in a vehicle, a network client its
-local player. Also the player's render view origin (rvo=) and the vehicle's physics
-origin (phys=) and last pushed origin (vpush=).
+in a vehicle at the start of a tick, before entity Think (at=pre), and at its end
+(at=post): on a server where the tick logs its pose, on a network client after each
+predicted tick, a tick predicted again (new=0) included. A server prints every client in
+a vehicle, a network client its local player. Also the player's render view origin
+(rvo=) and the vehicle's physics origin (phys=) and last pushed origin (vpush=).
 ================
 */
 void idGameLocal::EmitVehicleViewState( const char* at ) {

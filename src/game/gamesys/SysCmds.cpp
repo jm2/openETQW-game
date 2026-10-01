@@ -1223,17 +1223,53 @@ void Cmd_SwapVehicleSeat_f( const idCmdArgs &args ) {
 
 /*
 ==================
+CycleCameraClientArg
+
+true when s is a whole decimal number, an optional '-' and at least one digit, so that
+atoi reads all of it ("abc" or "1.5" is refused rather than read as 0 or 1). The console
+lexer splits "1abc" into "1" and "abc", so the command also takes exactly one argument.
+==================
+*/
+static bool CycleCameraClientArg( const char* s ) {
+	if ( *s == '-' ) {
+		s++;
+	}
+	if ( *s == '\0' ) {
+		return false;
+	}
+	for ( ; *s != '\0'; s++ ) {
+		if ( !idStr::CharIsNumeric( *s ) ) {
+			return false;
+		}
+	}
+	return true;
+}
+
+/*
+==================
 Cmd_CycleVehicleCamera_f
 
 OpenETQW (M5 step 6): cycles a player's vehicle camera to the seat's next view, as the
 camera-mode key does (idPlayer::CycleVehicleCameraMode); the server sends the new mode to
 the clients. The engine's vehicle-view-net test needs it: no valley seat's first view is
-a smooth one. A network client cannot cycle a camera.
+a smooth one. Only a server cycles cameras, and not while the game is paused (nor does
+the key). The seat is checked before the cycle with sdSeatGate::FindSeat, which turns
+away what CycleCamera does not: a position id out of range (PositionForPlayer would call
+Error), a position that does not hold the player (the cycle would act for its occupant),
+and a seat without views (the cycle would take the mode modulo zero).
 ==================
 */
 void Cmd_CycleVehicleCamera_f( const idCmdArgs &args ) {
-	if ( args.Argc() < 2 ) {
+	if ( gameLocal.isClient ) {
+		gameLocal.Printf( "CYCLE_CAMERA: a network client cannot cycle a camera; the server does\n" );
+		return;
+	}
+	if ( args.Argc() != 2 || !CycleCameraClientArg( args.Argv( 1 ) ) ) {
 		gameLocal.Printf( "usage: cycleVehicleCamera <clientNum>\n" );
+		return;
+	}
+	if ( gameLocal.IsPaused() ) {
+		gameLocal.Printf( "CYCLE_CAMERA: the game is paused\n" );
 		return;
 	}
 	int clientNum = atoi( args.Argv( 1 ) );
@@ -1246,25 +1282,19 @@ void Cmd_CycleVehicleCamera_f( const idCmdArgs &args ) {
 		gameLocal.Printf( "CYCLE_CAMERA: entity %d is not a player\n", clientNum );
 		return;
 	}
-	idEntity* proxy = player->GetProxyEntity();
-	sdTransport* vehicle = proxy != NULL ? proxy->Cast< sdTransport >() : NULL;
-	if ( !vehicle ) {
-		gameLocal.Printf( "CYCLE_CAMERA: client %d is not in a vehicle\n", clientNum );
-		return;
-	}
-	if ( gameLocal.isClient ) {
-		gameLocal.Printf( "CYCLE_CAMERA: failed for client %d (only the server cycles cameras)\n", clientNum );
-		return;
-	}
-	const int oldMode = player->GetProxyViewMode();
-	player->CycleVehicleCameraMode();
 	seatInfo_t seat;
 	if ( !sdSeatGate::FindSeat( player, seat ) ) {
-		gameLocal.Printf( "CYCLE_CAMERA: client %d in %s: no view\n", clientNum, proxy->name.c_str() );
+		gameLocal.Printf( "CYCLE_CAMERA: client %d is not in a vehicle seat with a view\n", clientNum );
+		return;
+	}
+	const int oldMode = seat.viewMode;
+	player->CycleVehicleCameraMode();
+	if ( !sdSeatGate::FindSeat( player, seat ) ) {
+		gameLocal.Printf( "CYCLE_CAMERA: client %d left the seat while cycling\n", clientNum );
 		return;
 	}
 	gameLocal.Printf( "CYCLE_CAMERA: client %d in %s seat %d camera mode %d -> %d (%s)\n",
-		clientNum, proxy->name.c_str(), seat.positionId, oldMode, seat.viewMode, seat.view->GetTypeName() );
+		clientNum, seat.proxy->name.c_str(), seat.positionId, oldMode, seat.viewMode, seat.view->GetTypeName() );
 }
 
 /*
