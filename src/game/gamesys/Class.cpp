@@ -715,7 +715,6 @@ bool idClass::PostEventMS( const idEventDef *ev, int time ) {
 		if ( ev == &EV_SafeRemove ) {
 			if ( IsType( idEntity::Type ) ) {
 				// Clients aren't allowed to do this.
-				assert( false );
 				gameLocal.Warning( "Client called idClass::PostEventMS with EV_Remove or EV_SafeRemove!" );
 				return false;
 			}
@@ -1126,7 +1125,6 @@ idClass::Event_SafeRemove
 void idClass::Event_SafeRemove( void ) {
 	if ( gameLocal.isClient && IsType( idEntity::Type ) ) {
 		// Clients aren't allowed to do this.
-		assert( false );
 		gameLocal.Warning( "Client called idClass::Event_SafeRemove!" );
 		return;
 	}

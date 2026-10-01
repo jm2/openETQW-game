@@ -2481,7 +2481,6 @@ idGameLocal::FreeLoggedTrace
 void idGameLocal::FreeLoggedTrace( sdLoggedTrace* trace ) {
 	if ( !trace ) {
 		gameLocal.Warning( "idGameLocal::FreeLoggedTrace NULL trace" );
-		assert( false );
 		return;
 	}
 
@@ -2534,7 +2533,6 @@ idGameLocal::GetLoggedDecal
 gameDecalInfo_t* idGameLocal::GetLoggedDecal( int index ) {
 	if ( index < 0 || index >= MAX_LOGGED_DECALS ) {
 		gameLocal.Warning( "idGameLocal::GetLoggedDecal : index '%d' out of bounds", index );
-		assert( false );
 		return NULL;
 	}
 
@@ -2549,7 +2547,6 @@ idGameLocal::ResetLoggedDecal
 void idGameLocal::ResetLoggedDecal( int index ) {
 	if ( index < 0 || index >= MAX_LOGGED_DECALS ) {
 		gameLocal.Warning( "idGameLocal::ResetLoggedDecal : index '%d' out of bounds", index );
-		assert( false );
 		return;
 	}
 

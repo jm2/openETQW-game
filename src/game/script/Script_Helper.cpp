@@ -61,7 +61,6 @@ sdScriptHelper::Init
 bool sdScriptHelper::Init( idScriptObject* obj, const char* functionName ) {
 	if ( thread != NULL ) {
 		gameLocal.Warning( "sdScriptHelper::Init ScriptHelper reused without being cleared" );
-		assert( false );
 		return false;
 	}
 
