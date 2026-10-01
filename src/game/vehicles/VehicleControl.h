@@ -515,6 +515,8 @@ public:
 protected:
 
 	void					SetupInput();
+	void					EmitAirControlTrace( idPlayer* driver, const idAngles& base, const idAngles& cmdAngles,
+								float pitchInput, float rollInput, float yawInput, float forward ) const;
 
 	void					RunStateMachine();
 	void					HandlePhysics();
@@ -566,6 +568,18 @@ protected:
 
 	// new steering stuff
 	idAngles				oldCmdAngles;
+
+	// OpenETQW (M5 step 14a): on a network client, the state SetupInput carries between
+	// ticks as each predicted tick left it, by frame, so that the first tick replayed after
+	// a snapshot starts from the snapshot tick's (docs/vehicle-responsiveness.md stage 6)
+	struct predictedControl_t {
+		int					frame;
+		idAngles			oldCmdAngles;
+		float				collective;
+		float				collectiveDefault;
+	};
+	static const int		PREDICTED_CONTROL_FRAMES = 64;	// a power of two; net_clientMaxPrediction is 30 ticks
+	predictedControl_t		predictedControl[ PREDICTED_CONTROL_FRAMES ];
 
 	// careening input parms
 	float					careenHeight;

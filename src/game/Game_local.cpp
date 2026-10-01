@@ -1600,6 +1600,8 @@ void idGameLocal::Clear( void ) {
 	editEntities = NULL;
 	entityHash.Clear( 1024, MAX_GENTITIES );
 	framenum = 0;
+	clientSnapshotFrame = 0;
+	clientPredictedFrame = 0;
 	previousTime = 0;
 	time = 0;
 	timeOffset = 0;
@@ -3500,6 +3502,8 @@ void idGameLocal::LoadMap( const char* mapName, int randSeed, int startTime ) {
 	nextBotPopulationCheck = startTime;
 
 	framenum		= 0;
+	clientSnapshotFrame	= 0;
+	clientPredictedFrame	= 0;
 
 	if ( !editEntities ) {
 		editEntities = new idEditEntities;

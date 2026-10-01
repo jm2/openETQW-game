@@ -662,6 +662,10 @@ public:
 	idList< lifeStat_t >		lifeStats;
 
 	int						framenum;
+	// OpenETQW (M5 step 14a): on a client, the frame of the last snapshot read, and the
+	// newest frame predicted before it (AIR_CTL's since= and ahead=)
+	int						clientSnapshotFrame;
+	int						clientPredictedFrame;
 	int						startTime;
 	int						previousTime;			// time in msec of last frame
 	int						time;					// in msec
