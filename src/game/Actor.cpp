@@ -91,7 +91,6 @@ idAnimState::SetState
 void idAnimState::SetState( const char *statename, int blendFrames ) {
 	const sdProgram::sdFunction* func = self->scriptObject->GetFunction( statename );
 	if ( !func ) {
-		assert( 0 );
 		gameLocal.Error( "Can't find function '%s' in object '%s'", statename, self->scriptObject->GetTypeName() );
 	}
 
@@ -742,7 +741,6 @@ idActor::SetAnimState
 void idActor::SetAnimState( int channel, const char *statename, int blendFrames ) {
 	const sdProgram::sdFunction* func = scriptObject->GetFunction( statename );
 	if ( !func ) {
-		assert( 0 );
 		gameLocal.Error( "Can't find function '%s' in object '%s'", statename, scriptObject->GetTypeName() );
 	}
 

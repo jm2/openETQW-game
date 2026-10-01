@@ -1475,7 +1475,6 @@ void idWeapon::SetState( const char *statename, int blendFrames ) {
 
 	const sdProgram::sdFunction* func = scriptObject->GetFunction( statename );
 	if ( !func ) {
-		assert( 0 );
 		gameLocal.Error( "Can't find function '%s' in object '%s'", statename, scriptObject->GetTypeName() );
 	}
 
@@ -2059,7 +2058,6 @@ idWeapon::Event_WeaponState
 void idWeapon::Event_WeaponState( const char *statename, int blendFrames ) {
 	const sdProgram::sdFunction* func = scriptObject->GetFunction( statename );
 	if ( !func ) {
-		assert( 0 );
 		gameLocal.Error( "Can't find function '%s' in object '%s'", statename, scriptObject->GetTypeName() );
 	}
 

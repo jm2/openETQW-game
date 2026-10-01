@@ -2288,7 +2288,6 @@ sdProgramThread* idProgram::CreateThread( const sdScriptHelper& h ) {
 
 	if ( function->parmTotal != h.GetSize() ) {
 		gameLocal.Warning( "idProgram::CreateThread Function '%s' Called With Incorrect Number Of Arguments", function->GetName() );
-		assert( false );
 		return NULL;
 	}
 
