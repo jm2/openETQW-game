@@ -2552,7 +2552,6 @@ void idGameLocal::ResetLoggedDecal( int index ) {
 
 	gameDecalInfo_t* info = loggedDecals[ index ];
 	if( !info->renderEntity.hModel || !info->renderEntity.hModel->Surface( 0 )) {
-		assert( 0 );
 		return;
 	}
 
