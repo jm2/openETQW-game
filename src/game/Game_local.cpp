@@ -4103,6 +4103,12 @@ void idGameLocal::MapClear( bool clearClients ) {
 		fileSystem->CloseFile( debugLogFile );
 		debugLogFile = NULL;
 	}
+
+	// OpenETQW (M5 step 7): the saved tick view belongs to the map being cleared. Clear runs
+	// only at startup and shutdown, and a restart (which keeps the clients) or the next map
+	// (which hands out spawn ids from the start again) could otherwise match its identity, and
+	// RestoreTickView put an old view back on the first tick
+	SaveTickView( NULL );
 }
 
 /*

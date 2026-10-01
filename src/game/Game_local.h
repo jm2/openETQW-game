@@ -763,8 +763,8 @@ public:
 		// OpenETQW (M5 step 7; owner decision E3; compat-ledger 058): the view player's
 		// renderView origin and axis as RunFrame's pose log saved them, and who, which seat
 		// (proxy, position, view mode) and which remote camera they were saved for (-1 each
-		// after Clear and without a view player). RestoreTickView puts them back at the next
-		// tick's entry, so that the tick never reads a render-only frame's view
+		// after Clear and MapClear, and without a view player). RestoreTickView puts them
+		// back at the next tick's entry, so that the tick never reads a render-only frame's view
 		idVec3					tickViewOrigin;
 		idMat3					tickViewAxis;
 		int						tickViewPlayer;
