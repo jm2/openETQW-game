@@ -3999,6 +3999,7 @@ void idGameLocal::ClientPrediction( const usercmd_t* clientCmds, const usercmd_t
 				} else {
 					unlock.weaponPoseValid[ index ] = false;
 				}
+				ResetOriginLogOnSeatChange( viewPlayer );
 			}
 
 			if ( bse != NULL ) {

@@ -24,7 +24,6 @@ public:
 	virtual void					OnPlayerEntered( idPlayer* player );	// player entered the vehicle into this view
 	virtual void					OnPlayerSwitched( idPlayer* player, bool newPosition );	// player toggled views into this view
 	virtual void					OnTeleport( void );
-	virtual void					ResetViewHistory( idPlayer* player ) {}
 
 	virtual void					CalculateViewPos( idPlayer* player, idVec3& origin, idMat3& axis, bool fullUpdate ) = 0;
 	void							Update( sdVehicleWeapon* weapon );
@@ -92,14 +91,12 @@ private:
 
 class sdDampedVehicleView : public sdVehicleView {
 public:
-									sdDampedVehicleView();
 	virtual							~sdDampedVehicleView() { }
 
 	virtual const char*				GetTypeName() const { return TypeName(); }
 	static const char*				TypeName() { return "standard"; }
 
 	virtual void					OnPlayerSwitched( idPlayer* player, bool newPosition );
-	virtual void					ResetViewHistory( idPlayer* player );
 
 	virtual void					CalculateViewPos( idPlayer* player, idVec3& origin, idMat3& axis, bool fullUpdate );
 
@@ -129,11 +126,6 @@ protected:
 	idVec3							eyeBaseOffset;
 
 	idMat3							lastReturnedAxis;
-
-	idVec3							dampedOriginLog[2];
-	idQuat							dampedQuatLog[2];
-	int								dampedFrameLog[2];
-	bool							dampedPoseValid[2];
 };
 
 
@@ -192,11 +184,6 @@ class sdSmoothVehicleView : public sdVehicleView {
 public:
 	sdSmoothVehicleView() {
 		firstFrame = false;
-		smoothPoseValid[ 0 ] = smoothPoseValid[ 1 ] = false;
-		smoothFrameLog[ 0 ] = smoothFrameLog[ 1 ] = 0;
-		smoothOriginLog[ 0 ] = smoothOriginLog[ 1 ] = vec3_zero;
-		smoothQuatLog[ 0 ] = idQuat( 0.0f, 0.0f, 0.0f, 1.0f );
-		smoothQuatLog[ 1 ] = idQuat( 0.0f, 0.0f, 0.0f, 1.0f );
 	}
 
 	virtual void					Init( sdVehiclePosition* _position, const positionViewMode_t& _viewMode );
@@ -211,7 +198,6 @@ public:
 	virtual const idAngles			GetRequiredViewAngles( const idVec3& aimPosition ) const;
 
 	virtual void					OnPlayerSwitched( idPlayer* player, bool newPosition );
-	virtual void					ResetViewHistory( idPlayer* player );
 
 protected:
 	virtual void					SetupEyes( idAnimatedEntity* other );
@@ -276,11 +262,6 @@ protected:
 	idVec3							previousOwnerOrigin;
 
 	bool							firstFrame;
-
-	idVec3							smoothOriginLog[2];
-	idQuat							smoothQuatLog[2];
-	int								smoothFrameLog[2];
-	bool							smoothPoseValid[2];
 };
 
 class sdSmoothVehicleView_Free : public sdSmoothVehicleView {

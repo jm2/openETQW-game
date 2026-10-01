@@ -878,6 +878,37 @@ void idGameLocal::LatchSeatPresentation( idPlayer* localPlayer ) {
 
 /*
 ================
+idGameLocal::ResetOriginLogOnSeatChange
+
+OpenETQW (M5 step 6; owner decision 5; compat-ledger 057): called where a tick logs its
+pose, after originlog[ framenum & 1 ] is written. When the view player logged is the one
+logged last and its proxy, position or view mode differs from that entry's, the previous
+slot takes this tick's origin, so the tick's base draw does not rewind to the old seat's
+camera (or to the vehicle camera after an exit) and its render-only frames hold. The
+change may have come at any time since the last log: in Think, from events or the
+console, or, on a network client, from a snapshot. A change of view player only stores
+the new identity, and a respawn or teleport that keeps the seat resets nothing, as in
+the SDK. The weapon logs are view-relative and are not reset.
+================
+*/
+void idGameLocal::ResetOriginLogOnSeatChange( idPlayer* viewPlayer ) {
+	int proxySpawnId;
+	int positionId;
+	int viewMode;
+	SeatIdentity( viewPlayer, proxySpawnId, positionId, viewMode );
+	const int viewerSpawnId = viewPlayer != NULL ? GetSpawnId( viewPlayer ) : -1;
+	if ( viewerSpawnId != -1 && viewerSpawnId == unlock.originlogViewer &&
+		( proxySpawnId != unlock.originlogProxySpawnId || positionId != unlock.originlogPositionId || viewMode != unlock.originlogViewMode ) ) {
+		unlock.originlog[ ( framenum + 1 ) & 1 ] = unlock.originlog[ framenum & 1 ];
+	}
+	unlock.originlogViewer = viewerSpawnId;
+	unlock.originlogProxySpawnId = proxySpawnId;
+	unlock.originlogPositionId = positionId;
+	unlock.originlogViewMode = viewMode;
+}
+
+/*
+================
 idGameLocal::RecheckSeatPresentation
 
 OpenETQW (M5 step 13): the draw-time re-check (docs/vehicle-responsiveness.md 3.1, rule
