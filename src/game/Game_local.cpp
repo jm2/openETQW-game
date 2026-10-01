@@ -5926,12 +5926,17 @@ void idGameLocal::ClientUpdateView( const usercmd_t &cmd, int timeLeft ) {
 		return;
 	}
 
+	// OpenETQW (M5 step 6): canUnlockFrames is latched before entity Think, so on the render-only
+	// frames of a tick in which the viewer gained a proxy it is still set; the on-foot blocks run
+	// only when the viewer has no proxy now (compat-ledger 056)
+	const bool onFoot = p->GetProxyEntity() == NULL;
+
 	int effectiveTime = time + ( USERCMD_MSEC - timeLeft );
 	gameRenderWorld->DebugClearLines( effectiveTime );
 	gameRenderWorld->DebugClearPolygons( effectiveTime );
 
 	// store reference positions and orientations at the beginning of a cycle of unlock frames
-	if ( framenum != unlock.lastFullDrawFrame ) {
+	if ( onFoot && framenum != unlock.lastFullDrawFrame ) {
 		unlock.refAngles = p->renderView.viewaxis.ToAngles();
 
 		if ( g_unlock_updateViewpos.GetBool() && g_unlock_viewStyle.GetInteger() == 1 ) {
@@ -6002,135 +6007,137 @@ void idGameLocal::ClientUpdateView( const usercmd_t &cmd, int timeLeft ) {
 		}
 	}
 
-	idAngles currentAngles = unlock.refAngles;
+	if ( onFoot ) {
+		idAngles currentAngles = unlock.refAngles;
 
-	// Gordon: FIXME: This doesn't take all clamps/rate limits into account
-	if ( g_unlock_updateAngles.GetBool() && !IsPaused() ) {
-		// apply the latest angles to update the view axis
-		for ( int i = 0; i < 3; i++ ) {
-			currentAngles[i] = unlock.refAngles[i] + SHORT2ANGLE( cmd.angles[i] ) - SHORT2ANGLE( p->usercmd.angles[i] );
+		// Gordon: FIXME: This doesn't take all clamps/rate limits into account
+		if ( g_unlock_updateAngles.GetBool() && !IsPaused() ) {
+			// apply the latest angles to update the view axis
+			for ( int i = 0; i < 3; i++ ) {
+				currentAngles[i] = unlock.refAngles[i] + SHORT2ANGLE( cmd.angles[i] ) - SHORT2ANGLE( p->usercmd.angles[i] );
+			}
+
+			// HACK: let the player clamp the mouse move
+			idAngles delta = ( currentAngles - unlock.refAngles ).Normalize180();
+			delta /= interpFraction;
+			p->MouseMove( unlock.refAngles, delta );
+			delta *= interpFraction;
+			currentAngles = unlock.refAngles + delta;
+
+			// clamp to the limits
+			currentAngles.Normalize180();
+			currentAngles.Clamp( unlock.minAngles, unlock.maxAngles );
+
+			p->renderView.viewaxis = currentAngles.ToMat3();
+			updateSight = true;
 		}
 
-		// HACK: let the player clamp the mouse move
-		idAngles delta = ( currentAngles - unlock.refAngles ).Normalize180();
-		delta /= interpFraction;
-		p->MouseMove( unlock.refAngles, delta );
-		delta *= interpFraction;
-		currentAngles = unlock.refAngles + delta;
 
-		// clamp to the limits
-		currentAngles.Normalize180();
-		currentAngles.Clamp( unlock.minAngles, unlock.maxAngles );
+		idVec3 originDelta = vec3_origin;
+		if ( g_unlock_updateViewpos.GetBool() ) {
+			switch ( g_unlock_viewStyle.GetInteger() ) {
+				case 0: {
+					// extrapolate last speed, ignoring any newer data
+					idVec3 current = unlock.originlog[ framenum & 1 ];
+					idVec3 prev = unlock.originlog[ ( framenum + 1 ) & 1 ];
+					originDelta = ( current - prev ) * interpFraction;
+					p->renderView.vieworg = current + originDelta;
+					break;
+				}
+				case 1: {
+					// interpolate between two last positions
+					// lags behind of one frame (32ms), but no misprediction hitches
+					idVec3 current = unlock.originlog[ framenum & 1 ];
+					idVec3 prev = unlock.originlog[ ( framenum + 1 ) & 1 ];
+					originDelta = ( current - prev ) * interpFraction;
+					p->renderView.vieworg = prev + originDelta;
+					break;
+				}
+			}
+			updateSight = true;
+		}
 
-		p->renderView.viewaxis = currentAngles.ToMat3();
-		updateSight = true;
+		// sight model for the various scopes needs to be updated
+		// conveniently uses the same origin as the view, so all computation is already done
+		if ( updateSight ) {
+			sdClientAnimated *sight = p->GetSight();
+			if ( sight != NULL ) {
+				float fovx, fovy;
+				gameLocal.CalcFov( p->GetSightFOV(), fovx, fovy );
+				sight->GetRenderEntity()->weaponDepthHackFOV_x = fovx;
+				sight->GetRenderEntity()->weaponDepthHackFOV_y = fovy;
+
+				sight->SetOrigin( p->renderView.vieworg );
+				sight->SetAxis( p->renderView.viewaxis );
+				sight->Present();
+			}
+		}
+
+		// Update the weapon from the two full-tic poses.  The old path destructively
+		// shifted the absolute render origin for the base draw, making the weapon
+		// alternate between game-tic and render-only transforms as the player moved.
+		// Interpolating in view space keeps camera motion, bob and weapon orientation
+		// on the same timeline.
+		if ( unlock.doWeapon && ( g_unlock_updateViewpos.GetBool() || g_unlock_updateAngles.GetBool() ) ) {
+			const int currentIndex = framenum & 1;
+			const int previousIndex = ( framenum + 1 ) & 1;
+			const bool haveWeaponPose = unlock.weaponPoseValid[ currentIndex ] &&
+				unlock.weaponPoseValid[ previousIndex ];
+
+			idVec3 updatedOrigin;
+			idMat3 updatedAxis;
+			idMat3 angleTransform;
+			if ( haveWeaponPose ) {
+				idVec3 localOffset = unlock.weaponOffsetLog[ currentIndex ];
+				idMat3 localAxis = unlock.weaponAxisLog[ currentIndex ];
+				if ( g_unlock_updateViewpos.GetBool() && g_unlock_viewStyle.GetInteger() == 1 ) {
+					localOffset.Lerp( unlock.weaponOffsetLog[ previousIndex ],
+						unlock.weaponOffsetLog[ currentIndex ], interpFraction );
+					idQuat interpolatedAxis;
+					interpolatedAxis.Slerp( unlock.weaponAxisLog[ previousIndex ].ToQuat(),
+						unlock.weaponAxisLog[ currentIndex ].ToQuat(), interpFraction );
+					localAxis = interpolatedAxis.ToMat3();
+				}
+				updatedOrigin = p->renderView.vieworg + localOffset * p->renderView.viewaxis;
+				updatedAxis = localAxis * p->renderView.viewaxis;
+			} else {
+				// Preserve the legacy transform until both history slots have been filled.
+				idAngles a = currentAngles - unlock.refAngles;
+				a.Normalize180();
+				idMat3 world;
+				idAngles::YawToMat3( unlock.refAngles.yaw, world );
+				angleTransform = world.Transpose() * a.ToMat3() * world;
+				updatedOrigin = unlock.weaponOrigin - unlock.viewOrigin;
+				updatedOrigin *= angleTransform;
+				updatedOrigin += unlock.viewOrigin + originDelta;
+				updatedAxis = unlock.weaponAxis * angleTransform;
+			}
+
+			p->weapon->GetRenderEntity()->origin = updatedOrigin;
+			p->weapon->GetRenderEntity()->axis = updatedAxis;
+
+			p->weapon->BecomeActive( TH_UPDATEVISUALS );
+			PresentUnlocked( p->weapon.GetEntity() );
+
+			// update bound GUIs as well
+			for ( rvClientEntity* cent = p->weapon->clientEntities.Next(); cent != NULL; cent = cent->bindNode.Next() ) {
+				sdGuiSurface* guiSurface;
+				rvClientEffect* effect;
+				if ( ( guiSurface = cent->Cast< sdGuiSurface >() ) != NULL ) {
+					// Keep the GUI rigidly attached to the interpolated weapon pose.
+					const idMat3 inverseWeaponAxis = unlock.weaponAxis.Transpose();
+					const idVec3 guiOffset =
+						( unlock.weaponGUIOrigin - unlock.weaponOrigin ) * inverseWeaponAxis;
+					const idMat3 guiLocalAxis = unlock.weaponGUIAxis * inverseWeaponAxis;
+					guiSurface->GetRenderable().SetPosition(
+						updatedOrigin + guiOffset * updatedAxis,
+						guiLocalAxis * updatedAxis );
+				} else if ( ( effect = cent->Cast< rvClientEffect >() ) != NULL ) {
+					effect->ClientUpdateView();
+				}
+			}
+		}
 	}
-
-
-	idVec3 originDelta = vec3_origin;
-	if ( g_unlock_updateViewpos.GetBool() ) {
-		switch ( g_unlock_viewStyle.GetInteger() ) {
-			case 0: {
-				// extrapolate last speed, ignoring any newer data
-				idVec3 current = unlock.originlog[ framenum & 1 ];
-				idVec3 prev = unlock.originlog[ ( framenum + 1 ) & 1 ];
-				originDelta = ( current - prev ) * interpFraction;
-				p->renderView.vieworg = current + originDelta;
-				break;
-			}
-			case 1: {
-				// interpolate between two last positions
-				// lags behind of one frame (32ms), but no misprediction hitches
-				idVec3 current = unlock.originlog[ framenum & 1 ];
-				idVec3 prev = unlock.originlog[ ( framenum + 1 ) & 1 ];
-				originDelta = ( current - prev ) * interpFraction;
-				p->renderView.vieworg = prev + originDelta;
-				break;
-			}
-		}
-		updateSight = true;
-	}
-
-	// sight model for the various scopes needs to be updated
-	// conveniently uses the same origin as the view, so all computation is already done
-	if ( updateSight ) {
-		sdClientAnimated *sight = p->GetSight();
-		if ( sight != NULL ) {
-			float fovx, fovy;
-			gameLocal.CalcFov( p->GetSightFOV(), fovx, fovy );
-			sight->GetRenderEntity()->weaponDepthHackFOV_x = fovx;
-			sight->GetRenderEntity()->weaponDepthHackFOV_y = fovy;
-
-			sight->SetOrigin( p->renderView.vieworg );
-			sight->SetAxis( p->renderView.viewaxis );
-			sight->Present();
-		}
-	}
-
-	// Update the weapon from the two full-tic poses.  The old path destructively
-	// shifted the absolute render origin for the base draw, making the weapon
-	// alternate between game-tic and render-only transforms as the player moved.
-	// Interpolating in view space keeps camera motion, bob and weapon orientation
-	// on the same timeline.
-	if ( unlock.doWeapon && ( g_unlock_updateViewpos.GetBool() || g_unlock_updateAngles.GetBool() ) ) {
-		const int currentIndex = framenum & 1;
-		const int previousIndex = ( framenum + 1 ) & 1;
-		const bool haveWeaponPose = unlock.weaponPoseValid[ currentIndex ] &&
-			unlock.weaponPoseValid[ previousIndex ];
-
-		idVec3 updatedOrigin;
-		idMat3 updatedAxis;
-		idMat3 angleTransform;
-		if ( haveWeaponPose ) {
-			idVec3 localOffset = unlock.weaponOffsetLog[ currentIndex ];
-			idMat3 localAxis = unlock.weaponAxisLog[ currentIndex ];
-			if ( g_unlock_updateViewpos.GetBool() && g_unlock_viewStyle.GetInteger() == 1 ) {
-				localOffset.Lerp( unlock.weaponOffsetLog[ previousIndex ],
-					unlock.weaponOffsetLog[ currentIndex ], interpFraction );
-				idQuat interpolatedAxis;
-				interpolatedAxis.Slerp( unlock.weaponAxisLog[ previousIndex ].ToQuat(),
-					unlock.weaponAxisLog[ currentIndex ].ToQuat(), interpFraction );
-				localAxis = interpolatedAxis.ToMat3();
-			}
-			updatedOrigin = p->renderView.vieworg + localOffset * p->renderView.viewaxis;
-			updatedAxis = localAxis * p->renderView.viewaxis;
-		} else {
-			// Preserve the legacy transform until both history slots have been filled.
-			idAngles a = currentAngles - unlock.refAngles;
-			a.Normalize180();
-			idMat3 world;
-			idAngles::YawToMat3( unlock.refAngles.yaw, world );
-			angleTransform = world.Transpose() * a.ToMat3() * world;
-			updatedOrigin = unlock.weaponOrigin - unlock.viewOrigin;
-			updatedOrigin *= angleTransform;
-			updatedOrigin += unlock.viewOrigin + originDelta;
-			updatedAxis = unlock.weaponAxis * angleTransform;
-		}
-
-		p->weapon->GetRenderEntity()->origin = updatedOrigin;
-		p->weapon->GetRenderEntity()->axis = updatedAxis;
-
-		p->weapon->BecomeActive( TH_UPDATEVISUALS );
-		PresentUnlocked( p->weapon.GetEntity() );
-
-		// update bound GUIs as well
-		for ( rvClientEntity* cent = p->weapon->clientEntities.Next(); cent != NULL; cent = cent->bindNode.Next() ) {
-			sdGuiSurface* guiSurface;
-			rvClientEffect* effect;
-			if ( ( guiSurface = cent->Cast< sdGuiSurface >() ) != NULL ) {
-				// Keep the GUI rigidly attached to the interpolated weapon pose.
-				const idMat3 inverseWeaponAxis = unlock.weaponAxis.Transpose();
-				const idVec3 guiOffset =
-					( unlock.weaponGUIOrigin - unlock.weaponOrigin ) * inverseWeaponAxis;
-				const idMat3 guiLocalAxis = unlock.weaponGUIAxis * inverseWeaponAxis;
-				guiSurface->GetRenderable().SetPosition(
-					updatedOrigin + guiOffset * updatedAxis,
-					guiLocalAxis * updatedAxis );
-			} else if ( ( effect = cent->Cast< rvClientEffect >() ) != NULL ) {
-				effect->ClientUpdateView();
-			}
-		}
- 	}
 
 	if ( g_unlock_interpolateMoving.GetBool() ) {
 		// walk entities that need interpolation and present them to the renderer with updated origins
