@@ -1700,6 +1700,13 @@ void idGameLocal::Clear( void ) {
 	unlock.originlogProxySpawnId = -1;
 	unlock.originlogPositionId = -1;
 	unlock.originlogViewMode = -1;
+	// OpenETQW (M5 step 7): no tick view saved yet
+	unlock.tickViewPlayer = -1;
+	unlock.tickViewProxySpawnId = -1;
+	unlock.tickViewPositionId = -1;
+	unlock.tickViewMode = -1;
+	unlock.tickViewCamera = -1;
+	unlock.latchedViewer = -1;
 
 	nextBotPopulationCheck = 0;
 	
@@ -4093,6 +4100,15 @@ void idGameLocal::MapClear( bool clearClients ) {
 		fileSystem->CloseFile( debugLogFile );
 		debugLogFile = NULL;
 	}
+
+	// OpenETQW (M5 step 7): with the clients cleared too (the map's shutdown), the saved tick
+	// view belongs to a player that is gone, and the next map hands out spawn ids from the
+	// start again, so its first tick could match the saved identity. Clear runs only at startup
+	// and shutdown. A restart in place keeps the clients: the saved player is the same entity,
+	// and its view is the one its last tick logged
+	if ( clearClients ) {
+		SaveTickView( NULL );
+	}
 }
 
 /*
@@ -5162,9 +5178,17 @@ void idGameLocal::RunFrame( const usercmd_t *clientCmds, int elapsedTime ) {
 		unlock.canUnlockFrames = false;
 	}
 	LatchSeatPresentation( localPlayer );
+	LatchUnlockViewer();
 
+	// OpenETQW (M5 step 7): ClientUpdateView sets unlockedDraw, so it says whether a
+	// render-only frame was prepared since the last tick
+	const bool renderFramesRan = unlock.unlockedDraw;
 	unlock.unlockedDraw = false;
 	interpolateEntities.Clear();
+	// OpenETQW (M5 step 7; owner decision E3): the saved view player's renderView as the last
+	// tick left it, not as the last render-only frame did, for the rest of this tick
+	// (UpdateScript reads it before CalculateView); network clients do not run RunFrame
+	const int tickViewAtEntry = !isClient ? RestoreTickView( renderFramesRan ) : -1;
 
 
 
@@ -5344,6 +5368,8 @@ void idGameLocal::RunFrame( const usercmd_t *clientCmds, int elapsedTime ) {
 		// OpenETQW (M5 step 6), with g_logVehicleViews: the views of players in vehicles as
 		// the tick starts, after whatever ran since the last tick (AoR, snapshots, events)
 		EmitVehicleViewState( "pre" );
+		// OpenETQW (M5 step 7), with g_simHash: whether Think starts on the tick's view
+		EmitTickView( tickViewAtEntry );
 
 		int num = 0;
 		for ( ent = activeEntities.Next(); ent != NULL; ent = ent->activeNode.Next() ) {
@@ -5398,6 +5424,8 @@ void idGameLocal::RunFrame( const usercmd_t *clientCmds, int elapsedTime ) {
 			}
 			ResetOriginLogOnSeatChange( viewPlayer );
 		}
+		// OpenETQW (M5 step 7): the view this tick computed, put back at the next tick's entry
+		SaveTickView( viewPlayer );
 		// the replay's per-tick view state, from the view player that was just logged
 		// (before event servicing can change the viewer or its proxy)
 		EmitSimView( viewPlayer );
@@ -5924,8 +5952,14 @@ void idGameLocal::ClientUpdateView( const usercmd_t &cmd, int timeLeft ) {
 
 	// OpenETQW (M5 step 6): canUnlockFrames is latched before entity Think, so on the render-only
 	// frames of a tick in which the viewer gained a proxy it is still set; the on-foot blocks run
-	// only when the viewer has no proxy now (compat-ledger 056)
-	const bool onFoot = p->GetProxyEntity() == NULL;
+	// only when the viewer has no proxy now (compat-ledger 056). M5 step 7: and only when the
+	// viewer is the one canUnlockFrames was latched for (IsFPSUnlock judged it) and the one whose
+	// pose the last tick logged (originlog is its; on an authoritative game so is the view
+	// RestoreTickView puts back). A change of viewer between ticks (the console's spectate
+	// commands on a listen host) would otherwise write another player's renderView, which that
+	// player's tick reads in UpdateScript and nothing puts back (compat-ledger 058)
+	const int viewerSpawnId = GetSpawnId( p );
+	const bool onFoot = p->GetProxyEntity() == NULL && viewerSpawnId == unlock.latchedViewer && viewerSpawnId == unlock.originlogViewer;
 
 	int effectiveTime = time + ( USERCMD_MSEC - timeLeft );
 	gameRenderWorld->DebugClearLines( effectiveTime );
