@@ -2447,6 +2447,12 @@ bool idGameLocal::ClientReadSnapshot( int sequence, const int gameFrame, const i
 	}
 
 	// update the game time
+	// OpenETQW (M5 step 14a): framenum is the newest frame predicted since the last snapshot,
+	// unless no tick ran since then (two snapshots read in one engine frame)
+	if ( framenum > clientSnapshotFrame ) {
+		clientPredictedFrame = framenum;
+	}
+	clientSnapshotFrame = gameFrame;
 	framenum = gameFrame;
 	if ( !IsPaused() ) {
 		time = gameTime - timeOffset;

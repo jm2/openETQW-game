@@ -1809,6 +1809,14 @@ void sdAirVehicleControl::Init( sdTransport* transport ) {
 	height								= -1.f;
 
 	oldCmdAngles.Zero();
+	// empty slots: framenum is never negative, so no framenum - 1 is -2
+	compile_time_assert( ( PREDICTED_CONTROL_FRAMES & ( PREDICTED_CONTROL_FRAMES - 1 ) ) == 0 );
+	for ( int i = 0; i < PREDICTED_CONTROL_FRAMES; i++ ) {
+		predictedControl[ i ].frame				= -2;
+		predictedControl[ i ].oldCmdAngles		= oldCmdAngles;
+		predictedControl[ i ].collective		= collective;
+		predictedControl[ i ].collectiveDefault	= collectiveDefault;
+	}
 
 	careenHeight						= args.GetFloat( "careen_height", "512" );
 	careenSpeed							= args.GetFloat( "careen_speed", "150" );
@@ -1972,6 +1980,20 @@ sdAirVehicleControl::SetupInput
 void sdAirVehicleControl::SetupInput() {
 	idPlayer* driver = owner->GetPositionManager().FindDriver();
 
+	// OpenETQW (M5 step 14a): neither oldCmdAngles nor collective is networked, so on the first
+	// tick a client replays after a snapshot they hold its newest prediction instead of the
+	// snapshot tick's state: the cyclic delta is lost or reversed and collective runs ahead.
+	// Start from the state this client predicted for the previous frame. On a first-time tick
+	// that is the state already in place.
+	if ( gameLocal.isClient && g_airControlHistory.GetBool() ) {
+		const predictedControl_t& previous = predictedControl[ ( gameLocal.framenum - 1 ) & ( PREDICTED_CONTROL_FRAMES - 1 ) ];
+		if ( previous.frame == gameLocal.framenum - 1 ) {
+			oldCmdAngles		= previous.oldCmdAngles;
+			collective			= previous.collective;
+			collectiveDefault	= previous.collectiveDefault;
+		}
+	}
+
 	input->Clear();
 	idVec3 directions = vec3_origin;
 	idAngles cmdAngles = ang_zero;
@@ -1981,6 +2003,7 @@ void sdAirVehicleControl::SetupInput() {
 		cmdAngles = input->GetCmdAngles();
 	}
 
+	const idAngles baseCmdAngles = oldCmdAngles;
 	idAngles angleDelta = cmdAngles - oldCmdAngles;
 	angleDelta.Normalize180();
 	oldCmdAngles = cmdAngles;
@@ -2258,6 +2281,59 @@ void sdAirVehicleControl::SetupInput() {
 			}
 		}
 	}
+
+	// OpenETQW (M5 step 14a): recorded whatever g_airControlHistory says, so that it can be
+	// switched while a client flies
+	if ( gameLocal.isClient ) {
+		predictedControl_t& current = predictedControl[ gameLocal.framenum & ( PREDICTED_CONTROL_FRAMES - 1 ) ];
+		current.frame				= gameLocal.framenum;
+		current.oldCmdAngles		= oldCmdAngles;
+		current.collective			= collective;
+		current.collectiveDefault	= collectiveDefault;
+	}
+
+	if ( driver != NULL && g_logAirControl.GetBool() ) {
+		EmitAirControlTrace( driver, baseCmdAngles, cmdAngles, input->GetPitch(), input->GetRoll(), input->GetYaw(), directions.x );
+	}
+}
+
+/*
+================
+sdAirVehicleControl::EmitAirControlTrace
+
+OpenETQW (M5 step 14a), with g_logAirControl: one AIR_CTL line for a tick of a piloted
+aircraft's control, on the server and on a client's first-time and replayed ticks, so a
+test can pair a client's replay of tick F with the server's run of it (the same framenum).
+uf and dup are the driver's usercmd's frame and duplicate count as the tick runs: a command
+the server duplicated keeps uf = F - 1. The command angles and the base the cyclic delta
+was taken from print as the usercmd's shorts (exact); the pose is the one the tick starts
+from (docs/vehicle-responsiveness.md stage 6).
+================
+*/
+void sdAirVehicleControl::EmitAirControlTrace( idPlayer* driver, const idAngles& base, const idAngles& cmdAngles,
+	float pitchInput, float rollInput, float yawInput, float forward ) const {
+	const usercmd_t& cmd = gameLocal.usercmds[ driver->entityNumber ];
+	const bool client = gameLocal.isClient;
+	const idPhysics* phys = owner->GetPhysics();
+	const idVec3& org = phys->GetOrigin();
+	const idQuat quat = phys->GetAxis().ToQuat();
+	const idVec3& lin = phys->GetLinearVelocity();
+	const idVec3& ang = phys->GetAngularVelocity();
+
+	common->Printf( "AIR_CTL: side=%s tick=%d ent=%d uf=%d dup=%d adv=%d pred=%d since=%d ahead=%d"
+		" cmd=(%d,%d,%d) base=(%d,%d,%d) in=(%.9g,%.9g,%.9g) coll=%.9g collDef=%.9g fwd=%.9g grounded=%d gear=%d"
+		" org=(%.9g,%.9g,%.9g) quat=(%.9g,%.9g,%.9g,%.9g) lin=(%.9g,%.9g,%.9g) ang=(%.9g,%.9g,%.9g)\n",
+		client ? "cl" : "srv", gameLocal.framenum, owner->entityNumber, cmd.gameFrame, cmd.duplicateCount,
+		driver->GetUserInfo().advancedFlightControls ? 1 : 0,
+		client && !gameLocal.isNewFrame ? 1 : 0,
+		client ? gameLocal.framenum - gameLocal.clientSnapshotFrame : 0,
+		client ? gameLocal.clientPredictedFrame - gameLocal.clientSnapshotFrame : 0,
+		ANGLE2SHORT( cmdAngles.pitch ), ANGLE2SHORT( cmdAngles.yaw ), ANGLE2SHORT( cmdAngles.roll ),
+		ANGLE2SHORT( base.pitch ), ANGLE2SHORT( base.yaw ), ANGLE2SHORT( base.roll ),
+		pitchInput, rollInput, yawInput, collective, collectiveDefault, forward,
+		isGrounded ? 1 : 0, landingGearDown ? 1 : 0,
+		org.x, org.y, org.z, quat.x, quat.y, quat.z, quat.w,
+		lin.x, lin.y, lin.z, ang.x, ang.y, ang.z );
 }
 
 /*
