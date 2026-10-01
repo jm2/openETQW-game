@@ -895,6 +895,7 @@ public:
 	bool					RecheckSeatPresentation( void );
 	void					EmitSeatGate( void );
 	void					RunSeatGateSchedule( usercmd_t* cmds );
+	void					EmitVehicleViewState( const char* at );	// vehicles/VehicleViewProbe.cpp
 	virtual void			WriteClientNetworkInfo( idFile* file );
 	virtual void			ReadClientNetworkInfo( idFile* file );
 	virtual void			WriteUserInfo( idBitMsg& msg, const idDict& info );
