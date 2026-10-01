@@ -760,10 +760,11 @@ public:
 		int						originlogProxySpawnId;
 		int						originlogPositionId;
 		int						originlogViewMode;
-		// OpenETQW (M5 step 7): the view player's renderView origin and axis as RunFrame's
-		// pose log saved them, and who, which seat (proxy, position, view mode) and which
-		// remote camera they were saved for (-1 each after Clear and without a view player);
-		// TICK_VIEW compares the view at the next tick's entry and as its Think starts with them
+		// OpenETQW (M5 step 7; owner decision E3; compat-ledger 058): the view player's
+		// renderView origin and axis as RunFrame's pose log saved them, and who, which seat
+		// (proxy, position, view mode) and which remote camera they were saved for (-1 each
+		// after Clear and without a view player). RestoreTickView puts them back at the next
+		// tick's entry, so that the tick never reads a render-only frame's view
 		idVec3					tickViewOrigin;
 		idMat3					tickViewAxis;
 		int						tickViewPlayer;
@@ -917,6 +918,7 @@ public:
 	void					ResetOriginLogOnSeatChange( idPlayer* viewPlayer );
 	void					SaveTickView( idPlayer* viewPlayer );		// vehicles/SeatGate.cpp
 	int						TickViewChanged( idPlayer* viewPlayer );
+	int						RestoreTickView( void );
 	void					EmitTickView( int atEntry );
 	bool					RecheckSeatPresentation( void );
 	void					EmitSeatGate( void );
