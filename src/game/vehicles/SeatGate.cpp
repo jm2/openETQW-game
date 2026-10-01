@@ -909,6 +909,92 @@ void idGameLocal::ResetOriginLogOnSeatChange( idPlayer* viewPlayer ) {
 
 /*
 ================
+RemoteCameraId
+
+the remote camera a saved tick view is compared by; -1 without one
+================
+*/
+static int RemoteCameraId( idPlayer* viewPlayer ) {
+	idEntity* camera = viewPlayer->GetRemoteCamera();
+	return camera != NULL ? gameLocal.GetSpawnId( camera ) : -1;
+}
+
+/*
+================
+idGameLocal::SaveTickView
+
+OpenETQW (M5 step 7): called where RunFrame logs the tick's pose, after originlog. Saves
+the view player's renderView origin and axis, the view this tick computed, with the view
+player, its seat and its remote camera, for TickViewChanged. Without a view player nothing
+is saved, and the last saved view is dropped.
+================
+*/
+void idGameLocal::SaveTickView( idPlayer* viewPlayer ) {
+	if ( viewPlayer == NULL ) {
+		unlock.tickViewPlayer = -1;
+		unlock.tickViewProxySpawnId = -1;
+		unlock.tickViewPositionId = -1;
+		unlock.tickViewMode = -1;
+		unlock.tickViewCamera = -1;
+		return;
+	}
+	const renderView_t* view = viewPlayer->GetRenderView();
+	unlock.tickViewOrigin = view->vieworg;
+	unlock.tickViewAxis = view->viewaxis;
+	unlock.tickViewPlayer = GetSpawnId( viewPlayer );
+	SeatIdentity( viewPlayer, unlock.tickViewProxySpawnId, unlock.tickViewPositionId, unlock.tickViewMode );
+	unlock.tickViewCamera = RemoteCameraId( viewPlayer );
+}
+
+/*
+================
+idGameLocal::TickViewChanged
+
+OpenETQW (M5 step 7): whether viewPlayer's renderView origin and axis differ, in any bit,
+from the ones SaveTickView saved: 1 if they do, 0 if not. -1 when there is nothing to
+compare with: no view was saved (the first tick, or no view player at the last pose log),
+or viewPlayer, its proxy, position or view mode, or its remote camera is not the one saved.
+================
+*/
+int idGameLocal::TickViewChanged( idPlayer* viewPlayer ) {
+	if ( viewPlayer == NULL || unlock.tickViewPlayer == -1 || GetSpawnId( viewPlayer ) != unlock.tickViewPlayer ) {
+		return -1;
+	}
+	int proxySpawnId;
+	int positionId;
+	int viewMode;
+	SeatIdentity( viewPlayer, proxySpawnId, positionId, viewMode );
+	if ( proxySpawnId != unlock.tickViewProxySpawnId || positionId != unlock.tickViewPositionId ||
+		viewMode != unlock.tickViewMode || RemoteCameraId( viewPlayer ) != unlock.tickViewCamera ) {
+		return -1;
+	}
+	const renderView_t* view = viewPlayer->GetRenderView();
+	return ( view->vieworg.Compare( unlock.tickViewOrigin ) && view->viewaxis.Compare( unlock.tickViewAxis ) ) ? 0 : 1;
+}
+
+/*
+================
+idGameLocal::EmitTickView
+
+OpenETQW (M5 step 7), with g_simHash: each tick, as the entity Think loop starts, the
+view player's renderView against the view the last tick's pose log saved
+(TickViewChanged: 1 differs, 0 the same, -1 nothing to compare with). entry is the
+comparison at the tick's entry and think the one now. On an authoritative game entry=1
+is a render-only frame's view (ClientUpdateView writes renderView between ticks) that
+reached the tick, and think=1 is Think starting on it: SDK scripts read renderView in
+UpdateScript, before CalculateView writes the tick's view (the engine's
+docs/frame-path.md 6.9).
+================
+*/
+void idGameLocal::EmitTickView( int atEntry ) {
+	if ( !g_simHash.GetBool() ) {
+		return;
+	}
+	common->Printf( "TICK_VIEW: tick=%d entry=%d think=%d\n", framenum, atEntry, TickViewChanged( GetLocalViewPlayer() ) );
+}
+
+/*
+================
 idGameLocal::RecheckSeatPresentation
 
 OpenETQW (M5 step 13): the draw-time re-check (docs/vehicle-responsiveness.md 3.1, rule

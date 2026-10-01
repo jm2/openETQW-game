@@ -1700,6 +1700,12 @@ void idGameLocal::Clear( void ) {
 	unlock.originlogProxySpawnId = -1;
 	unlock.originlogPositionId = -1;
 	unlock.originlogViewMode = -1;
+	// OpenETQW (M5 step 7): no tick view saved yet
+	unlock.tickViewPlayer = -1;
+	unlock.tickViewProxySpawnId = -1;
+	unlock.tickViewPositionId = -1;
+	unlock.tickViewMode = -1;
+	unlock.tickViewCamera = -1;
 
 	nextBotPopulationCheck = 0;
 	
@@ -5169,6 +5175,9 @@ void idGameLocal::RunFrame( const usercmd_t *clientCmds, int elapsedTime ) {
 
 	unlock.unlockedDraw = false;
 	interpolateEntities.Clear();
+	// OpenETQW (M5 step 7), with g_simHash: the view player's renderView at the tick's entry
+	// against the view the last tick's pose log saved (TICK_VIEW)
+	const int tickViewAtEntry = TickViewChanged( GetLocalViewPlayer() );
 
 
 
@@ -5348,6 +5357,8 @@ void idGameLocal::RunFrame( const usercmd_t *clientCmds, int elapsedTime ) {
 		// OpenETQW (M5 step 6), with g_logVehicleViews: the views of players in vehicles as
 		// the tick starts, after whatever ran since the last tick (AoR, snapshots, events)
 		EmitVehicleViewState( "pre" );
+		// OpenETQW (M5 step 7), with g_simHash: whether Think starts on the last tick's view
+		EmitTickView( tickViewAtEntry );
 
 		int num = 0;
 		for ( ent = activeEntities.Next(); ent != NULL; ent = ent->activeNode.Next() ) {
@@ -5402,6 +5413,8 @@ void idGameLocal::RunFrame( const usercmd_t *clientCmds, int elapsedTime ) {
 			}
 			ResetOriginLogOnSeatChange( viewPlayer );
 		}
+		// OpenETQW (M5 step 7): the view this tick computed, for the next tick's TICK_VIEW
+		SaveTickView( viewPlayer );
 		// the replay's per-tick view state, from the view player that was just logged
 		// (before event servicing can change the viewer or its proxy)
 		EmitSimView( viewPlayer );
