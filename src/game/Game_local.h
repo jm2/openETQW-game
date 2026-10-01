@@ -753,6 +753,13 @@ public:
 		int						seatProxySpawnId;
 		int						seatPositionId;
 		int						seatViewMode;
+		// OpenETQW (M5 step 6): who and which seat (proxy, position, view mode) the last
+		// originlog entry was logged for (-1 each before the first); a change of seat for
+		// the same view player resets the history at the pose log (ResetOriginLogOnSeatChange)
+		int						originlogViewer;
+		int						originlogProxySpawnId;
+		int						originlogPositionId;
+		int						originlogViewMode;
 	} unlock;
 
 	int						cumulativeEventsServiced;
@@ -896,6 +903,7 @@ public:
 	void					RunVehicleDeterminismSchedule( usercmd_t* cmds );
 	void					EmitSimView( idPlayer* viewer );
 	void					LatchSeatPresentation( idPlayer* localPlayer );	// vehicles/SeatGate.cpp
+	void					ResetOriginLogOnSeatChange( idPlayer* viewPlayer );
 	bool					RecheckSeatPresentation( void );
 	void					EmitSeatGate( void );
 	void					RunSeatGateSchedule( usercmd_t* cmds );

@@ -1695,6 +1695,11 @@ void idGameLocal::Clear( void ) {
 	unlock.seatProxySpawnId = -1;
 	unlock.seatPositionId = -1;
 	unlock.seatViewMode = -1;
+	// OpenETQW (M5 step 6): no originlog entry yet
+	unlock.originlogViewer = -1;
+	unlock.originlogProxySpawnId = -1;
+	unlock.originlogPositionId = -1;
+	unlock.originlogViewMode = -1;
 
 	nextBotPopulationCheck = 0;
 	
@@ -5395,6 +5400,7 @@ void idGameLocal::RunFrame( const usercmd_t *clientCmds, int elapsedTime ) {
 			} else {
 				unlock.weaponPoseValid[ index ] = false;
 			}
+			ResetOriginLogOnSeatChange( viewPlayer );
 		}
 		// the replay's per-tick view state, from the view player that was just logged
 		// (before event servicing can change the viewer or its proxy)

@@ -264,10 +264,6 @@ void sdVehicleView::OnPlayerSwitched( idPlayer* player, bool newPosition ) {
 	} else {
 		GetInitialViewAxis( entryAim );
 	}
-	if ( player != NULL && player == gameLocal.GetLocalViewPlayer() ) {
-		gameLocal.unlock.originlog[ 0 ] = player->renderView.vieworg;
-		gameLocal.unlock.originlog[ 1 ] = player->renderView.vieworg;
-	}
 }
 
 /*
