@@ -5162,10 +5162,6 @@ sdTransport::UpdateModelTransform
 ================
 */
 void sdTransport::UpdateModelTransform( void ) {
-	if ( gameLocal.unlock.unlockedDraw ) {
-		return;
-	}
-
 	sdTeleporter* teleportEnt = teleportEntity;
 	if ( teleportEnt != NULL ) {
 		idPlayer* player = gameLocal.GetLocalViewPlayer();
