@@ -5984,29 +5984,6 @@ void idGameLocal::ClientUpdateView( const usercmd_t &cmd, int timeLeft ) {
 	unlock.lastFractionFrame = framenum;
 	unlock.interpFraction = interpFraction;
 
-	idEntity* proxy = p->GetProxyEntity();
-	if ( proxy != NULL ) {
-		sdTransport* transport = proxy->Cast< sdTransport >();
-		if ( transport != NULL ) {
-			// 1. Interpolate chassis & presentation occupants
-			transport->ClientUpdateInterpolation( interpFraction );
-
-			// 2. Interpolate camera view
-			p->CalculateFirstPersonView( false );
-			p->CalculateRenderView();
-
-			// 3. Update active cockpit entity if present
-			if ( gameLocal.playerView.CockpitIsValid() ) {
-				rvClientEntityPtr< sdClientAnimated > &cockpit = gameLocal.playerView.GetCockpit();
-				if ( cockpit.IsValid() ) {
-					cockpit->ClientUpdateView();
-					cockpit->Present();
-				}
-			}
-			return;
-		}
-	}
-
 	if ( onFoot ) {
 		idAngles currentAngles = unlock.refAngles;
 
