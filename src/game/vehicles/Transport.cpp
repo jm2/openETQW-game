@@ -1562,15 +1562,6 @@ sdTransport::sdTransport( void ) {
 	empTime						= 0;
 	weaponEmpTime				= 0;
 
-	chassisPoseValid[0]			= false;
-	chassisPoseValid[1]			= false;
-	chassisFrameLog[0]			= 0;
-	chassisFrameLog[1]			= 0;
-	chassisOriginLog[0]			= vec3_zero;
-	chassisOriginLog[1]			= vec3_zero;
-	chassisQuatLog[0]			= idQuat( 0.0f, 0.0f, 0.0f, 1.0f );
-	chassisQuatLog[1]			= idQuat( 0.0f, 0.0f, 0.0f, 1.0f );
-
 	vehicleControl				= NULL;
 	vehicleSoundControl			= NULL;
 
@@ -2828,7 +2819,6 @@ void sdTransport::PlacePlayerInPosition( idPlayer *other, sdVehiclePosition &pos
 
 	other->SetProxyEntity( this, position.GetPositionId() );
 	other->ResetPredictionErrorDecay();
-	ResetChassisHistory();
 	GetViewForPlayer( other ).ResetViewHistory( other );
 
 	const char* fsmName = position.GetAttachAnim();
@@ -4395,19 +4385,6 @@ sdTransport::PostThink
 ================
 */
 void sdTransport::PostThink( void ) {
-	int index = gameLocal.framenum & 1;
-	int prev = ( gameLocal.framenum + 1 ) & 1;
-	chassisOriginLog[ index ] = GetPhysics()->GetOrigin();
-	chassisQuatLog[ index ] = GetPhysics()->GetAxis().ToQuat();
-	chassisFrameLog[ index ] = gameLocal.framenum;
-	if ( !chassisPoseValid[ prev ] ) {
-		chassisOriginLog[ prev ] = chassisOriginLog[ index ];
-		chassisQuatLog[ prev ] = chassisQuatLog[ index ];
-		chassisFrameLog[ prev ] = gameLocal.framenum - 1;
-		chassisPoseValid[ prev ] = true;
-	}
-	chassisPoseValid[ index ] = true;
-
 	UpdateDecay();
 	UpdateLockAlarm();
 
@@ -5210,53 +5187,6 @@ void sdTransport::UpdateModelTransform( void ) {
 
 /*
 ================
-sdTransport::ClientUpdateInterpolation
-================
-*/
-void sdTransport::ClientUpdateInterpolation( float interpFraction ) {
-	int curr = gameLocal.framenum & 1;
-	int prev = ( gameLocal.framenum + 1 ) & 1;
-
-	if ( chassisPoseValid[ curr ] && chassisPoseValid[ prev ] &&
-		 ( gameLocal.framenum - chassisFrameLog[ prev ] == 1 ) ) {
-		float distSqr = ( chassisOriginLog[ curr ] - chassisOriginLog[ prev ] ).LengthSqr();
-		if ( distSqr < 250000.0f ) { // < 500 units max step
-			idVec3 interpOrg;
-			interpOrg.Lerp( chassisOriginLog[ prev ], chassisOriginLog[ curr ], interpFraction );
-
-			idQuat interpQuat;
-			interpQuat.Slerp( chassisQuatLog[ prev ], chassisQuatLog[ curr ], interpFraction );
-			interpQuat.Normalize();
-
-			renderEntity.origin = interpOrg;
-			renderEntity.axis = interpQuat.ToMat3();
-			lastPushedOrigin = renderEntity.origin;
-			lastPushedAxis = renderEntity.axis;
-		}
-	}
-
-	BecomeActive( TH_UPDATEVISUALS );
-	Present();
-	positionManager.PresentPlayers();
-}
-
-/*
-================
-sdTransport::ResetChassisHistory
-================
-*/
-void sdTransport::ResetChassisHistory( void ) {
-	int curr = gameLocal.framenum & 1;
-	int prev = ( gameLocal.framenum + 1 ) & 1;
-	chassisPoseValid[ 0 ] = chassisPoseValid[ 1 ] = true;
-	chassisOriginLog[ 0 ] = chassisOriginLog[ 1 ] = GetPhysics()->GetOrigin();
-	chassisQuatLog[ 0 ] = chassisQuatLog[ 1 ] = GetPhysics()->GetAxis().ToQuat();
-	chassisFrameLog[ curr ] = gameLocal.framenum;
-	chassisFrameLog[ prev ] = gameLocal.framenum - 1;
-}
-
-/*
-================
 sdTransport::OnTeleportStarted
 ================
 */
@@ -5273,7 +5203,6 @@ sdTransport::OnTeleportFinished
 */
 void sdTransport::OnTeleportFinished( void ) {
 	SetTeleportEntity( NULL );
-	ResetChassisHistory();
 
 	nextTeleportTime = gameLocal.time; // + SEC2MS( 2.f );
 }
