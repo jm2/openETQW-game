@@ -1733,8 +1733,15 @@ void idEntity::Present( void ) {
 		return;
 	}
 	BecomeInactive( TH_UPDATEVISUALS );
-#if 0 // jmarshall - unlock fps
-	if ( gameLocal.com_unlockFPS->GetBool() && g_unlock_interpolateMoving.GetBool() ) {
+	// OpenETQW (M5 step 8, owner decision D5): the SDK's producer for the remote-entity
+	// interpolation, which retail 1.5 runs (idEntity::Present 0x108224: origin only, one tick
+	// behind) and an earlier port had compiled out. Network clients only until step 9 (D6:
+	// on an authoritative host, the listen host or single player, the drawn origin must stay
+	// out of tick state; this writes renderEntity.origin and so lastPushedOrigin and the combat
+	// model's link). Not for the local view player, whose model the view follows at the tick
+	// (ClientUpdateView's consumer skips it as well).
+	if ( gameLocal.isClient && gameLocal.com_unlockFPS != NULL && gameLocal.com_unlockFPS->GetBool() &&
+		 g_unlock_interpolateMoving.GetBool() && this != gameLocal.GetLocalViewPlayer() ) {
 		// it should be possible to keep entities back one frame and record their positions while we can't unlock frames
 		// have to watch out not to do that to an entity we're bound to however (like riding the icarus)
 		// without constantly keeping origins one frame behind, some might jump a bit when we go in and out of unlock mode
@@ -1756,7 +1763,6 @@ void idEntity::Present( void ) {
 			}
 		}
 	}
-#endif
 	// if set to invisible, skip
 	if ( renderEntity.hModel && !IsHidden() ) {
 

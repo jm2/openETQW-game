@@ -3808,7 +3808,7 @@ void idGameLocal::ClientPrediction( const usercmd_t* clientCmds, const usercmd_t
 	LatchUnlockViewer();
 
 	unlock.unlockedDraw = false;
-	interpolateEntities.Clear();
+	// (interpolateEntities is cleared below, on new frames only)
 
 	idEntity* ent;
 
@@ -3853,6 +3853,16 @@ void idGameLocal::ClientPrediction( const usercmd_t* clientCmds, const usercmd_t
 		}
 	} else {
 		isNewFrame = false;
+	}
+
+	// OpenETQW (M5 step 8): the Entity::Present producer marks entities for interpolation
+	// only on new frames (Present returns early otherwise), so the list a new frame built
+	// must survive the re-predicted frames that follow a snapshot: they end on the same
+	// framenum, so interpolateHistory still lines up. Clearing it on every predicted frame
+	// left remote entities uninterpolated on every draw after a snapshot that brought no
+	// new frame. (An entity removes itself from the list when it is destroyed.)
+	if ( isNewFrame ) {
+		interpolateEntities.Clear();
 	}
 
 	UpdateDeploymentRequests();
