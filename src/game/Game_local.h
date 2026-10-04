@@ -914,6 +914,15 @@ public:
 	virtual void			OnClientDisconnected( void );
 	virtual void			ClientUpdateView( const usercmd_t &cmd, int timeLeft );
 	void					PresentUnlocked( idEntity* ent );
+	int						SubmitPresentationCopies( void );	// M5 step 9 (D6)
+	void					SubmitPresentationCopies( idLinkList< rvClientEntity >& bound, const idVec3& delta );
+	void					RestorePresentationCopies( void );
+	struct presentationCopy_t {
+		idEntityPtr< idEntity >					entity;		// an interpolated entity, or
+		rvClientEntityPtr< rvClientEntity >		cent;		// a client model bound to one
+		int										handle;
+	};
+	idList< presentationCopy_t >	presentationCopies;
 	void					EmitSimStateHash( void );
 	void					EmitVehicleTrace( void );
 	void					RunVehicleDeterminismSchedule( usercmd_t* cmds );
