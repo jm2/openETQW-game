@@ -1650,6 +1650,7 @@ void idGameLocal::Clear( void ) {
 	unlock.interpFraction = 0.0f;
 	unlock.lastFraction = 0.0f;
 	unlock.lastFractionFrame = -1;
+	unlock.rewoundFrame = -1;
 
 	globalMaterial = NULL;
 	newInfo.Clear();
@@ -6103,6 +6104,17 @@ void idGameLocal::ClientUpdateView( const usercmd_t &cmd, int timeLeft ) {
 					gotOne = true;	// safe check single GUI
 				}
 			}	
+
+			// M5 step 10 (D7): since the frame that runs a tick calls ClientUpdateView too, the
+			// cycle can start without the base draw's rewind (PlayerView.cpp), and the weapon is
+			// still at tick n; apply the rewind's legacy shift here so the reference is at n - 1,
+			// as the fallback transform below expects (only used until both weapon pose slots
+			// are logged). The bound GUI keeps its offset from the weapon either way
+			if ( unlock.rewoundFrame != framenum && g_unlock_updateViewpos.GetBool() && g_unlock_viewStyle.GetInteger() == 1 ) {
+				const idVec3 shift = unlock.originlog[ framenum & 1 ] - unlock.originlog[ ( framenum + 1 ) & 1 ];
+				unlock.weaponOrigin -= shift;
+				unlock.weaponGUIOrigin -= shift;
+			}
 
 			unlock.doWeapon = true;
 		} else {

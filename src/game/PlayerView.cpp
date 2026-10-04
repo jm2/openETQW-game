@@ -959,6 +959,7 @@ bool idPlayerView::RenderPlayerView( idPlayer* viewPlayer ) {
 				 !gameLocal.unlock.unlockedDraw && gameLocal.unlock.canUnlockFrames ) {
 				if ( g_unlock_updateViewpos.GetBool() && g_unlock_viewStyle.GetInteger() == 1 ) {
 					currentView.vieworg = gameLocal.unlock.originlog[ ( gameLocal.framenum + 1 ) & 1 ];
+					gameLocal.unlock.rewoundFrame = gameLocal.framenum;	// M5 step 10: see ClientUpdateView
 					if ( viewPlayer->weapon != NULL ) {
 						renderEntity_t* weaponRenderEntity = viewPlayer->weapon->GetRenderEntity();
 						const idVec3 originalWeaponOrigin = weaponRenderEntity->origin;
