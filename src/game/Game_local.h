@@ -916,11 +916,13 @@ public:
 	void					PresentUnlocked( idEntity* ent );
 	int						SubmitPresentationCopies( void );	// M5 step 9 (D6)
 	void					SubmitPresentationCopies( idLinkList< rvClientEntity >& bound, const idVec3& delta );
+	void					SubmitPresentationCopy( int handle, const renderEntity_t& copy, idEntity* e, rvClientEntity* cent );
 	void					RestorePresentationCopies( void );
 	struct presentationCopy_t {
 		idEntityPtr< idEntity >					entity;		// an interpolated entity, or
 		rvClientEntityPtr< rvClientEntity >		cent;		// a client model bound to one
 		int										handle;
+		renderEntity_t							def;		// the def the copy replaced
 	};
 	idList< presentationCopy_t >	presentationCopies;
 	void					EmitSimStateHash( void );

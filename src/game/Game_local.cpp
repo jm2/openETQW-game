@@ -5908,15 +5908,20 @@ OpenETQW (M5 step 9, owner decision D6). On an authoritative game (the listen ho
 single player) the Entity::Present producer only records each entity's last two tick
 origins. For every draw this submits a copy of the entity's render entity at the
 presentation origin: one tick behind on a frame that ran a tick (retail's shape, as on a
-network client), lerped by the frame's fraction on a render-only frame. Nothing is
-written to the entity: renderEntity, lastPushedOrigin and the combat model stay at the
-tick's pose, and RestorePresentationCopies puts the tick's def back after the draw (the
+network client), lerped by the frame's fraction on a render-only frame whose fraction
+was computed this tick (ClientUpdateView can return before computing it; such a draw
+uses the tick frame's origin). Nothing is written to the entity: renderEntity,
+lastPushedOrigin and the combat model stay at the tick's pose, and
+RestorePresentationCopies puts back the def each copy replaced after the draw (the
 renderer draws the scene inside RenderScene, RB_STD_DrawView, so nothing reads the copies
 after RenderPlayerView returns).
 The client models bound to it (a remote player's third-person weapon, for example),
-which follow its tick pose (rvClientEntity::UpdateBind reads lastPushedOrigin), are
-submitted moved by the same offset, as they follow the drawn origin on a network client.
-Bound client effects keep the tick's pose. Returns the number of copies submitted.
+which follow its tick pose (rvClientEntity::UpdateBind reads its renderEntity or
+lastPushedOrigin, both the tick origin after Present), are submitted moved by the same
+offset from the tick origin, as they follow the drawn origin on a network client.
+Attachments without a render entity of their own (client effects such as projectile
+trails, client lights, vehicle light defs) keep the tick's pose: a known host-only gap
+(ledger 060). Returns the number of copies submitted.
 ================
 */
 int idGameLocal::SubmitPresentationCopies( void ) {
@@ -5938,17 +5943,14 @@ int idGameLocal::SubmitPresentationCopies( void ) {
 		const idVec3& A = e->interpolateHistory[ ( framenum + 1 ) & 1 ];
 		const idVec3& B = e->interpolateHistory[ framenum & 1 ];
 		renderEntity_t copy = *e->GetRenderEntity();
-		if ( unlock.unlockedDraw ) {
+		if ( unlock.unlockedDraw && unlock.lastFractionFrame == framenum ) {
 			const float f = idMath::ClampFloat( 0.0f, 1.0f, unlock.interpFraction );
 			copy.origin = ( 1.0f - f ) * A + f * B;
 		} else {
 			copy.origin = A;
 		}
-		gameRenderWorld->UpdateEntityDef( handle, &copy );
-		presentationCopy_t& c = presentationCopies.Alloc();
-		c.entity = e;
-		c.handle = handle;
-		SubmitPresentationCopies( e->clientEntities, copy.origin - e->GetRenderEntity()->origin );
+		SubmitPresentationCopy( handle, copy, e, NULL );
+		SubmitPresentationCopies( e->clientEntities, copy.origin - B );
 	}
 	return presentationCopies.Num();
 }
@@ -5960,21 +5962,32 @@ void idGameLocal::SubmitPresentationCopies( idLinkList< rvClientEntity >& bound,
 		if ( re != NULL && handle >= 0 && !cent->IsHidden() ) {
 			renderEntity_t copy = *re;
 			copy.origin += delta;
-			gameRenderWorld->UpdateEntityDef( handle, &copy );
-			presentationCopy_t& c = presentationCopies.Alloc();
-			c.cent = cent;
-			c.handle = handle;
+			SubmitPresentationCopy( handle, copy, NULL, cent );
 		}
 		SubmitPresentationCopies( cent->clientEntities, delta );
 	}
+}
+
+void idGameLocal::SubmitPresentationCopy( int handle, const renderEntity_t& copy, idEntity* e, rvClientEntity* cent ) {
+	const renderEntity_t* def = gameRenderWorld->GetRenderEntity( handle );
+	if ( def == NULL ) {
+		return;
+	}
+	presentationCopy_t& c = presentationCopies.Alloc();
+	c = presentationCopy_t();	// Alloc hands back the slot as the last draw left it
+	c.entity = e;
+	c.cent = cent;
+	c.handle = handle;
+	c.def = *def;
+	gameRenderWorld->UpdateEntityDef( handle, &copy );
 }
 
 /*
 ================
 idGameLocal::RestorePresentationCopies
 
-OpenETQW (M5 step 9): resubmits each copied entity's own render entity (the tick's
-pose) once the draw is done, unless its def changed meanwhile.
+OpenETQW (M5 step 9): puts back the def each copy replaced once the draw is done,
+unless the handle no longer belongs to the same entity.
 ================
 */
 void idGameLocal::RestorePresentationCopies( void ) {
@@ -5982,10 +5995,8 @@ void idGameLocal::RestorePresentationCopies( void ) {
 		const presentationCopy_t& c = presentationCopies[ i ];
 		idEntity* e = c.entity.GetEntity();
 		rvClientEntity* cent = c.cent.GetEntity();
-		if ( e != NULL && e->GetModelDefHandle() == c.handle ) {
-			gameRenderWorld->UpdateEntityDef( c.handle, e->GetRenderEntity() );
-		} else if ( cent != NULL && cent->GetRenderEntityHandle() == c.handle ) {
-			gameRenderWorld->UpdateEntityDef( c.handle, cent->GetRenderEntity() );
+		if ( ( e != NULL && e->GetModelDefHandle() == c.handle ) || ( cent != NULL && cent->GetRenderEntityHandle() == c.handle ) ) {
+			gameRenderWorld->UpdateEntityDef( c.handle, &c.def );
 		}
 	}
 	presentationCopies.SetNum( 0, false );
