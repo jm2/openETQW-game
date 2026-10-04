@@ -5890,7 +5890,116 @@ makes rendering and sound system calls
 ================
 */
 bool idGameLocal::Draw( void ) {
-	return gameLocal.playerView.RenderPlayerView( GetActiveViewer() );
+	// OpenETQW (M5 step 9, D6): on an authoritative game the interpolated entities are
+	// drawn from presentation copies, submitted for this draw only
+	const int copies = SubmitPresentationCopies();
+	const bool drawn = gameLocal.playerView.RenderPlayerView( GetActiveViewer() );
+	if ( copies > 0 ) {
+		RestorePresentationCopies();
+	}
+	return drawn;
+}
+
+/*
+================
+idGameLocal::SubmitPresentationCopies
+
+OpenETQW (M5 step 9, owner decision D6). On an authoritative game (the listen host,
+single player) the Entity::Present producer only records each entity's last two tick
+origins. For every draw this submits a copy of the entity's render entity at the
+presentation origin: one tick behind on a frame that ran a tick (retail's shape, as on a
+network client), lerped by the frame's fraction on a render-only frame whose fraction
+was computed this tick (ClientUpdateView can return before computing it; such a draw
+uses the tick frame's origin). Nothing is written to the entity: renderEntity,
+lastPushedOrigin and the combat model stay at the tick's pose, and
+RestorePresentationCopies puts back the def each copy replaced after the draw (the
+renderer draws the scene inside RenderScene, RB_STD_DrawView, so nothing reads the copies
+after RenderPlayerView returns).
+The client models bound to it (a remote player's third-person weapon, for example),
+which follow its tick pose (rvClientEntity::UpdateBind reads its renderEntity or
+lastPushedOrigin, both the tick origin after Present), are submitted moved by the same
+offset from the tick origin, as they follow the drawn origin on a network client.
+Attachments without a render entity of their own (client effects such as projectile
+trails, client lights, vehicle light defs) keep the tick's pose: a known host-only gap
+(ledger 060). Returns the number of copies submitted.
+================
+*/
+int idGameLocal::SubmitPresentationCopies( void ) {
+	presentationCopies.SetNum( 0, false );
+	if ( isClient || com_unlockFPS == NULL || !com_unlockFPS->GetBool() || !g_unlock_interpolateMoving.GetBool() || !unlock.canUnlockFrames ) {
+		return 0;
+	}
+	const idPlayer* viewer = GetActiveViewer();
+	for ( idEntity* e = interpolateEntities.Next(); e != NULL; e = e->interpolateNode.Next() ) {
+		// only entities whose history this tick recorded (Present links them in and the list
+		// is cleared at each tick, so this holds today; the history is stale otherwise)
+		if ( e == viewer || e->interpolateLastFramenum != framenum ) {
+			continue;
+		}
+		const int handle = e->GetModelDefHandle();
+		if ( handle < 0 || e->IsHidden() ) {
+			continue;
+		}
+		const idVec3& A = e->interpolateHistory[ ( framenum + 1 ) & 1 ];
+		const idVec3& B = e->interpolateHistory[ framenum & 1 ];
+		renderEntity_t copy = *e->GetRenderEntity();
+		if ( unlock.unlockedDraw && unlock.lastFractionFrame == framenum ) {
+			const float f = idMath::ClampFloat( 0.0f, 1.0f, unlock.interpFraction );
+			copy.origin = ( 1.0f - f ) * A + f * B;
+		} else {
+			copy.origin = A;
+		}
+		SubmitPresentationCopy( handle, copy, e, NULL );
+		SubmitPresentationCopies( e->clientEntities, copy.origin - B );
+	}
+	return presentationCopies.Num();
+}
+
+void idGameLocal::SubmitPresentationCopies( idLinkList< rvClientEntity >& bound, const idVec3& delta ) {
+	for ( rvClientEntity* cent = bound.Next(); cent != NULL; cent = cent->bindNode.Next() ) {
+		const renderEntity_t* re = cent->GetRenderEntity();
+		const int handle = cent->GetRenderEntityHandle();
+		if ( re != NULL && handle >= 0 && !cent->IsHidden() ) {
+			renderEntity_t copy = *re;
+			copy.origin += delta;
+			SubmitPresentationCopy( handle, copy, NULL, cent );
+		}
+		SubmitPresentationCopies( cent->clientEntities, delta );
+	}
+}
+
+void idGameLocal::SubmitPresentationCopy( int handle, const renderEntity_t& copy, idEntity* e, rvClientEntity* cent ) {
+	const renderEntity_t* def = gameRenderWorld->GetRenderEntity( handle );
+	if ( def == NULL ) {
+		return;
+	}
+	presentationCopy_t& c = presentationCopies.Alloc();
+	c = presentationCopy_t();	// Alloc hands back the slot as the last draw left it
+	c.entity = e;
+	c.cent = cent;
+	c.handle = handle;
+	c.def = *def;
+	gameRenderWorld->UpdateEntityDef( handle, &copy );
+}
+
+/*
+================
+idGameLocal::RestorePresentationCopies
+
+OpenETQW (M5 step 9): puts back the def each copy replaced once the draw is done,
+unless the handle no longer belongs to the same entity.
+================
+*/
+void idGameLocal::RestorePresentationCopies( void ) {
+	for ( int i = 0; i < presentationCopies.Num(); i++ ) {
+		const presentationCopy_t& c = presentationCopies[ i ];
+		idEntity* e = c.entity.GetEntity();
+		rvClientEntity* cent = c.cent.GetEntity();
+		if ( ( e != NULL && e->GetModelDefHandle() == c.handle ) || ( cent != NULL && cent->GetRenderEntityHandle() == c.handle ) ) {
+			gameRenderWorld->UpdateEntityDef( c.handle, &c.def );
+		}
+	}
+	presentationCopies.SetNum( 0, false );
 }
 
 /*
@@ -6146,7 +6255,9 @@ void idGameLocal::ClientUpdateView( const usercmd_t &cmd, int timeLeft ) {
 		}
 	}
 
-	if ( g_unlock_interpolateMoving.GetBool() ) {
+	// on a network client (retail's shape); an authoritative game draws presentation copies
+	// instead (idGameLocal::Draw, M5 step 9, D6)
+	if ( isClient && g_unlock_interpolateMoving.GetBool() ) {
 		// walk entities that need interpolation and present them to the renderer with updated origins
 		idEntity *e;
 		for ( e = interpolateEntities.Next(); e != NULL; e = e->interpolateNode.Next() ) {

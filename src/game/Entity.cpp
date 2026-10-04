@@ -1733,14 +1733,16 @@ void idEntity::Present( void ) {
 		return;
 	}
 	BecomeInactive( TH_UPDATEVISUALS );
-	// OpenETQW (M5 step 8, owner decision D5): the SDK's producer for the remote-entity
-	// interpolation, which retail 1.5 runs (idEntity::Present 0x108224: origin only, one tick
-	// behind) and an earlier port had compiled out. Network clients only until step 9 (D6:
-	// on an authoritative host, the listen host or single player, the drawn origin must stay
-	// out of tick state; this writes renderEntity.origin and so lastPushedOrigin and the combat
-	// model's link). Not for the local view player, whose model the view follows at the tick
-	// (ClientUpdateView's consumer skips it as well).
-	if ( gameLocal.isClient && gameLocal.com_unlockFPS != NULL && gameLocal.com_unlockFPS->GetBool() &&
+	// OpenETQW (M5 steps 8 and 9, owner decisions D5 and D6): the SDK's producer for the
+	// remote-entity interpolation, which retail 1.5 runs (idEntity::Present 0x108224: origin
+	// only, one tick behind) and an earlier port had compiled out. On a network client it
+	// works as in retail, drawing the entity one tick behind through renderEntity.origin
+	// (step 8). On an authoritative game, the listen host and single player, it only records
+	// the history (step 9, D6): renderEntity.origin, lastPushedOrigin and the combat model
+	// stay at the tick's pose, and idGameLocal::Draw submits a presentation copy for each
+	// draw and puts the tick's def back afterwards. Not for the local view player, whose
+	// model the view follows at the tick (the consumers skip it as well).
+	if ( gameLocal.com_unlockFPS != NULL && gameLocal.com_unlockFPS->GetBool() &&
 		 g_unlock_interpolateMoving.GetBool() && this != gameLocal.GetLocalViewPlayer() ) {
 		// it should be possible to keep entities back one frame and record their positions while we can't unlock frames
 		// have to watch out not to do that to an entity we're bound to however (like riding the icarus)
@@ -1757,7 +1759,9 @@ void idEntity::Present( void ) {
 				} else {
 					// note: this works if there are multiple calls, it keeps storing latest origin and setting previous one
 					interpolateHistory[ gameLocal.framenum & 1 ] = renderEntity.origin;
-					renderEntity.origin = interpolateHistory[ ( gameLocal.framenum + 1 ) & 1 ];
+					if ( gameLocal.isClient ) {
+						renderEntity.origin = interpolateHistory[ ( gameLocal.framenum + 1 ) & 1 ];
+					}
 				}
 				interpolateLastFramenum = gameLocal.framenum;
 			}
