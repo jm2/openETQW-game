@@ -77,31 +77,37 @@ const unsigned long DDSF_MIPMAP          = 0x00400000l;
 #define DDS_MAKEFOURCC( a, b, c, d ) ((a) | ((b) << 8) | ((c) << 16) | ((d) << 24))
 
 typedef struct {
-    unsigned long dwSize;
-    unsigned long dwFlags;
-    unsigned long dwFourCC;
-    unsigned long dwRGBBitCount;
-    unsigned long dwRBitMask;
-    unsigned long dwGBitMask;
-    unsigned long dwBBitMask;
-    unsigned long dwABitMask;
+    unsigned int dwSize;
+    unsigned int dwFlags;
+    unsigned int dwFourCC;
+    unsigned int dwRGBBitCount;
+    unsigned int dwRBitMask;
+    unsigned int dwGBitMask;
+    unsigned int dwBBitMask;
+    unsigned int dwABitMask;
 } ddsFilePixelFormat_t;
 
 typedef struct
 {
-    unsigned long dwSize;
-    unsigned long dwFlags;
-    unsigned long dwHeight;
-    unsigned long dwWidth;
-    unsigned long dwPitchOrLinearSize;
-    unsigned long dwDepth;
-    unsigned long dwMipMapCount;
-    unsigned long dwReserved1[11];
+    unsigned int dwSize;
+    unsigned int dwFlags;
+    unsigned int dwHeight;
+    unsigned int dwWidth;
+    unsigned int dwPitchOrLinearSize;
+    unsigned int dwDepth;
+    unsigned int dwMipMapCount;
+    unsigned int dwReserved1[11];
     ddsFilePixelFormat_t ddspf;
-    unsigned long dwCaps1;
-    unsigned long dwCaps2;
-    unsigned long dwReserved2[3];
+    unsigned int dwCaps1;
+    unsigned int dwCaps2;
+    unsigned int dwReserved2[3];
 } ddsFileHeader_t;
+
+// OpenETQW: the DDS file layout is 32-bit fields. These were unsigned long, which is
+// 8 bytes on LP64 (Linux, macOS): the header was 248 bytes instead of 124, and every
+// retail precompressed image failed UploadPrecompressedImage's size check
+static_assert( sizeof( ddsFilePixelFormat_t ) == 32, "DDS pixel format is 32 bytes on disk" );
+static_assert( sizeof( ddsFileHeader_t ) == 124, "DDS header is 124 bytes on disk" );
 
 struct mipmapState_t {
 	enum colorType_e {
