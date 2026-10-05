@@ -25,9 +25,10 @@ get CI back: both stay private until the owner decides to publish.
    or the network gets the engine's full Meson suite with retail data, run in the engine
    repository against this branch:
    `ETQW_DATA_PATH="$HOME/etqw_data" meson test -C build -j 1`
-   (replace `$HOME/etqw_data` with the root of a full retail ET:QW install patched to 1.5:
-   `base/` must hold `pak000`–`pak008.pk4`; the language paks, such as `zpak_english000`–`003`,
-   are optional (they carry the dialogue); the unpatched DVD set is not supported). Check that
+   (replace `$HOME/etqw_data` with the root of a retail ET:QW install patched to 1.5:
+   `base/` must hold the base game's `pak000`–`pak004.pk4` and the 1.5 patch's
+   `pak005`–`pak008.pk4`; the language paks (`zpak_<language>000`–`003`) are optional (they
+   carry the dialogue); unpatched data is not supported). Check that
    the retail-data tests ran rather than skipped: a run that skips them does not meet this gate.
    Put the result in the PR with the host, OS, architecture, commit and data set. The tests use
    fixed UDP ports, so run one suite at a time on a host.
@@ -65,22 +66,6 @@ This repository pins the engine for the Engine Contract workflow in `tools/ci/en
 Move it with `python3 tools/ci/bump_engine.py --from-local ../openETQW` or a full SHA
 (`--remote <branch>` needs anonymous access to the engine repository, so it fails while the
 repositories are private; add `--no-verify` to pin a SHA without fetching).
-
-## History rewrite (2026-09-24)
-Both repositories' histories were rewritten on 2026-09-24 to remove a retail file
-(`src/sys/win32/rc/res/etqw_splash.bmp`, ET:QW cover art) from every commit. `main` and
-`wip/stock-maps-m2-checkpoint` were force-pushed. Every commit ID changed: game `main`
-is now `24f58bf` (was `285eaa1`), engine `main` is `84a224b` (was `2104090`).
-- Re-clone any clone made before the rewrite, or hard-reset each branch to its new remote
-  branch. Carry unpushed work over by cherry-picking it onto the new commits.
-- Never push a branch or tag that still contains pre-rewrite commits: that would bring
-  the file back.
-- The historical `tools/ci/engine.ref` pins in this repository name engine commits that
-  no longer exist. Engine commit IDs quoted in older engine docs are pre-rewrite IDs too.
-- GitHub still keeps `refs/pull/1/head` in each repository, pointing at the old history
-  (game `9b3a02b`, engine `53d0172`). Removing it needs GitHub Support or new
-  repositories. The owner deferred it on 2026-09-25 and expects to recreate the repositories;
-  when that happens, check that no ref reaches the purged bitmap.
 
 ## What never goes in
 - Retail game data, retail executables, PDBs, raw disassembly or decompiler output, and
