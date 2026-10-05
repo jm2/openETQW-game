@@ -316,7 +316,8 @@ static void LogFramePose( idPlayer* viewPlayer, const renderView_t* view ) {
 	AppendRenderPose( line, "wpn", weapon != NULL ? const_cast< idWeapon* >( weapon )->GetModelDefHandle() : -1 );
 	idEntity* proxy = viewPlayer != NULL ? viewPlayer->GetProxyEntity() : NULL;
 	if ( proxy != NULL ) {
-		line += va( " seat=%d:%d", proxy->entityNumber, viewPlayer->GetProxyPositionId() );
+		// entity:position:view mode (the view mode since M5 step 14, for the seat tests)
+		line += va( " seat=%d:%d:%d", proxy->entityNumber, viewPlayer->GetProxyPositionId(), viewPlayer->GetProxyViewMode() );
 	} else {
 		line += " seat=-";
 	}
