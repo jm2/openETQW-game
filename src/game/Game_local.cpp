@@ -1650,6 +1650,8 @@ void idGameLocal::Clear( void ) {
 	unlock.interpFraction = 0.0f;
 	unlock.lastFraction = 0.0f;
 	unlock.lastFractionFrame = -1;
+	unlock.rewoundFrame = -1;
+	unlock.lastFractionMs = 0;
 
 	globalMaterial = NULL;
 	newInfo.Clear();
@@ -6104,6 +6106,17 @@ void idGameLocal::ClientUpdateView( const usercmd_t &cmd, int timeLeft ) {
 				}
 			}	
 
+			// M5 step 10 (D7): since the frame that runs a tick calls ClientUpdateView too, the
+			// cycle can start without the base draw's rewind (PlayerView.cpp), and the weapon is
+			// still at tick n; apply the rewind's legacy shift here so the reference is at n - 1,
+			// as the fallback transform below expects (only used until both weapon pose slots
+			// are logged). The bound GUI keeps its offset from the weapon either way
+			if ( unlock.rewoundFrame != framenum && g_unlock_updateViewpos.GetBool() && g_unlock_viewStyle.GetInteger() == 1 ) {
+				const idVec3 shift = unlock.originlog[ framenum & 1 ] - unlock.originlog[ ( framenum + 1 ) & 1 ];
+				unlock.weaponOrigin -= shift;
+				unlock.weaponGUIOrigin -= shift;
+			}
+
 			unlock.doWeapon = true;
 		} else {
 			unlock.doWeapon = false;
@@ -6116,11 +6129,21 @@ void idGameLocal::ClientUpdateView( const usercmd_t &cmd, int timeLeft ) {
 	// OpenETQW: the presented time does not step back within a tick. When a snapshot
 	// arrives the client nudges its prediction clock, which can move timeLeft back by a
 	// millisecond or two; presenting that would move the view back for one draw.
-	if ( unlock.lastFractionFrame == framenum && interpFraction < unlock.lastFraction ) {
-		interpFraction = unlock.lastFraction;
+	// M5 step 10 (owner decision, 2026-10-04: smooth in presentation): holding the last
+	// fraction froze the view for a frame, now often, since the tick frame starts the
+	// tick's fractions and snapshots arrive just after it. Instead the presented fraction
+	// keeps advancing from the last one at half the wall-clock rate until the computed one
+	// catches up (within a frame or two); the client's clock itself is unchanged
+	const int nowMs = sys->Milliseconds();
+	// (<=: at the clamp's floor, 1 ms into a tick, the tick frame and the next draw can both
+	// compute 1/33; a draw in the same millisecond still repeats the fraction)
+	if ( unlock.lastFractionFrame == framenum && interpFraction <= unlock.lastFraction ) {
+		const float advanced = unlock.lastFraction + 0.5f * float( nowMs - unlock.lastFractionMs ) / float( USERCMD_MSEC );
+		interpFraction = Max( unlock.lastFraction, Min( advanced, float( USERCMD_MSEC - 1 ) / float( USERCMD_MSEC ) ) );
 	}
 	unlock.lastFraction = interpFraction;
 	unlock.lastFractionFrame = framenum;
+	unlock.lastFractionMs = nowMs;
 	unlock.interpFraction = interpFraction;
 
 	if ( onFoot ) {
