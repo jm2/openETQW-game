@@ -1651,6 +1651,7 @@ void idGameLocal::Clear( void ) {
 	unlock.lastFraction = 0.0f;
 	unlock.lastFractionFrame = -1;
 	unlock.rewoundFrame = -1;
+	unlock.lastFractionMs = 0;
 
 	globalMaterial = NULL;
 	newInfo.Clear();
@@ -6128,11 +6129,19 @@ void idGameLocal::ClientUpdateView( const usercmd_t &cmd, int timeLeft ) {
 	// OpenETQW: the presented time does not step back within a tick. When a snapshot
 	// arrives the client nudges its prediction clock, which can move timeLeft back by a
 	// millisecond or two; presenting that would move the view back for one draw.
+	// M5 step 10 (owner decision, 2026-10-04: smooth in presentation): holding the last
+	// fraction froze the view for a frame, now often, since the tick frame starts the
+	// tick's fractions and snapshots arrive just after it. Instead the presented fraction
+	// keeps advancing from the last one at half the wall-clock rate until the computed one
+	// catches up (within a frame or two); the client's clock itself is unchanged
+	const int nowMs = sys->Milliseconds();
 	if ( unlock.lastFractionFrame == framenum && interpFraction < unlock.lastFraction ) {
-		interpFraction = unlock.lastFraction;
+		const float advanced = unlock.lastFraction + 0.5f * float( nowMs - unlock.lastFractionMs ) / float( USERCMD_MSEC );
+		interpFraction = Max( unlock.lastFraction, Min( advanced, float( USERCMD_MSEC - 1 ) / float( USERCMD_MSEC ) ) );
 	}
 	unlock.lastFraction = interpFraction;
 	unlock.lastFractionFrame = framenum;
+	unlock.lastFractionMs = nowMs;
 	unlock.interpFraction = interpFraction;
 
 	if ( onFoot ) {
