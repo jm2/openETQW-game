@@ -74,7 +74,9 @@ void sdPresentation::SampleTick( idPlayer* viewPlayer ) {
 		return;
 	}
 	const seatRecipe_t* recipe = sdSeatGate::FindRecipe( seat.kind, seat.view->GetTypeName() );
-	if ( recipe == NULL || !recipe->presentable ) {
+	// the recipe says how the class's camera is drawn: a view whose thirdPerson flag does
+	// not match (a third-person standard view) draws the tick's view
+	if ( recipe == NULL || !recipe->presentable || recipe->worldCamera != seat.view->GetViewParms().thirdPerson ) {
 		return;
 	}
 	const renderEntity_t* hull = seat.transport->GetRenderEntity();
@@ -92,7 +94,7 @@ void sdPresentation::SampleTick( idPlayer* viewPlayer ) {
 	s.camAxis = view->viewaxis * inverseHull;
 	s.camOrigin = view->vieworg;
 	s.camWorldAxis = view->viewaxis;
-	s.thirdPerson = seat.view->GetViewParms().thirdPerson;
+	s.thirdPerson = recipe->worldCamera;
 	s.speed = const_cast< sdTransport* >( seat.transport )->GetPhysics()->GetLinearVelocity().Length();
 	s.valid = true;
 }
@@ -168,9 +170,10 @@ void sdPresentation::PrepareDraw( float fraction ) {
 	}
 	idPlayer* viewPlayer = gameLocal.GetLocalViewPlayer();
 	seatInfo_t seat;
-	// a fresh entry's angles are not clamped yet (first person); a chase view
-	// (sdSmoothVehicleView) keeps freshEntry set for good, and its entry snap is caught by
-	// the camera guard of SamplesContinue instead
+	// a fresh entry's angles are not clamped yet (first person). A chase view
+	// (sdSmoothVehicleView) keeps freshEntry set for good, so the flag says nothing there; an
+	// entry is caught by the missing previous sample, a seat change or camera cycle by the
+	// seat identity checks
 	if ( viewPlayer == NULL || !sdSeatGate::FindSeat( viewPlayer, seat ) || seat.view == NULL ||
 		 ( !cur.thirdPerson && seat.view->IsFreshEntry() ) ) {
 		return;

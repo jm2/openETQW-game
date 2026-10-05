@@ -40,12 +40,14 @@ extern idCVar g_simHash;
 // whose own tick cameras it blends in the world. pivot and freepivot views follow a turret
 // or gun joint that the presentation does not blend (the gun would lag the view by up to a
 // tick of its rotation), and they are angle-driven (stage 5); the jetpack comes later.
+// A view whose thirdPerson flag does not match its recipe (valley has two third-person
+// standard views) is not drawn: sdPresentation's tick sample refuses it.
 static const seatRecipe_t seatRecipes[] = {
-	{ SPK_TRANSPORT, "standard", false, true },
-	{ SPK_TRANSPORT, "smooth", false, true },
-	{ SPK_TRANSPORT, "smooth_free", false, true },
-	{ SPK_TRANSPORT, "smooth_locked", false, true },
-	{ SPK_NONE, NULL, false, false },
+	{ SPK_TRANSPORT, "standard", false, true, false },
+	{ SPK_TRANSPORT, "smooth", false, true, true },
+	{ SPK_TRANSPORT, "smooth_free", false, true, true },
+	{ SPK_TRANSPORT, "smooth_locked", false, true, true },
+	{ SPK_NONE, NULL, false, false, false },
 };
 
 // what the 'default' item of g_unlock_vehicleSeats stands for; ends with NULL
@@ -292,6 +294,7 @@ static const idList< seatRecipe_t >& ParsedTestRecipes( void ) {
 		recipe.viewType = testRecipes.viewTypes[ i ].c_str();
 		recipe.testOnly = true;
 		recipe.presentable = false;
+		recipe.worldCamera = false;
 	}
 	return testRecipes.recipes;
 }
