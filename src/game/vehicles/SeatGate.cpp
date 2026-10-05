@@ -35,12 +35,13 @@ extern idCVar g_simHash;
 */
 
 // (kind, view class) -> recipe; ends with a NULL viewType
-// M5 step 14 (stage 3): the first-person damped views, whose camera sdPresentation draws
-// in the blended hull's frame. Chase (smooth) views and the jetpack come later.
+// M5 step 14 (stage 3): the first-person standard view, whose camera sdPresentation draws
+// in the blended hull's frame. pivot and freepivot views follow a turret or gun joint that
+// the presentation does not blend (the gun would lag the view by up to a tick of its
+// rotation), and they are angle-driven (stage 5); chase (smooth) views and the jetpack
+// come later.
 static const seatRecipe_t seatRecipes[] = {
 	{ SPK_TRANSPORT, "standard", false, true },
-	{ SPK_TRANSPORT, "pivot", false, true },
-	{ SPK_TRANSPORT, "freepivot", false, true },
 	{ SPK_NONE, NULL, false, false },
 };
 
