@@ -30,6 +30,7 @@ struct seatRecipe_t {
 	seatProxyKind_t					kind;		// SPK_TRANSPORT or SPK_JETPACK only
 	const char*						viewType;	// sdVehicleView::GetTypeName()
 	bool							testOnly;	// from g_seatGateTestRecipe: opens the gate, is never presented
+	bool							presentable;	// M5 step 14: sdPresentation can draw the class (first-person views)
 };
 
 // the seat a player views from; FindSeat fills it

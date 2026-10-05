@@ -4012,6 +4012,8 @@ void idGameLocal::ClientPrediction( const usercmd_t* clientCmds, const usercmd_t
 				}
 				ResetOriginLogOnSeatChange( viewPlayer );
 			}
+			// OpenETQW (M5 step 14): the seat view's tick sample, as the pose log
+			presentation.SampleTick( viewPlayer );
 
 			if ( bse != NULL ) {
 				bse->EndFrame();

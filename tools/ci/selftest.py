@@ -26,6 +26,9 @@ silently turn a gate into a no-op:
   number of arguments, an argument of another kind or another return type
   than its native definition fails, as does one with no native definition or
   a missing events.script.
+* check_presentation_contract.py: the seat presentation calling a function
+  that changes game state, assigning a view or game field, or being referenced
+  outside its hooks fails; the clean source passes.
 
 The copyleft marker strings are assembled from fragments so this file does
 not trip check_no_gpl.py itself.  Exit codes: 0 pass, 1 a case failed.
@@ -346,6 +349,33 @@ def test_event_handlers(scratch: Path) -> None:
     check(code == 1 and "events.script not found" in out, "a script tree without events.script fails", out)
 
 
+def test_presentation_contract(scratch: Path) -> None:
+    print("check_presentation_contract.py")
+    clean = ("void sdPresentation::SampleTick( idPlayer* viewPlayer ) {\n"
+             "\tconst renderEntity_t* hull = transport->GetRenderEntity(); // Present() in a comment\n"
+             "\ts.hullOrigin = hull->origin;\n}\n")
+
+    def tree(name: str, body: str, other: str = "") -> tuple[int, str]:
+        root = scratch / f"presentation-{name}"
+        (root / "src" / "game").mkdir(parents=True)
+        (root / "src" / "game" / "Presentation.h").write_text("class sdPresentation { };\n", encoding="utf-8")
+        (root / "src" / "game" / "Presentation.cpp").write_text(clean + body, encoding="utf-8")
+        if other:
+            (root / "src" / "game" / "Player.cpp").write_text(other, encoding="utf-8")
+        return run_tool("check_presentation_contract.py", "--root", str(root))
+
+    code, out = tree("ok", "")
+    check(code == 0 and "0 violation(s)" in out, "the clean presentation passes", out)
+    code, out = tree("call", "void f() { transport->Present(); }\n")
+    check(code == 1 and "calls Present" in out, "a Present call fails", out)
+    code, out = tree("view", "void f() { viewPlayer->renderView.vieworg = o; }\n")
+    check(code == 1 and "assigns renderView" in out, "assigning the player's renderView fails", out)
+    code, out = tree("state", "void f() { gameLocal.unlock.seatAllowed = false; }\n")
+    check(code == 1 and "writes game state" in out, "writing a gameLocal field fails", out)
+    code, out = tree("ref", "", "void f() { gameLocal.presentation.Clear(); }\n")
+    check(code == 1 and "outside its hooks" in out, "a reference outside the hooks fails", out)
+
+
 def main() -> int:
     scratch = Path(tempfile.mkdtemp(prefix="openetqw-ci-selftest-"))
     try:
@@ -357,6 +387,7 @@ def main() -> int:
         test_run_logged(scratch)
         test_module_check(scratch)
         test_event_handlers(scratch)
+        test_presentation_contract(scratch)
     finally:
         shutil.rmtree(scratch, ignore_errors=True)
     if failures:
