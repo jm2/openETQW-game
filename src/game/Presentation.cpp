@@ -74,7 +74,7 @@ void sdPresentation::SampleTick( idPlayer* viewPlayer ) {
 		return;
 	}
 	const seatRecipe_t* recipe = sdSeatGate::FindRecipe( seat.kind, seat.view->GetTypeName() );
-	if ( recipe == NULL || !recipe->presentable || seat.view->GetViewParms().thirdPerson ) {
+	if ( recipe == NULL || !recipe->presentable ) {
 		return;
 	}
 	const renderEntity_t* hull = seat.transport->GetRenderEntity();
@@ -90,6 +90,9 @@ void sdPresentation::SampleTick( idPlayer* viewPlayer ) {
 	s.hullAxis = hull->axis;
 	s.camOffset = ( view->vieworg - hull->origin ) * inverseHull;
 	s.camAxis = view->viewaxis * inverseHull;
+	s.camOrigin = view->vieworg;
+	s.camWorldAxis = view->viewaxis;
+	s.thirdPerson = seat.view->GetViewParms().thirdPerson;
 	s.speed = const_cast< sdTransport* >( seat.transport )->GetPhysics()->GetLinearVelocity().Length();
 	s.valid = true;
 }
@@ -107,7 +110,8 @@ bool sdPresentation::SamplesContinue( const sample_t& a, const sample_t& b ) con
 	if ( !a.valid || !b.valid || b.framenum - a.framenum != 1 ) {
 		return false;
 	}
-	if ( a.proxySpawnId != b.proxySpawnId || a.positionId != b.positionId || a.viewMode != b.viewMode ) {
+	if ( a.proxySpawnId != b.proxySpawnId || a.positionId != b.positionId || a.viewMode != b.viewMode ||
+		 a.thirdPerson != b.thirdPerson ) {
 		return false;
 	}
 	const float maxMove = Max( PRESENT_MIN_JUMP, 2.0f * Max( a.speed, b.speed ) * MS2SEC( USERCMD_MSEC ) );
@@ -118,9 +122,16 @@ bool sdPresentation::SamplesContinue( const sample_t& a, const sample_t& b ) con
 	if ( HalfAngleCos( a.hullAxis, b.hullAxis ) < minCosHalf ) {
 		return false;
 	}
-	// the camera in the hull's frame: a recentre or reset snaps rather than sweeping
-	if ( ( b.camOffset - a.camOffset ).LengthSqr() > Square( PRESENT_MAX_CAMERA_MOVE ) ||
+	if ( b.thirdPerson ) {
+		// a chase camera follows the hull with its own damping: its move in the world is
+		// held to the hull's limits (a reset or a cut snaps rather than sweeping)
+		if ( ( b.camOrigin - a.camOrigin ).LengthSqr() > Square( maxMove + PRESENT_MAX_CAMERA_MOVE ) ||
+			 HalfAngleCos( a.camWorldAxis, b.camWorldAxis ) < minCosHalf ) {
+			return false;
+		}
+	} else if ( ( b.camOffset - a.camOffset ).LengthSqr() > Square( PRESENT_MAX_CAMERA_MOVE ) ||
 		 HalfAngleCos( a.camAxis, b.camAxis ) < minCosHalf ) {
+		// the camera in the hull's frame: a recentre or reset snaps rather than sweeping
 		return false;
 	}
 	return true;
@@ -157,7 +168,11 @@ void sdPresentation::PrepareDraw( float fraction ) {
 	}
 	idPlayer* viewPlayer = gameLocal.GetLocalViewPlayer();
 	seatInfo_t seat;
-	if ( viewPlayer == NULL || !sdSeatGate::FindSeat( viewPlayer, seat ) || seat.view == NULL || seat.view->IsFreshEntry() ) {
+	// a fresh entry's angles are not clamped yet (first person); a chase view
+	// (sdSmoothVehicleView) keeps freshEntry set for good, and its entry snap is caught by
+	// the camera guard of SamplesContinue instead
+	if ( viewPlayer == NULL || !sdSeatGate::FindSeat( viewPlayer, seat ) || seat.view == NULL ||
+		 ( !cur.thirdPerson && seat.view->IsFreshEntry() ) ) {
 		return;
 	}
 
@@ -167,12 +182,21 @@ void sdPresentation::PrepareDraw( float fraction ) {
 	drawHullAxis = hullQuat.ToMat3();
 	drawHullOrigin.Lerp( prev.hullOrigin, cur.hullOrigin, f );
 
-	idVec3 camOffset;
-	camOffset.Lerp( prev.camOffset, cur.camOffset, f );
-	idQuat camQuat;
-	camQuat.Slerp( prev.camAxis.ToQuat(), cur.camAxis.ToQuat(), f );
-	drawViewAxis = camQuat.ToMat3() * drawHullAxis;
-	drawViewOrigin = drawHullOrigin + camOffset * drawHullAxis;
+	if ( cur.thirdPerson ) {
+		// a chase view: its own tick outputs blended in the world (vehicle-responsiveness
+		// stage 3); it is not rigid to the hull
+		drawViewOrigin.Lerp( prev.camOrigin, cur.camOrigin, f );
+		idQuat camQuat;
+		camQuat.Slerp( prev.camWorldAxis.ToQuat(), cur.camWorldAxis.ToQuat(), f );
+		drawViewAxis = camQuat.ToMat3();
+	} else {
+		idVec3 camOffset;
+		camOffset.Lerp( prev.camOffset, cur.camOffset, f );
+		idQuat camQuat;
+		camQuat.Slerp( prev.camAxis.ToQuat(), cur.camAxis.ToQuat(), f );
+		drawViewAxis = camQuat.ToMat3() * drawHullAxis;
+		drawViewOrigin = drawHullOrigin + camOffset * drawHullAxis;
+	}
 	drawProxySpawnId = cur.proxySpawnId;
 	blending = true;
 	blendedDraws++;
