@@ -1742,12 +1742,15 @@ void idEntity::Present( void ) {
 	// stay at the tick's pose, and idGameLocal::Draw submits a presentation copy for each
 	// draw and puts the tick's def back afterwards. Not for the local view player, whose
 	// model the view follows at the tick (the consumers skip it as well).
+	// M5 step 14 (stage 4): also while a seat's presentation is allowed, except for the local
+	// view player's vehicle and its riders, which sdPresentation draws (on a network client
+	// this would draw them a tick behind the seat's own sample)
 	if ( gameLocal.com_unlockFPS != NULL && gameLocal.com_unlockFPS->GetBool() &&
-		 g_unlock_interpolateMoving.GetBool() && this != gameLocal.GetLocalViewPlayer() ) {
+		 g_unlock_interpolateMoving.GetBool() && this != gameLocal.GetLocalViewPlayer() && !gameLocal.IsLocalSeatCarried( this ) ) {
 		// it should be possible to keep entities back one frame and record their positions while we can't unlock frames
 		// have to watch out not to do that to an entity we're bound to however (like riding the icarus)
 		// without constantly keeping origins one frame behind, some might jump a bit when we go in and out of unlock mode
-		if ( !gameLocal.unlock.unlockedDraw && gameLocal.unlock.canUnlockFrames ) {
+		if ( !gameLocal.unlock.unlockedDraw && ( gameLocal.unlock.canUnlockFrames || gameLocal.unlock.seatAllowed ) ) {
 			// piggyback the AOR INHIBIT_IK setting to trigger the interpolation
 			if ( fl.unlockInterpolate && ( aorFlags & AOR_INHIBIT_IK ) == 0 ) {
 				if ( !interpolateNode.InList() ) {
