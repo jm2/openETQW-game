@@ -1698,6 +1698,7 @@ void idGameLocal::Clear( void ) {
 	unlock.seatPositionId = -1;
 	unlock.seatViewMode = -1;
 	presentation.Clear();
+	presentationCopies.SetNum( 0, false );	// never restored into another map's world
 	// OpenETQW (M5 step 6): no originlog entry yet
 	unlock.originlogViewer = -1;
 	unlock.originlogProxySpawnId = -1;
@@ -4120,6 +4121,10 @@ idGameLocal::MapShutdown
 ============
 */
 void idGameLocal::MapShutdown( void ) {
+	// OpenETQW (M5 step 14): a draw that did not finish left presentation copies; they
+	// belong to this map's render world, so drop them without restoring
+	presentationCopies.SetNum( 0, false );
+	presentation.Clear();
 	if ( gamestate == GAMESTATE_NOMAP ) {
 		return;
 	}

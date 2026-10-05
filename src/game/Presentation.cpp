@@ -245,8 +245,10 @@ void sdPresentation::SubmitCopies( void ) const {
 	}
 
 	// the cockpit
+	// (not when it is bound to the transport: SubmitCarried copied it with the hull's models)
 	sdClientAnimated* cockpit = gameLocal.playerView.GetCockpit().GetEntity();
-	if ( cockpit != NULL && cockpit->GetRenderEntityHandle() >= 0 && !cockpit->IsHidden() ) {
+	if ( cockpit != NULL && cockpit->bindNode.ListHead() != &transport->clientEntities &&
+		 cockpit->GetRenderEntityHandle() >= 0 && !cockpit->IsHidden() ) {
 		renderEntity_t cockpitCopy = *cockpit->GetRenderEntity();
 		cockpitCopy.origin = drawHullOrigin + ( cockpitCopy.origin - hull->origin ) * inverseHull * drawHullAxis;
 		cockpitCopy.axis = cockpitCopy.axis * inverseHull * drawHullAxis;
