@@ -733,7 +733,12 @@ public:
 		float					lastFraction;			// the last presented fraction, and the tick it was for:
 		int						lastFractionFrame;		// the fraction does not step back within a tick
 		int						lastFractionMs;			// sys->Milliseconds() at the last presented fraction (M5 step 10)
-		int						rewoundFrame;			// the tick whose base draw moved the weapon to n - 1 (M5 step 10)
+		int						rewoundFrame;
+		// M5 step 14, with g_simHash: the view player's vehicle's render-world def at the
+		// tick's entry (SIM_VIEW vdef=), after the last draw restored the presentation copies
+		bool					entryDefValid;
+		idVec3					entryDefOrigin;
+		idMat3					entryDefAxis;			// the tick whose base draw moved the weapon to n - 1 (M5 step 10)
 		idVec3					originlog[2];			// log last two origins
 		idVec3					weaponOffsetLog[2];		// weapon position in view space for the last two full game tics
 		idMat3					weaponAxisLog[2];		// weapon orientation in view space for the last two full game tics
@@ -944,6 +949,8 @@ public:
 	void					EmitTickView( int atEntry );
 	bool					RecheckSeatPresentation( void );
 	void					EmitSeatGate( void );
+	void					EmitSeatPresent( void );	// M5 step 14
+	void					RecordEntryDef( void );
 	void					RunSeatGateSchedule( usercmd_t* cmds );
 	void					EmitVehicleViewState( const char* at );	// vehicles/VehicleViewProbe.cpp
 	virtual void			WriteClientNetworkInfo( idFile* file );

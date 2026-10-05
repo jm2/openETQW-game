@@ -103,6 +103,9 @@ jobs:
       - name: Script event handlers match their event definitions
         run: python tools/ci/check_event_handlers.py
 
+      - name: The seat presentation keeps its contract with tick state (M5 step 14)
+        run: python tools/ci/check_presentation_contract.py
+
       - name: CI gate self-test (the gates still fail on new gaps)
         run: python tools/ci/selftest.py
 

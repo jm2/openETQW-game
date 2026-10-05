@@ -30,7 +30,9 @@ public:
 	// fraction (0 on a base draw) when the seat gate's re-check holds and every
 	// continuity guard passes; otherwise this draw shows the tick's own view
 	void					PrepareDraw( float fraction );
-	void					Invalidate( void ) { blending = false; }
+	// after the draw: the next draw must be prepared again (PrepareDraw)
+	void					Invalidate( void ) { blending = false; prepared = false; }
+	bool					IsPrepared( void ) const;
 
 	// RenderPlayerView: the presented view origin and axis for this draw, if any
 	bool					ApplyView( renderView_t& view ) const;
@@ -39,8 +41,9 @@ public:
 	// idGameLocal's presentation copies (restored after RenderPlayerView)
 	void					SubmitCopies( void ) const;
 
-	// the last PrepareDraw's outcome, for diagnostics (SEAT_PRESENT)
-	bool					IsBlending( void ) const { return blending; }
+	// the draws blended between the previous tick and this one (SEAT_PRESENT, g_simHash)
+	int						BlendedDrawsBeforeTick( void ) const { return blendedBeforeTick; }
+	int						PreparedDrawsBeforeTick( void ) const { return preparedBeforeTick; }
 
 private:
 	struct sample_t {
@@ -57,10 +60,16 @@ private:
 	};
 
 	bool					SamplesContinue( const sample_t& a, const sample_t& b ) const;
+	void					SubmitCarried( idLinkList< rvClientEntity >& carried, const idVec3& hullOrigin, const idMat3& inverseHull ) const;
 
 	sample_t				samples[ 2 ];	// by framenum & 1
 
 	bool					blending;		// this draw is presented from the samples
+	bool					prepared;		// PrepareDraw ran for this draw
+	int						blendedDraws;	// draws blended since the last tick sample
+	int						blendedBeforeTick;	// the same, as the last tick sample found it
+	int						preparedDraws;	// draws PrepareDraw ran for since the last tick sample
+	int						preparedBeforeTick;
 	int						drawFrame;		// the framenum PrepareDraw ran for
 	int						drawProxySpawnId;
 	idVec3					drawHullOrigin;

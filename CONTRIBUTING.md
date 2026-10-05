@@ -17,6 +17,7 @@ get CI back: both stay private until the owner decides to publish.
    - `python3 tools/ci/check_no_gpl.py` (no GPL-family license markers)
    - `python3 tools/ci/selftest.py` (the gates still fail on what they exist to catch)
    - `python3 tools/ci/check_event_handlers.py` (script event handlers match their event definitions, and every `events.script` declaration matches its native definition)
+   - `python3 tools/ci/check_presentation_contract.py` (the seat presentation, `src/game/Presentation.*`, changes no game state and is used only from its hooks; M5 step 14)
    - `actionlint` (workflow lint)
 
    Add `--include-untracked` to `check_spdx.py` and `check_no_gpl.py` to cover new files

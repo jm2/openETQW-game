@@ -17,6 +17,12 @@ This checks the presentation's source, with comments and strings removed:
 * sdPresentation and the presentation member are referenced only from the listed hooks
   (Game_local.h, Game_local.cpp, Game_network.cpp, PlayerView.cpp).
 
+Outside these files the seat draw writes presentation state only through idGameLocal::
+PresentationFraction (the fraction bookkeeping in unlock: interpFraction, lastFraction,
+lastFractionFrame, lastFractionMs, which the on-foot view writes the same way and no tick
+reads) and the presentation copies (idGameLocal::SubmitPresentationCopy, restored after
+the draw); those are part of the contract and reviewed with the hooks.
+
 Exit codes: 0 pass, 1 violations found, 2 usage / environment error.
 """
 

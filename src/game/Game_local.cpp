@@ -5182,6 +5182,7 @@ void idGameLocal::RunFrame( const usercmd_t *clientCmds, int elapsedTime ) {
 	}
 	LatchSeatPresentation( localPlayer );
 	LatchUnlockViewer();
+	RecordEntryDef();
 
 	// OpenETQW (M5 step 7): ClientUpdateView sets unlockedDraw, so it says whether a
 	// render-only frame was prepared since the last tick
@@ -5498,6 +5499,7 @@ void idGameLocal::RunFrame( const usercmd_t *clientCmds, int elapsedTime ) {
 	EmitSimStateHash();
 	EmitVehicleTrace();
 	EmitSeatGate();
+	EmitSeatPresent();
 
 	demoManager.EndDemoFrame();
 
@@ -5895,26 +5897,29 @@ makes rendering and sound system calls
 ================
 */
 bool idGameLocal::Draw( void ) {
+	// a draw that did not finish (RenderPlayerView did not return) left copies submitted:
+	// put the replaced defs back before anything else
+	if ( presentationCopies.Num() > 0 ) {
+		RestorePresentationCopies();
+	}
 	// OpenETQW (M5 step 9, D6): on an authoritative game the interpolated entities are
 	// drawn from presentation copies, submitted for this draw only
 	SubmitPresentationCopies();
-	// M5 step 14: the seat view. A draw that ClientUpdateView did not prepare (a base draw,
-	// com_unlock_tickFrames 0) presents the samples at fraction 0, as the on-foot base draw
-	// rewinds to the last tick; with com_unlockFPS 0 nothing is presented
-	if ( com_unlockFPS == NULL || !com_unlockFPS->GetBool() ) {
+	// M5 step 14: the seat view. A draw ClientUpdateView did not prepare (a base draw with
+	// com_unlock_tickFrames 0, or a call that returned before the seat branch) presents the
+	// samples at fraction 0, as the on-foot base draw rewinds to the last tick; with
+	// com_unlockFPS 0 nothing is presented. The draw's preparation is used once
+	if ( com_unlockFPS == NULL || !com_unlockFPS->GetBool() || !unlock.seatAllowed ) {
 		presentation.Invalidate();
-	} else if ( !unlock.unlockedDraw ) {
-		if ( unlock.seatAllowed ) {
-			presentation.PrepareDraw( 0.0f );
-		} else {
-			presentation.Invalidate();
-		}
+	} else if ( !presentation.IsPrepared() ) {
+		presentation.PrepareDraw( 0.0f );
 	}
 	presentation.SubmitCopies();
 	const bool drawn = gameLocal.playerView.RenderPlayerView( GetActiveViewer() );
 	if ( presentationCopies.Num() > 0 ) {
 		RestorePresentationCopies();
 	}
+	presentation.Invalidate();
 	return drawn;
 }
 
@@ -6009,7 +6014,9 @@ unless the handle no longer belongs to the same entity.
 ================
 */
 void idGameLocal::RestorePresentationCopies( void ) {
-	for ( int i = 0; i < presentationCopies.Num(); i++ ) {
+	// in reverse: a def submitted twice (a rider that is also an interpolated entity) gets
+	// back what it had before the first copy
+	for ( int i = presentationCopies.Num() - 1; i >= 0; i-- ) {
 		const presentationCopy_t& c = presentationCopies[ i ];
 		idEntity* e = c.entity.GetEntity();
 		rvClientEntity* cent = c.cent.GetEntity();
@@ -12112,12 +12119,62 @@ void idGameLocal::EmitSimView( idPlayer* viewer ) {
 			returnedLog = va( "(%.9g,%.9g,%.9g)", n( r.pitch ), n( r.yaw ), n( r.roll ) );
 		}
 	}
-	common->Printf( "SIM_VIEW: tick=%d view=%d ang=(%.9g,%.9g,%.9g) olog=(%.9g,%.9g,%.9g) wlog=%s vpush=(%.9g,%.9g,%.9g) vpang=(%.9g,%.9g,%.9g) vret=%s\n",
+	// M5 step 14: the vehicle's render-world def at the tick's entry; a presentation copy
+	// left unrestored would show here
+	idStr entryDefLog = "-";
+	if ( unlock.entryDefValid ) {
+		const idAngles d = unlock.entryDefAxis.ToAngles();
+		entryDefLog = va( "(%.9g,%.9g,%.9g,%.9g,%.9g,%.9g)", n( unlock.entryDefOrigin.x ), n( unlock.entryDefOrigin.y ),
+			n( unlock.entryDefOrigin.z ), n( d.pitch ), n( d.yaw ), n( d.roll ) );
+	}
+	common->Printf( "SIM_VIEW: tick=%d view=%d ang=(%.9g,%.9g,%.9g) olog=(%.9g,%.9g,%.9g) wlog=%s vpush=(%.9g,%.9g,%.9g) vpang=(%.9g,%.9g,%.9g) vret=%s vdef=%s\n",
 		framenum, viewer->entityNumber,
 		n( viewAngles.pitch ), n( viewAngles.yaw ), n( viewAngles.roll ),
 		n( originLog.x ), n( originLog.y ), n( originLog.z ),
 		weaponLog.c_str(),
 		n( pushedOrigin.x ), n( pushedOrigin.y ), n( pushedOrigin.z ),
 		n( pushedAngles.pitch ), n( pushedAngles.yaw ), n( pushedAngles.roll ),
-		returnedLog.c_str() );
+		returnedLog.c_str(), entryDefLog.c_str() );
+}
+
+/*
+================
+idGameLocal::RecordEntryDef
+
+OpenETQW (M5 step 14), with g_simHash: at the tick's entry, the local view player's
+vehicle's def as the render world holds it (what the last draw left), for SIM_VIEW.
+Read-only.
+================
+*/
+void idGameLocal::RecordEntryDef( void ) {
+	unlock.entryDefValid = false;
+	if ( !g_simHash.GetBool() ) {
+		return;
+	}
+	idPlayer* viewPlayer = GetLocalViewPlayer();
+	idEntity* proxy = viewPlayer != NULL ? viewPlayer->GetProxyEntity() : NULL;
+	const int handle = proxy != NULL ? proxy->GetModelDefHandle() : -1;
+	const renderEntity_t* def = handle >= 0 ? gameRenderWorld->GetRenderEntity( handle ) : NULL;
+	if ( def != NULL ) {
+		unlock.entryDefValid = true;
+		unlock.entryDefOrigin = def->origin;
+		unlock.entryDefAxis = def->axis;
+	}
+}
+
+/*
+================
+idGameLocal::EmitSeatPresent
+
+OpenETQW (M5 step 14), with g_simHash: after SEAT_GATE, how many draws the seat
+presentation was asked to prepare between the previous tick and this one, and how many
+of them it blended (the rest drew the tick's view: a guard, or a seat it cannot draw).
+================
+*/
+void idGameLocal::EmitSeatPresent( void ) {
+	if ( !g_simHash.GetBool() ) {
+		return;
+	}
+	common->Printf( "SEAT_PRESENT: tick=%d prepared=%d blended=%d\n", framenum, presentation.PreparedDrawsBeforeTick(),
+		presentation.BlendedDrawsBeforeTick() );
 }

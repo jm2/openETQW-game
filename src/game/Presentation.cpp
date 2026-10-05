@@ -17,6 +17,16 @@
 // further than this between two ticks is drawn unblended
 static const float	PRESENT_MIN_JUMP = 64.0f;		// u
 static const float	PRESENT_MAX_TURN = 45.0f;		// degrees
+// the camera-in-hull guard: a camera that moved this far in the hull's frame between two
+// ticks (a pivot recentring, a seat's camera reset) is drawn unblended
+static const float	PRESENT_MAX_CAMERA_MOVE = 32.0f;	// u
+
+// the cosine of half the angle between two rotations, from their quaternions
+static float HalfAngleCos( const idMat3& a, const idMat3& b ) {
+	const idQuat qa = a.ToQuat();
+	const idQuat qb = b.ToQuat();
+	return idMath::Fabs( qa.x * qb.x + qa.y * qb.y + qa.z * qb.z + qa.w * qb.w );
+}
 
 /*
 ================
@@ -29,8 +39,13 @@ void sdPresentation::Clear( void ) {
 		samples[ i ].framenum = -1;
 	}
 	blending = false;
+	prepared = false;
 	drawFrame = -1;
 	drawProxySpawnId = -1;
+	blendedDraws = 0;
+	blendedBeforeTick = 0;
+	preparedDraws = 0;
+	preparedBeforeTick = 0;
 }
 
 /*
@@ -44,6 +59,10 @@ camera the tick computed, as an offset and axis in the hull's frame. Reads only.
 ================
 */
 void sdPresentation::SampleTick( idPlayer* viewPlayer ) {
+	blendedBeforeTick = blendedDraws;
+	blendedDraws = 0;
+	preparedBeforeTick = preparedDraws;
+	preparedDraws = 0;
 	sample_t& s = samples[ gameLocal.framenum & 1 ];
 	s.valid = false;
 	s.framenum = gameLocal.framenum;
@@ -95,10 +114,13 @@ bool sdPresentation::SamplesContinue( const sample_t& a, const sample_t& b ) con
 	if ( ( b.hullOrigin - a.hullOrigin ).LengthSqr() > Square( maxMove ) ) {
 		return false;
 	}
-	const idQuat qa = a.hullAxis.ToQuat();
-	const idQuat qb = b.hullAxis.ToQuat();
-	const float cosHalf = idMath::Fabs( qa.x * qb.x + qa.y * qb.y + qa.z * qb.z + qa.w * qb.w );
-	if ( cosHalf < idMath::Cos( DEG2RAD( PRESENT_MAX_TURN ) * 0.5f ) ) {
+	const float minCosHalf = idMath::Cos( DEG2RAD( PRESENT_MAX_TURN ) * 0.5f );
+	if ( HalfAngleCos( a.hullAxis, b.hullAxis ) < minCosHalf ) {
+		return false;
+	}
+	// the camera in the hull's frame: a recentre or reset snaps rather than sweeping
+	if ( ( b.camOffset - a.camOffset ).LengthSqr() > Square( PRESENT_MAX_CAMERA_MOVE ) ||
+		 HalfAngleCos( a.camAxis, b.camAxis ) < minCosHalf ) {
 		return false;
 	}
 	return true;
@@ -118,6 +140,8 @@ continuity guards pass. The field of view is never blended (rule 5).
 */
 void sdPresentation::PrepareDraw( float fraction ) {
 	blending = false;
+	prepared = true;
+	preparedDraws++;
 	drawFrame = gameLocal.framenum;
 	const sample_t& prev = samples[ ( gameLocal.framenum + 1 ) & 1 ];
 	const sample_t& cur = samples[ gameLocal.framenum & 1 ];
@@ -151,6 +175,16 @@ void sdPresentation::PrepareDraw( float fraction ) {
 	drawViewOrigin = drawHullOrigin + camOffset * drawHullAxis;
 	drawProxySpawnId = cur.proxySpawnId;
 	blending = true;
+	blendedDraws++;
+}
+
+/*
+================
+sdPresentation::IsPrepared
+================
+*/
+bool sdPresentation::IsPrepared( void ) const {
+	return prepared && drawFrame == gameLocal.framenum;
 }
 
 /*
@@ -159,7 +193,7 @@ sdPresentation::ApplyView
 ================
 */
 bool sdPresentation::ApplyView( renderView_t& view ) const {
-	if ( !blending || drawFrame != gameLocal.framenum ) {
+	if ( !blending || !IsPrepared() ) {
 		return false;
 	}
 	view.vieworg = drawViewOrigin;
@@ -178,7 +212,7 @@ entities; idGameLocal restores the replaced defs after the draw.
 ================
 */
 void sdPresentation::SubmitCopies( void ) const {
-	if ( !blending || drawFrame != gameLocal.framenum ) {
+	if ( !blending || !IsPrepared() ) {
 		return;
 	}
 	idEntity* proxy = gameLocal.EntityForSpawnId( drawProxySpawnId );
@@ -193,6 +227,7 @@ void sdPresentation::SubmitCopies( void ) const {
 	copy.origin = drawHullOrigin;
 	copy.axis = drawHullAxis;
 	gameLocal.SubmitPresentationCopy( transport->GetModelDefHandle(), copy, transport, NULL );
+	SubmitCarried( transport->clientEntities, hull->origin, inverseHull );
 
 	// riders
 	const sdTransportPositionManager& positions = transport->GetPositionManager();
@@ -206,6 +241,7 @@ void sdPresentation::SubmitCopies( void ) const {
 		riderCopy.origin = drawHullOrigin + ( riderCopy.origin - hull->origin ) * inverseHull * drawHullAxis;
 		riderCopy.axis = riderCopy.axis * inverseHull * drawHullAxis;
 		gameLocal.SubmitPresentationCopy( rider->GetModelDefHandle(), riderCopy, rider, NULL );
+		SubmitCarried( rider->clientEntities, hull->origin, inverseHull );
 	}
 
 	// the cockpit
@@ -215,5 +251,30 @@ void sdPresentation::SubmitCopies( void ) const {
 		cockpitCopy.origin = drawHullOrigin + ( cockpitCopy.origin - hull->origin ) * inverseHull * drawHullAxis;
 		cockpitCopy.axis = cockpitCopy.axis * inverseHull * drawHullAxis;
 		gameLocal.SubmitPresentationCopy( cockpit->GetRenderEntityHandle(), cockpitCopy, NULL, cockpit );
+		SubmitCarried( cockpit->clientEntities, hull->origin, inverseHull );
+	}
+}
+
+/*
+================
+sdPresentation::SubmitCarried
+
+The client models bound to something the hull carries (a rider's third-person weapon, a
+model on the hull or the cockpit), recursively, by the same rigid carrier rule. Client
+effects and lights have no render entity of their own here and keep the tick's pose, as
+do GUI surfaces (sdGuiSurface), which are positioned through their renderable.
+================
+*/
+void sdPresentation::SubmitCarried( idLinkList< rvClientEntity >& carried, const idVec3& hullOrigin, const idMat3& inverseHull ) const {
+	for ( rvClientEntity* cent = carried.Next(); cent != NULL; cent = cent->bindNode.Next() ) {
+		const renderEntity_t* re = cent->GetRenderEntity();
+		const int handle = cent->GetRenderEntityHandle();
+		if ( re != NULL && handle >= 0 && !cent->IsHidden() ) {
+			renderEntity_t copy = *re;
+			copy.origin = drawHullOrigin + ( re->origin - hullOrigin ) * inverseHull * drawHullAxis;
+			copy.axis = re->axis * inverseHull * drawHullAxis;
+			gameLocal.SubmitPresentationCopy( handle, copy, NULL, cent );
+		}
+		SubmitCarried( cent->clientEntities, hullOrigin, inverseHull );
 	}
 }
