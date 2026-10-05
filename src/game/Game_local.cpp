@@ -6101,7 +6101,10 @@ void idGameLocal::ClientUpdateView( const usercmd_t &cmd, int timeLeft ) {
 
 	if ( !unlock.canUnlockFrames ) {
 		// OpenETQW (M5 step 14): a seat the gate allowed at this tick's latch is drawn from
-		// sdPresentation's tick samples at this draw's fraction; nothing else runs in a seat
+		// sdPresentation's tick samples at this draw's fraction; the on-foot view blocks do not
+		// run in a seat. Stage 4: on a network client the remote-entity consumer runs too,
+		// with its retail on-foot writes (renderEntity.origin, lastPushedOrigin and the combat
+		// model's link at the presented origin, as ledger 059)
 		if ( unlock.seatAllowed && timeLeft != USERCMD_MSEC ) {
 			const float fraction = PresentationFraction( timeLeft );
 			presentation.PrepareDraw( fraction );
