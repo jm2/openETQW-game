@@ -6135,7 +6135,9 @@ void idGameLocal::ClientUpdateView( const usercmd_t &cmd, int timeLeft ) {
 	// keeps advancing from the last one at half the wall-clock rate until the computed one
 	// catches up (within a frame or two); the client's clock itself is unchanged
 	const int nowMs = sys->Milliseconds();
-	if ( unlock.lastFractionFrame == framenum && interpFraction < unlock.lastFraction ) {
+	// (<=: at the clamp's floor, 1 ms into a tick, the tick frame and the next draw can both
+	// compute 1/33; a draw in the same millisecond still repeats the fraction)
+	if ( unlock.lastFractionFrame == framenum && interpFraction <= unlock.lastFraction ) {
 		const float advanced = unlock.lastFraction + 0.5f * float( nowMs - unlock.lastFractionMs ) / float( USERCMD_MSEC );
 		interpFraction = Max( unlock.lastFraction, Min( advanced, float( USERCMD_MSEC - 1 ) / float( USERCMD_MSEC ) ) );
 	}
