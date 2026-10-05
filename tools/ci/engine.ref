@@ -2,8 +2,8 @@
 #
 # Companion engine revision that the Engine Contract workflow builds against
 # this game checkout. Read by tools/ci/fetch_engine.py. Pin the engine commit
-# that pairs with this game branch (normally the engine's main; the
-# history was rewritten 2026-09-24, so older pins name commits that are gone), and move it with
+# that pairs with this game branch (normally the engine's main; older pins
+# may name commits that no longer resolve), and move it with
 #   python3 tools/ci/bump_engine.py --from-local ../openETQW   (or --remote <branch>, or <sha>)
 # Keep this a full 40-character commit SHA that exists on the engine remote.
 repository jm2/openETQW
