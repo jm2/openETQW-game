@@ -5954,29 +5954,25 @@ trails, client lights, vehicle light defs) keep the tick's pose: a known host-on
 */
 int idGameLocal::SubmitPresentationCopies( void ) {
 	presentationCopies.SetNum( 0, false );
-	if ( isClient || com_unlockFPS == NULL || !com_unlockFPS->GetBool() || !g_unlock_interpolateMoving.GetBool() || !unlock.canUnlockFrames ) {
+	if ( isClient || com_unlockFPS == NULL || !com_unlockFPS->GetBool() || !g_unlock_interpolateMoving.GetBool() ||
+		 ( !unlock.canUnlockFrames && !unlock.seatAllowed ) ) {
 		return 0;
 	}
 	const idPlayer* viewer = GetActiveViewer();
 	for ( idEntity* e = interpolateEntities.Next(); e != NULL; e = e->interpolateNode.Next() ) {
 		// only entities whose history this tick recorded (Present links them in and the list
 		// is cleared at each tick, so this holds today; the history is stale otherwise)
-		if ( e == viewer || e->interpolateLastFramenum != framenum ) {
+		if ( e == viewer || e->interpolateLastFramenum != framenum || IsLocalSeatCarried( e ) ) {
 			continue;
 		}
 		const int handle = e->GetModelDefHandle();
 		if ( handle < 0 || e->IsHidden() ) {
 			continue;
 		}
-		const idVec3& A = e->interpolateHistory[ ( framenum + 1 ) & 1 ];
 		const idVec3& B = e->interpolateHistory[ framenum & 1 ];
 		renderEntity_t copy = *e->GetRenderEntity();
-		if ( unlock.unlockedDraw && unlock.lastFractionFrame == framenum ) {
-			const float f = idMath::ClampFloat( 0.0f, 1.0f, unlock.interpFraction );
-			copy.origin = ( 1.0f - f ) * A + f * B;
-		} else {
-			copy.origin = A;
-		}
+		const bool current = unlock.unlockedDraw && unlock.lastFractionFrame == framenum;
+		copy.origin = InterpolatedOrigin( e, current ? unlock.interpFraction : 0.0f );
 		SubmitPresentationCopy( handle, copy, e, NULL );
 		SubmitPresentationCopies( e->clientEntities, copy.origin - B );
 	}
@@ -6105,9 +6101,15 @@ void idGameLocal::ClientUpdateView( const usercmd_t &cmd, int timeLeft ) {
 
 	if ( !unlock.canUnlockFrames ) {
 		// OpenETQW (M5 step 14): a seat the gate allowed at this tick's latch is drawn from
-		// sdPresentation's tick samples at this draw's fraction; nothing else runs in a seat
+		// sdPresentation's tick samples at this draw's fraction; the on-foot view blocks do not
+		// run in a seat. Stage 4: on a network client the remote-entity consumer runs too,
+		// with its retail on-foot writes (renderEntity.origin, lastPushedOrigin and the combat
+		// model's link at the presented origin, as ledger 059)
 		if ( unlock.seatAllowed && timeLeft != USERCMD_MSEC ) {
-			presentation.PrepareDraw( PresentationFraction( timeLeft ) );
+			const float fraction = PresentationFraction( timeLeft );
+			presentation.PrepareDraw( fraction );
+			// stage 4: remote entities move too while seated (a network client's consumer)
+			PresentInterpolatedEntities( GetActiveViewer(), fraction );
 		}
 		return;
 	}
@@ -6326,22 +6328,79 @@ void idGameLocal::ClientUpdateView( const usercmd_t &cmd, int timeLeft ) {
 		}
 	}
 
-	// on a network client (retail's shape); an authoritative game draws presentation copies
-	// instead (idGameLocal::Draw, M5 step 9, D6)
-	if ( isClient && g_unlock_interpolateMoving.GetBool() ) {
-		// walk entities that need interpolation and present them to the renderer with updated origins
-		idEntity *e;
-		for ( e = interpolateEntities.Next(); e != NULL; e = e->interpolateNode.Next() ) {
-			if ( e == p ) { // not on self (which you don't see in 1stp anyway so shouldn't matter)
-				continue;
-			}
-			idVec3 A = e->interpolateHistory[ ( gameLocal.framenum + 1 ) & 1 ];
-			idVec3 B = e->interpolateHistory[ gameLocal.framenum & 1 ];
-			float ratio = interpFraction;
-			e->GetRenderEntity()->origin = ( 1.0f - ratio ) * A + ratio * B;
-			e->BecomeActive( TH_UPDATEVISUALS );
-			PresentUnlocked( e );
+	PresentInterpolatedEntities( p, interpFraction );
+}
+
+/*
+================
+idGameLocal::IsLocalSeatCarried
+
+OpenETQW (M5 step 14, stage 4): the local view player's vehicle and the players riding
+it, which sdPresentation draws while the seat's presentation is allowed; the remote-entity
+interpolation leaves them alone then.
+================
+*/
+bool idGameLocal::IsLocalSeatCarried( const idEntity* e ) const {
+	if ( !unlock.seatAllowed || e == NULL ) {
+		return false;
+	}
+	idPlayer* viewer = GetLocalViewPlayer();
+	idEntity* proxy = viewer != NULL ? viewer->GetProxyEntity() : NULL;
+	if ( proxy == NULL ) {
+		return false;
+	}
+	if ( e == proxy ) {
+		return true;
+	}
+	const idPlayer* rider = e->IsType( idPlayer::Type ) ? static_cast< const idPlayer* >( e ) : NULL;
+	return rider != NULL && rider->GetProxyEntity() == proxy;
+}
+
+/*
+================
+idGameLocal::InterpolatedOrigin
+
+OpenETQW (M5 step 14, stage 4): an interpolated entity's presentation origin at the
+fraction: the lerp of its last two tick origins, or, for a player riding a vehicle that
+is interpolated this tick, the vehicle's lerped origin plus the rider's offset from it at
+tick n (the carrier rule: origins lerped on their own while the axes stay at the tick
+would slide the rider against the seat).
+================
+*/
+idVec3 idGameLocal::InterpolatedOrigin( idEntity* e, float fraction ) const {
+	const float f = idMath::ClampFloat( 0.0f, 1.0f, fraction );
+	const idVec3& B = e->interpolateHistory[ framenum & 1 ];
+	idEntity* carrier = e->IsType( idPlayer::Type ) ? static_cast< idPlayer* >( e )->GetProxyEntity() : NULL;
+	if ( carrier != NULL && carrier->interpolateNode.InList() && carrier->interpolateLastFramenum == framenum ) {
+		const idVec3& carrierA = carrier->interpolateHistory[ ( framenum + 1 ) & 1 ];
+		const idVec3& carrierB = carrier->interpolateHistory[ framenum & 1 ];
+		return ( 1.0f - f ) * carrierA + f * carrierB + ( B - carrierB );
+	}
+	const idVec3& A = e->interpolateHistory[ ( framenum + 1 ) & 1 ];
+	return ( 1.0f - f ) * A + f * B;
+}
+
+/*
+================
+idGameLocal::PresentInterpolatedEntities
+
+The SDK's consumer of the remote-entity interpolation, on a network client (retail's
+shape): each listed entity is presented at its interpolated origin. An authoritative
+game draws presentation copies instead (idGameLocal::Draw, M5 step 9, D6). Since M5 step
+14 (stage 4) also while a seat's presentation is allowed, and riders by the carrier rule.
+================
+*/
+void idGameLocal::PresentInterpolatedEntities( idPlayer* viewer, float fraction ) {
+	if ( !isClient || !g_unlock_interpolateMoving.GetBool() ) {
+		return;
+	}
+	for ( idEntity* e = interpolateEntities.Next(); e != NULL; e = e->interpolateNode.Next() ) {
+		if ( e == viewer || IsLocalSeatCarried( e ) ) { // not on self (which you don't see in 1stp anyway)
+			continue;
 		}
+		e->GetRenderEntity()->origin = InterpolatedOrigin( e, fraction );
+		e->BecomeActive( TH_UPDATEVISUALS );
+		PresentUnlocked( e );
 	}
 }
 
