@@ -952,6 +952,8 @@ bool idPlayerView::RenderPlayerView( idPlayer* viewPlayer ) {
 			const renderView_t& view = viewPlayer->renderView;
 
 			currentView = view;
+			// OpenETQW (M5 step 14): an allowed seat draws the presented camera (sdPresentation)
+			gameLocal.presentation.ApplyView( currentView );
 
 			// readjust the view one frame earlier for regular game draws (again: for base draws, not for extra draws)
 			// extra draws do this in their own loop

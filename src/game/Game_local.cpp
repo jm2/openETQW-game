@@ -1697,6 +1697,7 @@ void idGameLocal::Clear( void ) {
 	unlock.seatProxySpawnId = -1;
 	unlock.seatPositionId = -1;
 	unlock.seatViewMode = -1;
+	presentation.Clear();
 	// OpenETQW (M5 step 6): no originlog entry yet
 	unlock.originlogViewer = -1;
 	unlock.originlogProxySpawnId = -1;
@@ -5426,6 +5427,8 @@ void idGameLocal::RunFrame( const usercmd_t *clientCmds, int elapsedTime ) {
 			}
 			ResetOriginLogOnSeatChange( viewPlayer );
 		}
+		// OpenETQW (M5 step 14): the seat view's tick sample (hull and camera), as the pose log
+		presentation.SampleTick( viewPlayer );
 		// OpenETQW (M5 step 7): the view this tick computed, put back at the next tick's entry
 		SaveTickView( viewPlayer );
 		// the replay's per-tick view state, from the view player that was just logged
@@ -5894,9 +5897,22 @@ makes rendering and sound system calls
 bool idGameLocal::Draw( void ) {
 	// OpenETQW (M5 step 9, D6): on an authoritative game the interpolated entities are
 	// drawn from presentation copies, submitted for this draw only
-	const int copies = SubmitPresentationCopies();
+	SubmitPresentationCopies();
+	// M5 step 14: the seat view. A draw that ClientUpdateView did not prepare (a base draw,
+	// com_unlock_tickFrames 0) presents the samples at fraction 0, as the on-foot base draw
+	// rewinds to the last tick; with com_unlockFPS 0 nothing is presented
+	if ( com_unlockFPS == NULL || !com_unlockFPS->GetBool() ) {
+		presentation.Invalidate();
+	} else if ( !unlock.unlockedDraw ) {
+		if ( unlock.seatAllowed ) {
+			presentation.PrepareDraw( 0.0f );
+		} else {
+			presentation.Invalidate();
+		}
+	}
+	presentation.SubmitCopies();
 	const bool drawn = gameLocal.playerView.RenderPlayerView( GetActiveViewer() );
-	if ( copies > 0 ) {
+	if ( presentationCopies.Num() > 0 ) {
 		RestorePresentationCopies();
 	}
 	return drawn;
@@ -6032,6 +6048,40 @@ void idGameLocal::PresentUnlocked( idEntity* ent ) {
 }
 
 /*
+================
+idGameLocal::PresentationFraction
+
+The draw's sub-tick fraction from the engine's timeLeft, as the on-foot view and the
+seat view (M5 step 14) use it, recorded in unlock.interpFraction.
+================
+*/
+float idGameLocal::PresentationFraction( int timeLeft ) {
+	float interpFraction = float( USERCMD_MSEC - timeLeft ) / float( USERCMD_MSEC );
+	// OpenETQW: the presented time does not step back within a tick. When a snapshot
+
+	// arrives the client nudges its prediction clock, which can move timeLeft back by a
+	// millisecond or two; presenting that would move the view back for one draw.
+	// M5 step 10 (owner decision, 2026-10-04: smooth in presentation): holding the last
+	// fraction froze the view for a frame, now often, since the tick frame starts the
+	// tick's fractions and snapshots arrive just after it. Instead the presented fraction
+	// keeps advancing from the last one at half the wall-clock rate until the computed one
+	// catches up (within a frame or two); the client's clock itself is unchanged
+	const int nowMs = sys->Milliseconds();
+	// (<=: at the clamp's floor, 1 ms into a tick, the tick frame and the next draw can both
+	// compute 1/33; a draw in the same millisecond still repeats the fraction)
+	if ( unlock.lastFractionFrame == framenum && interpFraction <= unlock.lastFraction ) {
+		const float advanced = unlock.lastFraction + 0.5f * float( nowMs - unlock.lastFractionMs ) / float( USERCMD_MSEC );
+		interpFraction = Max( unlock.lastFraction, Min( advanced, float( USERCMD_MSEC - 1 ) / float( USERCMD_MSEC ) ) );
+	}
+	unlock.lastFraction = interpFraction;
+	unlock.lastFractionFrame = framenum;
+	unlock.lastFractionMs = nowMs;
+	unlock.interpFraction = interpFraction;
+
+	return interpFraction;
+}
+
+/*
 ===============
 idGameLocal::ClientUpdateView
 ===============
@@ -6042,6 +6092,11 @@ void idGameLocal::ClientUpdateView( const usercmd_t &cmd, int timeLeft ) {
 	unlock.unlockedDraw = true;
 
 	if ( !unlock.canUnlockFrames ) {
+		// OpenETQW (M5 step 14): a seat the gate allowed at this tick's latch is drawn from
+		// sdPresentation's tick samples at this draw's fraction; nothing else runs in a seat
+		if ( unlock.seatAllowed && timeLeft != USERCMD_MSEC ) {
+			presentation.PrepareDraw( PresentationFraction( timeLeft ) );
+		}
 		return;
 	}
 
@@ -6125,26 +6180,7 @@ void idGameLocal::ClientUpdateView( const usercmd_t &cmd, int timeLeft ) {
 		unlock.lastFullDrawFrame = framenum;
 	}
 
-	float interpFraction = float( USERCMD_MSEC - timeLeft ) / float( USERCMD_MSEC );
-	// OpenETQW: the presented time does not step back within a tick. When a snapshot
-	// arrives the client nudges its prediction clock, which can move timeLeft back by a
-	// millisecond or two; presenting that would move the view back for one draw.
-	// M5 step 10 (owner decision, 2026-10-04: smooth in presentation): holding the last
-	// fraction froze the view for a frame, now often, since the tick frame starts the
-	// tick's fractions and snapshots arrive just after it. Instead the presented fraction
-	// keeps advancing from the last one at half the wall-clock rate until the computed one
-	// catches up (within a frame or two); the client's clock itself is unchanged
-	const int nowMs = sys->Milliseconds();
-	// (<=: at the clamp's floor, 1 ms into a tick, the tick frame and the next draw can both
-	// compute 1/33; a draw in the same millisecond still repeats the fraction)
-	if ( unlock.lastFractionFrame == framenum && interpFraction <= unlock.lastFraction ) {
-		const float advanced = unlock.lastFraction + 0.5f * float( nowMs - unlock.lastFractionMs ) / float( USERCMD_MSEC );
-		interpFraction = Max( unlock.lastFraction, Min( advanced, float( USERCMD_MSEC - 1 ) / float( USERCMD_MSEC ) ) );
-	}
-	unlock.lastFraction = interpFraction;
-	unlock.lastFractionFrame = framenum;
-	unlock.lastFractionMs = nowMs;
-	unlock.interpFraction = interpFraction;
+	const float interpFraction = PresentationFraction( timeLeft );
 
 	if ( onFoot ) {
 		idAngles currentAngles = unlock.refAngles;

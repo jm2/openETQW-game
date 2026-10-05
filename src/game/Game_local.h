@@ -24,6 +24,7 @@ void gameError( const char *fmt, ... );
 #include "physics/PhysicsEvent.h"
 #include "proficiency/ProficiencyManager.h"
 #include "PlayerView.h"
+#include "Presentation.h"
 #include "AORManager.h"
 #include "proficiency/StatsTracker.h"
 
@@ -917,6 +918,8 @@ public:
 	virtual void			ClientUpdateView( const usercmd_t &cmd, int timeLeft );
 	void					PresentUnlocked( idEntity* ent );
 	int						SubmitPresentationCopies( void );	// M5 step 9 (D6)
+	float					PresentationFraction( int timeLeft );	// the draw's sub-tick fraction (ClientUpdateView)
+	sdPresentation			presentation;						// M5 step 14: the seat view
 	void					SubmitPresentationCopies( idLinkList< rvClientEntity >& bound, const idVec3& delta );
 	void					SubmitPresentationCopy( int handle, const renderEntity_t& copy, idEntity* e, rvClientEntity* cent );
 	void					RestorePresentationCopies( void );

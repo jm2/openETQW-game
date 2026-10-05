@@ -35,8 +35,13 @@ extern idCVar g_simHash;
 */
 
 // (kind, view class) -> recipe; ends with a NULL viewType
+// M5 step 14 (stage 3): the first-person damped views, whose camera sdPresentation draws
+// in the blended hull's frame. Chase (smooth) views and the jetpack come later.
 static const seatRecipe_t seatRecipes[] = {
-	{ SPK_NONE, NULL, false },
+	{ SPK_TRANSPORT, "standard", false, true },
+	{ SPK_TRANSPORT, "pivot", false, true },
+	{ SPK_TRANSPORT, "freepivot", false, true },
+	{ SPK_NONE, NULL, false, false },
 };
 
 // what the 'default' item of g_unlock_vehicleSeats stands for; ends with NULL
@@ -282,6 +287,7 @@ static const idList< seatRecipe_t >& ParsedTestRecipes( void ) {
 		recipe.kind = SPK_TRANSPORT;		// never the jetpack
 		recipe.viewType = testRecipes.viewTypes[ i ].c_str();
 		recipe.testOnly = true;
+		recipe.presentable = false;
 	}
 	return testRecipes.recipes;
 }

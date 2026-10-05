@@ -84,6 +84,10 @@ protected:
 	mutable bool					freshEntry;
 	idMat3							entryAim;
 
+public:
+	// OpenETQW (M5 step 14): read by sdPresentation's continuity guard
+	bool							IsFreshEntry( void ) const { return freshEntry; }
+
 private:
 	static sdVehicleViewFactory	viewFactory;
 };
