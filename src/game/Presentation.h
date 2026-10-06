@@ -53,8 +53,11 @@ private:
 		int					viewMode;
 		idVec3				hullOrigin;		// the transport's render entity at the tick's end
 		idMat3				hullAxis;
-		idVec3				camOffset;		// the tick camera in the hull's frame
+		idVec3				camOffset;		// the tick camera in the hull's frame (first person)
 		idMat3				camAxis;
+		idVec3				camOrigin;		// the tick camera in the world (a chase view)
+		idMat3				camWorldAxis;
+		bool				thirdPerson;	// a chase view: blended in the world, not in the hull
 		float				speed;			// the transport's speed, for the jump guard
 		bool				valid;
 	};
