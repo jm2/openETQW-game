@@ -43,11 +43,13 @@ extern idCVar g_simHash;
 // A view whose thirdPerson flag does not match its recipe (valley has two third-person
 // standard views) is not drawn: sdPresentation's tick sample refuses it.
 static const seatRecipe_t seatRecipes[] = {
-	{ SPK_TRANSPORT, "standard", false, true, false },
-	{ SPK_TRANSPORT, "smooth", false, true, true },
-	{ SPK_TRANSPORT, "smooth_free", false, true, true },
-	{ SPK_TRANSPORT, "smooth_locked", false, true, true },
-	{ SPK_NONE, NULL, false, false, false },
+	// standard: late look (stage 5, its first tier: the base class's extent clamps); the
+	// chase views orbit, and get it later
+	{ SPK_TRANSPORT, "standard", false, true, false, true },
+	{ SPK_TRANSPORT, "smooth", false, true, true, false },
+	{ SPK_TRANSPORT, "smooth_free", false, true, true, false },
+	{ SPK_TRANSPORT, "smooth_locked", false, true, true, false },
+	{ SPK_NONE, NULL, false, false, false, false },
 };
 
 // what the 'default' item of g_unlock_vehicleSeats stands for; ends with NULL
@@ -295,6 +297,7 @@ static const idList< seatRecipe_t >& ParsedTestRecipes( void ) {
 		recipe.testOnly = true;
 		recipe.presentable = false;
 		recipe.worldCamera = false;
+		recipe.lateLook = false;
 	}
 	return testRecipes.recipes;
 }

@@ -95,6 +95,25 @@ void sdPresentation::SampleTick( idPlayer* viewPlayer ) {
 	s.camOrigin = view->vieworg;
 	s.camWorldAxis = view->viewaxis;
 	s.thirdPerson = recipe->worldCamera;
+	// stage 5, the damped first-person view: camera = viewAngles x eye (VehicleView.cpp,
+	// CalcViewAxes), so the camera without the angles is what the tick's eye and clamps left
+	// review of #38: only where the class's clamp is the base one and has no rate limit
+	// or hull-relative final clamp (ClampFinalAxis), and never in a seat that needs the
+	// tophat (the pilots: their mouse flies the vehicle)
+	const positionViewMode_t& parms = seat.view->GetViewParms();
+	s.lateLook = recipe->lateLook && !s.thirdPerson && seat.view->UsesBaseClamp() && !parms.tophatRequired
+		&& !parms.clampYaw.flags.limitRate && !parms.clampPitch.flags.limitRate
+		&& !parms.clampDampedYaw.flags.enabled && !parms.clampDampedPitch.flags.enabled;
+	// whether the tick took its command's turn (sdTransport::UpdateViewAngles and
+	// ClampViewAngles, idPlayer::UpdateViewAngles): if not, the command's angle change is
+	// not input the tick showed, and the draws must not show it either
+	s.turnAllowed = TurnAllowed( *seat.transport, seat.positionId, *viewPlayer );
+	s.inputTaken = s.turnAllowed && !( parms.tophatRequired && !viewPlayer->usercmd.buttons.btn.tophat );
+	s.tickAngles = viewPlayer->clientViewAngles;
+	for ( int i = 0; i < 3; i++ ) {
+		s.cmdAngles[ i ] = viewPlayer->usercmd.angles[ i ];
+	}
+	s.lookBase = s.tickAngles.ToMat3().Transpose() * s.camAxis;
 	s.speed = const_cast< sdTransport* >( seat.transport )->GetPhysics()->GetLinearVelocity().Length();
 	s.valid = true;
 }
@@ -151,7 +170,7 @@ the sampled seat, the game is not paused, the view has no fresh entry pending an
 continuity guards pass. The field of view is never blended (rule 5).
 ================
 */
-void sdPresentation::PrepareDraw( float fraction ) {
+void sdPresentation::PrepareDraw( float fraction, const usercmd_t* cmd ) {
 	blending = false;
 	prepared = true;
 	preparedDraws++;
@@ -195,14 +214,62 @@ void sdPresentation::PrepareDraw( float fraction ) {
 	} else {
 		idVec3 camOffset;
 		camOffset.Lerp( prev.camOffset, cur.camOffset, f );
-		idQuat camQuat;
-		camQuat.Slerp( prev.camAxis.ToQuat(), cur.camAxis.ToQuat(), f );
-		drawViewAxis = camQuat.ToMat3() * drawHullAxis;
 		drawViewOrigin = drawHullOrigin + camOffset * drawHullAxis;
+		if ( cur.lateLook && prev.lateLook && g_unlock_vehicleLook.GetBool() ) {
+			// stage 5 (late look): A = A_n - (1 - f) r_n + clampPure( A_n + mouse turn since
+			// the tick ), r_n the part of the tick's angle change its input did not cause
+			// (auto-centre, clamps), spread over the tick so it does not step at its end;
+			// every angle difference is the shortest arc, and usercmd angles wrap in 16 bits
+			idAngles turn( 0.0f, 0.0f, 0.0f );
+			if ( cmd != NULL && cur.turnAllowed && !( seat.view->GetViewParms().tophatRequired && !cmd->buttons.btn.tophat ) ) {
+				for ( int i = 0; i < 2; i++ ) {
+					turn[ i ] = idMath::AngleNormalize180( SHORT2ANGLE( static_cast< short >( cmd->angles[ i ] - cur.cmdAngles[ i ] ) ) );
+				}
+			}
+			idAngles drawn = cur.tickAngles;
+			for ( int i = 0; i < 2; i++ ) {
+				const float input = cur.inputTaken ? idMath::AngleNormalize180( SHORT2ANGLE( static_cast< short >( cur.cmdAngles[ i ] - prev.cmdAngles[ i ] ) ) ) : 0.0f;
+				const float residual = idMath::AngleNormalize180( idMath::AngleNormalize180( cur.tickAngles[ i ] - prev.tickAngles[ i ] ) - input );
+				drawn[ i ] = idMath::AngleNormalize180( cur.tickAngles[ i ] - ( 1.0f - f ) * residual + turn[ i ] );
+			}
+			seat.view->ClampViewAnglesPure( drawn, cur.tickAngles, f * MS2SEC( USERCMD_MSEC ) );
+			idQuat baseQuat;
+			baseQuat.Slerp( prev.lookBase.ToQuat(), cur.lookBase.ToQuat(), f );
+			drawViewAxis = drawn.ToMat3() * baseQuat.ToMat3() * drawHullAxis;
+		} else {
+			idQuat camQuat;
+			camQuat.Slerp( prev.camAxis.ToQuat(), cur.camAxis.ToQuat(), f );
+			drawViewAxis = camQuat.ToMat3() * drawHullAxis;
+		}
 	}
 	drawProxySpawnId = cur.proxySpawnId;
 	blending = true;
 	blendedDraws++;
+}
+
+/*
+================
+sdPresentation::TurnAllowed
+
+stage 5: whether the tick lets a mouse turn change the view angles, apart from the
+tophat: not while the player's turning is inhibited (a camera, turningFrozen, a
+teleport), the transport teleports or the seat's weapon is EMPed (idPlayer::
+UpdateViewAngles, sdTransport::UpdateViewAngles and ClampViewAngles). Latched at the
+tick: these change only on ticks
+================
+*/
+bool sdPresentation::TurnAllowed( const sdTransport& transport, int positionId, idPlayer& player ) const {
+	if ( player.InhibitTurning() ) {
+		return false;
+	}
+	if ( transport.IsTeleporting() ) {
+		return false;
+	}
+	const sdVehiclePosition* position = transport.GetPositionManager().PositionForId( positionId );
+	if ( position != NULL && position->GetWeaponIndex() != -1 && const_cast< sdTransport& >( transport ).IsWeaponEMPed() ) {
+		return false;
+	}
+	return true;
 }
 
 /*

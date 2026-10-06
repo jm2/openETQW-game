@@ -6107,7 +6107,7 @@ void idGameLocal::ClientUpdateView( const usercmd_t &cmd, int timeLeft ) {
 		// model's link at the presented origin, as ledger 059)
 		if ( unlock.seatAllowed && timeLeft != USERCMD_MSEC ) {
 			const float fraction = PresentationFraction( timeLeft );
-			presentation.PrepareDraw( fraction );
+			presentation.PrepareDraw( fraction, &cmd );	// cmd: stage 5's late look
 			// stage 4: remote entities move too while seated (a network client's consumer)
 			PresentInterpolatedEntities( GetActiveViewer(), fraction );
 		}

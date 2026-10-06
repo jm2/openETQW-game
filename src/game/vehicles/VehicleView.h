@@ -87,6 +87,12 @@ protected:
 public:
 	// OpenETQW (M5 step 14): read by sdPresentation's continuity guard
 	bool							IsFreshEntry( void ) const { return freshEntry; }
+	// OpenETQW (M5 step 14, stage 5): the base ClampViewAngles for a draw: no fresh-entry
+	// handling (it would clear freshEntry), and rate limits over the elapsed time. Const
+	void							ClampViewAnglesPure( idAngles& viewAngles, const idAngles& oldViewAngles, float elapsedSec ) const;
+	// whether the class's ClampViewAngles is the base one, which ClampViewAnglesPure follows;
+	// a class that overrides it returns false
+	virtual bool					UsesBaseClamp( void ) const { return true; }
 
 private:
 	static sdVehicleViewFactory	viewFactory;
@@ -158,6 +164,7 @@ public:
 
 	virtual void				CalculateViewPos( idPlayer* player, idVec3& origin, idMat3& axis, bool fullUpdate );
 	virtual void				ClampViewAngles( idAngles& viewAngles, const idAngles& oldAngles ) const;
+	virtual bool				UsesBaseClamp( void ) const { return false; }	// OpenETQW: stage 5
 
 protected:
 	virtual void				GetDampingAxis( idMat3& axis ) const;
@@ -198,6 +205,7 @@ public:
 	virtual void					CalculateViewPos( idPlayer* player, idVec3& origin, idMat3& axis, bool fullUpdate );
 
 	virtual void					ClampViewAngles( idAngles& viewAngles, const idAngles& oldAngles ) const;
+	virtual bool					UsesBaseClamp( void ) const { return false; }	// OpenETQW: stage 5
 
 	virtual const idAngles			GetRequiredViewAngles( const idVec3& aimPosition ) const;
 
