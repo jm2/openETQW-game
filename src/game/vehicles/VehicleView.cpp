@@ -157,6 +157,8 @@ void sdVehicleView::ZoomCycle( void ) const {
 sdVehicleView::ClampViewAngles
 ================
 */
+// OpenETQW (M5 step 14, stage 5): ClampViewAnglesPure follows this for a draw; a class that
+// overrides it must override UsesBaseClamp to return false
 void sdVehicleView::ClampViewAngles( idAngles& viewAngles, const idAngles& oldViewAngles ) const {
 
 	idAngles oldAngles = oldViewAngles;
