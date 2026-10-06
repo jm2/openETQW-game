@@ -168,6 +168,33 @@ void sdVehicleView::ClampViewAngles( idAngles& viewAngles, const idAngles& oldVi
 
 /*
 ================
+sdVehicleView::ClampViewAnglesPure
+================
+*/
+static void ClampAnglePure( idAngles& newAngles, const idAngles& oldAngles, const angleClamp_t& clamp, int index, float elapsedSec ) {
+	if ( clamp.flags.limitRate ) {
+		const float rate = clamp.rate[ 0 ] * elapsedSec;
+		const float diff = idMath::AngleDelta( newAngles[ index ], oldAngles[ index ] );
+		if ( diff > rate ) {
+			newAngles[ index ] = idMath::AngleNormalize180( oldAngles[ index ] + rate );
+		} else if ( diff < -rate ) {
+			newAngles[ index ] = idMath::AngleNormalize180( oldAngles[ index ] - rate );
+		}
+	}
+	if ( clamp.flags.enabled ) {
+		const float mid = ( clamp.extents[ 0 ] + clamp.extents[ 1 ] ) * 0.5f;
+		const float range = ( clamp.extents[ 1 ] - clamp.extents[ 0 ] ) * 0.5f;
+		newAngles[ index ] = idMath::ClampFloat( -range, range, idMath::AngleNormalize180( newAngles[ index ] - mid ) ) + mid;
+	}
+}
+
+void sdVehicleView::ClampViewAnglesPure( idAngles& viewAngles, const idAngles& oldViewAngles, float elapsedSec ) const {
+	ClampAnglePure( viewAngles, oldViewAngles, viewMode.clampPitch, 0, elapsedSec );
+	ClampAnglePure( viewAngles, oldViewAngles, viewMode.clampYaw, 1, elapsedSec );
+}
+
+/*
+================
 sdVehicleView::DoFreshEntryAngles
 ================
 */

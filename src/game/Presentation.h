@@ -16,6 +16,7 @@
 
 class idPlayer;
 class sdTransport;
+class sdVehicleView;
 
 class sdPresentation {
 public:
@@ -29,7 +30,7 @@ public:
 	// at draw time, for the draw about to be rendered: blends the last two samples at
 	// fraction (0 on a base draw) when the seat gate's re-check holds and every
 	// continuity guard passes; otherwise this draw shows the tick's own view
-	void					PrepareDraw( float fraction );
+	void					PrepareDraw( float fraction, const usercmd_t* cmd = NULL );
 	// after the draw: the next draw must be prepared again (PrepareDraw)
 	void					Invalidate( void ) { blending = false; prepared = false; }
 	bool					IsPrepared( void ) const;
@@ -58,11 +59,17 @@ private:
 		idVec3				camOrigin;		// the tick camera in the world (a chase view)
 		idMat3				camWorldAxis;
 		bool				thirdPerson;	// a chase view: blended in the world, not in the hull
+		bool				lateLook;		// stage 5: the view angles below are shown with the mouse turn since the tick
+		idAngles			tickAngles;		// the tick's view angles (clientViewAngles) and its command's
+		short				cmdAngles[ 3 ];
+		idMat3				lookBase;		// the camera without the view angles, in the hull's frame:
+											// camera = tickAngles.ToMat3() x lookBase x hull
 		float				speed;			// the transport's speed, for the jump guard
 		bool				valid;
 	};
 
 	bool					SamplesContinue( const sample_t& a, const sample_t& b ) const;
+	bool					LookAllowed( const sdTransport& transport, const sdVehicleView& view, int positionId, const usercmd_t& cmd ) const;
 	void					SubmitCarried( idLinkList< rvClientEntity >& carried, const idVec3& hullOrigin, const idMat3& inverseHull ) const;
 
 	sample_t				samples[ 2 ];	// by framenum & 1

@@ -87,6 +87,9 @@ protected:
 public:
 	// OpenETQW (M5 step 14): read by sdPresentation's continuity guard
 	bool							IsFreshEntry( void ) const { return freshEntry; }
+	// OpenETQW (M5 step 14, stage 5): the base ClampViewAngles for a draw: no fresh-entry
+	// handling (it would clear freshEntry), and rate limits over the elapsed time. Const
+	void							ClampViewAnglesPure( idAngles& viewAngles, const idAngles& oldViewAngles, float elapsedSec ) const;
 
 private:
 	static sdVehicleViewFactory	viewFactory;

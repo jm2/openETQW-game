@@ -32,6 +32,7 @@ struct seatRecipe_t {
 	bool							testOnly;	// from g_seatGateTestRecipe: opens the gate, is never presented
 	bool							presentable;	// M5 step 14: sdPresentation can draw the class
 	bool							worldCamera;	// a chase class (third person, blended in the world); else first person in the hull
+	bool							lateLook;		// stage 5: the class's view angles get the mouse turn made since the tick
 };
 
 // the seat a player views from; FindSeat fills it
