@@ -1001,19 +1001,13 @@ void sdSmoothVehicleView::ClampViewAnglesPure( idAngles& viewAngles, const idAng
 ================
 sdSmoothVehicleView::GetOrbitFocus
 
-OpenETQW (M5 step 14, stage 5): the focus point CalculateViewPos aims the camera at, from
-the transport's pushed origin or the eye joint as the tick left them. Reads only
+OpenETQW (M5 step 14, stage 5): the focus point the tick's CalculateViewPos aimed the
+camera at (the transport's pushed origin or eye joint plus cameraHeight), as it left it
+in evalState. Reads only
 ================
 */
 bool sdSmoothVehicleView::GetOrbitFocus( idVec3& focus ) const {
-	sdTransport* owner = position->GetTransport();
-	idVec3 ownerOrigin = owner->GetLastPushedOrigin();
-	jointHandle_t eyeJoint = owner->GetAnimator()->GetJointHandle( viewMode.eyes );
-	if ( eyeJoint != INVALID_JOINT ) {
-		idMat3 tempAxes;
-		owner->GetWorldOriginAxisNoUpdate( eyeJoint, ownerOrigin, tempAxes );
-	}
-	focus = ownerOrigin + idVec3( 0.0f, 0.0f, viewMode.cameraHeight );
+	focus = evalState.focusPoint;
 	return true;
 }
 

@@ -314,6 +314,7 @@ public:
 
 	virtual void					ClampViewAngles( idAngles& viewAngles, const idAngles& oldAngles ) const;
 	virtual bool					HasPureClamp( void ) const { return false; }	// OpenETQW: stage 5 (its look follows the tophat)
+	virtual bool					GetOrbitFocus( idVec3& focus ) const { return false; }	// OpenETQW: stage 5 (none yet)
 	virtual void					CalculateViewPos( idPlayer* player, idVec3& origin, idMat3& axis, bool fullUpdate );
 
 	virtual void					OnPlayerSwitched( idPlayer* player, bool newPosition );

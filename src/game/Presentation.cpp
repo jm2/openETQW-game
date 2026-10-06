@@ -247,7 +247,9 @@ void sdPresentation::PrepareDraw( float fraction, const usercmd_t* cmd ) {
 				float input = cur.inputTaken ? idMath::AngleNormalize180( SHORT2ANGLE( static_cast< short >( cur.cmdAngles[ i ] - prev.cmdAngles[ i ] ) ) ) : 0.0f;
 				// what the tick's clamps let through of it
 				input = input * change > 0.0f ? ( idMath::Fabs( input ) < idMath::Fabs( change ) ? input : change ) : 0.0f;
-				extra[ i ] = ( 1.0f - f ) * input + idMath::AngleNormalize180( turned[ i ] - base[ i ] );
+				// the part of tick n's turn still to come only if the last interval drew its
+				// own late turn: else this draw would step by it as the orbit comes back
+				extra[ i ] = ( prev.orbitValid ? ( 1.0f - f ) * input : 0.0f ) + idMath::AngleNormalize180( turned[ i ] - base[ i ] );
 			}
 			OrbitView( extra, cur, prev, f, *seat.view );
 		}
