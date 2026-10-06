@@ -20,6 +20,7 @@ static const float	PRESENT_MAX_TURN = 45.0f;		// degrees
 // the camera-in-hull guard: a camera that moved this far in the hull's frame between two
 // ticks (a pivot recentring, a seat's camera reset) is drawn unblended
 static const float	PRESENT_MAX_CAMERA_MOVE = 32.0f;	// u
+static const float	ORBIT_EPSILON = 0.5f;			// u: a chase camera this far off the ray from its focus was moved by a clip or damping
 
 // the cosine of half the angle between two rotations, from their quaternions
 static float HalfAngleCos( const idMat3& a, const idMat3& b ) {
@@ -101,9 +102,19 @@ void sdPresentation::SampleTick( idPlayer* viewPlayer ) {
 	// or hull-relative final clamp (ClampFinalAxis), and never in a seat that needs the
 	// tophat (the pilots: their mouse flies the vehicle)
 	const positionViewMode_t& parms = seat.view->GetViewParms();
-	s.lateLook = recipe->lateLook && !s.thirdPerson && seat.view->UsesBaseClamp() && !parms.tophatRequired
+	s.lateLook = recipe->lateLook && seat.view->HasPureClamp() && !parms.tophatRequired
 		&& !parms.clampYaw.flags.limitRate && !parms.clampPitch.flags.limitRate
 		&& !parms.clampDampedYaw.flags.enabled && !parms.clampDampedPitch.flags.enabled;
+	s.ownerAxis = const_cast< sdTransport* >( seat.transport )->GetPhysics()->GetAxis();
+	// a chase view orbits its focus: CalculateViewPos puts the camera at focus - forward x
+	// length unless the world clip, the lift over the hull or the distance damping moved
+	// it, and only then is a turn about the focus what the next tick would show
+	s.orbitValid = false;
+	if ( s.thirdPerson && s.lateLook && seat.view->GetOrbitFocus( s.focus ) ) {
+		const idVec3 toFocus = s.focus - s.camOrigin;
+		const float along = toFocus * s.camWorldAxis[ 0 ];
+		s.orbitValid = along > 0.0f && ( toFocus - s.camWorldAxis[ 0 ] * along ).LengthSqr() < Square( ORBIT_EPSILON );
+	}
 	// whether the tick took its command's turn (sdTransport::UpdateViewAngles and
 	// ClampViewAngles, idPlayer::UpdateViewAngles): if not, the command's angle change is
 	// not input the tick showed, and the draws must not show it either
@@ -204,6 +215,16 @@ void sdPresentation::PrepareDraw( float fraction, const usercmd_t* cmd ) {
 	drawHullAxis = hullQuat.ToMat3();
 	drawHullOrigin.Lerp( prev.hullOrigin, cur.hullOrigin, f );
 
+	// stage 5 (late look): the mouse turn made since the tick, every angle difference the
+	// shortest arc (usercmd angles wrap in 16 bits)
+	const bool lateLook = cur.lateLook && prev.lateLook && g_unlock_vehicleLook.GetBool();
+	idAngles turn( 0.0f, 0.0f, 0.0f );
+	if ( lateLook && cmd != NULL && cur.turnAllowed && !( seat.view->GetViewParms().tophatRequired && !cmd->buttons.btn.tophat ) ) {
+		for ( int i = 0; i < 2; i++ ) {
+			turn[ i ] = idMath::AngleNormalize180( SHORT2ANGLE( static_cast< short >( cmd->angles[ i ] - cur.cmdAngles[ i ] ) ) );
+		}
+	}
+
 	if ( cur.thirdPerson ) {
 		// a chase view: its own tick outputs blended in the world (vehicle-responsiveness
 		// stage 3); it is not rigid to the hull
@@ -211,28 +232,40 @@ void sdPresentation::PrepareDraw( float fraction, const usercmd_t* cmd ) {
 		idQuat camQuat;
 		camQuat.Slerp( prev.camWorldAxis.ToQuat(), cur.camWorldAxis.ToQuat(), f );
 		drawViewAxis = camQuat.ToMat3();
+		if ( lateLook && cur.orbitValid ) {
+			// stage 5 for a chase view: the blend shows tick n's own turn spread over the
+			// tick, so the draw adds what of it is still to come, (1 - f) x the input the tick
+			// took, and the clamped turn since the tick; as an orbit about the blended focus,
+			// as CalculateViewPos places the camera while nothing shortened its boom
+			idAngles base = cur.tickAngles;
+			seat.view->ClampViewAnglesPure( base, cur.tickAngles, cur.ownerAxis, 0.0f );
+			idAngles turned = cur.tickAngles + turn;
+			seat.view->ClampViewAnglesPure( turned, cur.tickAngles, cur.ownerAxis, f * MS2SEC( USERCMD_MSEC ) );
+			idAngles extra( 0.0f, 0.0f, 0.0f );
+			for ( int i = 0; i < 2; i++ ) {
+				const float change = idMath::AngleNormalize180( cur.tickAngles[ i ] - prev.tickAngles[ i ] );
+				float input = cur.inputTaken ? idMath::AngleNormalize180( SHORT2ANGLE( static_cast< short >( cur.cmdAngles[ i ] - prev.cmdAngles[ i ] ) ) ) : 0.0f;
+				// what the tick's clamps let through of it
+				input = input * change > 0.0f ? ( idMath::Fabs( input ) < idMath::Fabs( change ) ? input : change ) : 0.0f;
+				extra[ i ] = ( 1.0f - f ) * input + idMath::AngleNormalize180( turned[ i ] - base[ i ] );
+			}
+			OrbitView( extra, cur, prev, f, *seat.view );
+		}
 	} else {
 		idVec3 camOffset;
 		camOffset.Lerp( prev.camOffset, cur.camOffset, f );
 		drawViewOrigin = drawHullOrigin + camOffset * drawHullAxis;
-		if ( cur.lateLook && prev.lateLook && g_unlock_vehicleLook.GetBool() ) {
+		if ( lateLook ) {
 			// stage 5 (late look): A = A_n - (1 - f) r_n + clampPure( A_n + mouse turn since
 			// the tick ), r_n the part of the tick's angle change its input did not cause
-			// (auto-centre, clamps), spread over the tick so it does not step at its end;
-			// every angle difference is the shortest arc, and usercmd angles wrap in 16 bits
-			idAngles turn( 0.0f, 0.0f, 0.0f );
-			if ( cmd != NULL && cur.turnAllowed && !( seat.view->GetViewParms().tophatRequired && !cmd->buttons.btn.tophat ) ) {
-				for ( int i = 0; i < 2; i++ ) {
-					turn[ i ] = idMath::AngleNormalize180( SHORT2ANGLE( static_cast< short >( cmd->angles[ i ] - cur.cmdAngles[ i ] ) ) );
-				}
-			}
+			// (auto-centre, clamps), spread over the tick so it does not step at its end
 			idAngles drawn = cur.tickAngles;
 			for ( int i = 0; i < 2; i++ ) {
 				const float input = cur.inputTaken ? idMath::AngleNormalize180( SHORT2ANGLE( static_cast< short >( cur.cmdAngles[ i ] - prev.cmdAngles[ i ] ) ) ) : 0.0f;
 				const float residual = idMath::AngleNormalize180( idMath::AngleNormalize180( cur.tickAngles[ i ] - prev.tickAngles[ i ] ) - input );
 				drawn[ i ] = idMath::AngleNormalize180( cur.tickAngles[ i ] - ( 1.0f - f ) * residual + turn[ i ] );
 			}
-			seat.view->ClampViewAnglesPure( drawn, cur.tickAngles, f * MS2SEC( USERCMD_MSEC ) );
+			seat.view->ClampViewAnglesPure( drawn, cur.tickAngles, cur.ownerAxis, f * MS2SEC( USERCMD_MSEC ) );
 			idQuat baseQuat;
 			baseQuat.Slerp( prev.lookBase.ToQuat(), cur.lookBase.ToQuat(), f );
 			drawViewAxis = drawn.ToMat3() * baseQuat.ToMat3() * drawHullAxis;
@@ -245,6 +278,56 @@ void sdPresentation::PrepareDraw( float fraction, const usercmd_t* cmd ) {
 	drawProxySpawnId = cur.proxySpawnId;
 	blending = true;
 	blendedDraws++;
+}
+
+/*
+================
+sdPresentation::OrbitView
+
+stage 5, a chase view: turns the drawn camera by extra (pitch and yaw, as its view angles
+turn it) about the blended focus, then holds it to the class's view constraints in the
+drawn hull's frame (ClampToViewConstraints), never further out than the blended camera
+already is
+================
+*/
+void sdPresentation::OrbitView( const idAngles& extra, const sample_t& cur, const sample_t& prev, float f, const sdVehicleView& view ) {
+	idVec3 focus;
+	focus.Lerp( prev.focus, cur.focus, f );
+	idAngles forward = drawViewAxis[ 0 ].ToAngles();
+	forward.roll = 0.0f;
+	idAngles turned = forward;
+	turned.pitch += extra.pitch;
+	turned.yaw += extra.yaw;
+	turned.Normalize180();
+
+	const positionViewMode_t& parms = view.GetViewParms();
+	const idMat3 hullT = drawHullAxis.Transpose();
+	idAngles before = ( forward.ToMat3() * hullT ).ToAngles();
+	idAngles after = ( turned.ToMat3() * hullT ).ToAngles();
+	bool clamped = false;
+	const angleClamp_t* clamps[ 2 ] = { &parms.clampPitch, &parms.clampYaw };
+	for ( int i = 0; i < 2; i++ ) {
+		if ( !clamps[ i ]->flags.enabled ) {
+			continue;
+		}
+		const float mid = ( clamps[ i ]->extents[ 0 ] + clamps[ i ]->extents[ 1 ] ) * 0.5f;
+		const float range = ( clamps[ i ]->extents[ 1 ] - clamps[ i ]->extents[ 0 ] ) * 0.5f;
+		const float was = idMath::AngleNormalize180( before[ i ] - mid );
+		const float now = idMath::AngleNormalize180( after[ i ] - mid );
+		const float limit = Max( range, idMath::Fabs( was ) );
+		if ( idMath::Fabs( now ) > limit ) {
+			after[ i ] = mid + ( now > 0.0f ? limit : -limit );
+			clamped = true;
+		}
+	}
+	idMat3 axis = turned.ToMat3();
+	if ( clamped ) {
+		idAngles world = ( after.ToMat3() * drawHullAxis )[ 0 ].ToAngles();
+		world.roll = 0.0f;
+		axis = world.ToMat3();
+	}
+	drawViewOrigin = focus + ( drawViewOrigin - focus ) * drawViewAxis.Transpose() * axis;
+	drawViewAxis = axis;
 }
 
 /*
