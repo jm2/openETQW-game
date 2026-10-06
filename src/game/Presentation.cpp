@@ -97,7 +97,18 @@ void sdPresentation::SampleTick( idPlayer* viewPlayer ) {
 	s.thirdPerson = recipe->worldCamera;
 	// stage 5, the damped first-person view: camera = viewAngles x eye (VehicleView.cpp,
 	// CalcViewAxes), so the camera without the angles is what the tick's eye and clamps left
-	s.lateLook = recipe->lateLook && !s.thirdPerson;
+	// review of #38: only where the class's clamp is the base one and has no rate limit
+	// or hull-relative final clamp (ClampFinalAxis), and never in a seat that needs the
+	// tophat (the pilots: their mouse flies the vehicle)
+	const positionViewMode_t& parms = seat.view->GetViewParms();
+	s.lateLook = recipe->lateLook && !s.thirdPerson && seat.view->UsesBaseClamp() && !parms.tophatRequired
+		&& !parms.clampYaw.flags.limitRate && !parms.clampPitch.flags.limitRate
+		&& !parms.clampDampedYaw.flags.enabled && !parms.clampDampedPitch.flags.enabled;
+	// whether the tick took its command's turn (sdTransport::UpdateViewAngles and
+	// ClampViewAngles, idPlayer::UpdateViewAngles): if not, the command's angle change is
+	// not input the tick showed, and the draws must not show it either
+	s.turnAllowed = TurnAllowed( *seat.transport, seat.positionId, *viewPlayer );
+	s.inputTaken = s.turnAllowed && !( parms.tophatRequired && !viewPlayer->usercmd.buttons.btn.tophat );
 	s.tickAngles = viewPlayer->clientViewAngles;
 	for ( int i = 0; i < 3; i++ ) {
 		s.cmdAngles[ i ] = viewPlayer->usercmd.angles[ i ];
@@ -210,14 +221,14 @@ void sdPresentation::PrepareDraw( float fraction, const usercmd_t* cmd ) {
 			// (auto-centre, clamps), spread over the tick so it does not step at its end;
 			// every angle difference is the shortest arc, and usercmd angles wrap in 16 bits
 			idAngles turn( 0.0f, 0.0f, 0.0f );
-			if ( cmd != NULL && LookAllowed( *seat.transport, *seat.view, seat.positionId, *cmd ) ) {
+			if ( cmd != NULL && cur.turnAllowed && !( seat.view->GetViewParms().tophatRequired && !cmd->buttons.btn.tophat ) ) {
 				for ( int i = 0; i < 2; i++ ) {
 					turn[ i ] = idMath::AngleNormalize180( SHORT2ANGLE( static_cast< short >( cmd->angles[ i ] - cur.cmdAngles[ i ] ) ) );
 				}
 			}
 			idAngles drawn = cur.tickAngles;
 			for ( int i = 0; i < 2; i++ ) {
-				const float input = idMath::AngleNormalize180( SHORT2ANGLE( static_cast< short >( cur.cmdAngles[ i ] - prev.cmdAngles[ i ] ) ) );
+				const float input = cur.inputTaken ? idMath::AngleNormalize180( SHORT2ANGLE( static_cast< short >( cur.cmdAngles[ i ] - prev.cmdAngles[ i ] ) ) ) : 0.0f;
 				const float residual = idMath::AngleNormalize180( idMath::AngleNormalize180( cur.tickAngles[ i ] - prev.tickAngles[ i ] ) - input );
 				drawn[ i ] = idMath::AngleNormalize180( cur.tickAngles[ i ] - ( 1.0f - f ) * residual + turn[ i ] );
 			}
@@ -238,15 +249,17 @@ void sdPresentation::PrepareDraw( float fraction, const usercmd_t* cmd ) {
 
 /*
 ================
-sdPresentation::LookAllowed
+sdPresentation::TurnAllowed
 
-stage 5: when a draw may show the mouse turn made since the tick: not while a seat that
-needs the tophat lacks it, the transport teleports, or the seat's weapon is EMPed (the
-tick ignores the turn then too; Transport.cpp UpdateViewAngles and ClampViewAngles)
+stage 5: whether the tick lets a mouse turn change the view angles, apart from the
+tophat: not while the player's turning is inhibited (a camera, turningFrozen, a
+teleport), the transport teleports or the seat's weapon is EMPed (idPlayer::
+UpdateViewAngles, sdTransport::UpdateViewAngles and ClampViewAngles). Latched at the
+tick: these change only on ticks
 ================
 */
-bool sdPresentation::LookAllowed( const sdTransport& transport, const sdVehicleView& view, int positionId, const usercmd_t& cmd ) const {
-	if ( view.GetViewParms().tophatRequired && !cmd.buttons.btn.tophat ) {
+bool sdPresentation::TurnAllowed( const sdTransport& transport, int positionId, idPlayer& player ) const {
+	if ( player.InhibitTurning() ) {
 		return false;
 	}
 	if ( transport.IsTeleporting() ) {

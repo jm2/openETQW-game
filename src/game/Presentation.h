@@ -60,6 +60,8 @@ private:
 		idMat3				camWorldAxis;
 		bool				thirdPerson;	// a chase view: blended in the world, not in the hull
 		bool				lateLook;		// stage 5: the view angles below are shown with the mouse turn since the tick
+		bool				turnAllowed;	// the tick let a mouse turn change the angles (the tophat aside)
+		bool				inputTaken;		// and took its own command's turn
 		idAngles			tickAngles;		// the tick's view angles (clientViewAngles) and its command's
 		short				cmdAngles[ 3 ];
 		idMat3				lookBase;		// the camera without the view angles, in the hull's frame:
@@ -69,7 +71,7 @@ private:
 	};
 
 	bool					SamplesContinue( const sample_t& a, const sample_t& b ) const;
-	bool					LookAllowed( const sdTransport& transport, const sdVehicleView& view, int positionId, const usercmd_t& cmd ) const;
+	bool					TurnAllowed( const sdTransport& transport, int positionId, idPlayer& player ) const;
 	void					SubmitCarried( idLinkList< rvClientEntity >& carried, const idVec3& hullOrigin, const idMat3& inverseHull ) const;
 
 	sample_t				samples[ 2 ];	// by framenum & 1
