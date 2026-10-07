@@ -956,6 +956,7 @@ public:
 	void					EmitSeatPresent( void );	// M5 step 14
 	void					RecordEntryDef( void );
 	void					RunSeatGateSchedule( usercmd_t* cmds );
+	void					RunLeadMeasureSchedule( usercmd_t* cmds );	// M5 step 14b
 	void					EmitVehicleViewState( const char* at );	// vehicles/VehicleViewProbe.cpp
 	virtual void			WriteClientNetworkInfo( idFile* file );
 	virtual void			ReadClientNetworkInfo( idFile* file );
