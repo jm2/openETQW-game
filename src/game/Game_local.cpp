@@ -5171,7 +5171,7 @@ idCVar g_fpuExceptions( "g_fpuExceptions", "0", CVAR_BOOL | CVAR_GAME | CVAR_NOC
 
 idCVar g_debugStatsSetup( "g_debugStatsSetup", "0", CVAR_GAME | CVAR_BOOL | CVAR_NOCHEAT, "prints any problems with calculating a client rank when they connect to a server" );
 idCVar g_simHash( "g_simHash", "0", CVAR_GAME | CVAR_BOOL, "emit authoritative simulation state hash (SIM_HASH line) every tick; off by default, tests that need it set it explicitly" );
-idCVar g_determinismTest( "g_determinismTest", "0", CVAR_GAME | CVAR_INTEGER, "execute a tick-indexed determinism test input stream: 1 on foot, then a titan; 2 a ground vehicle, then an aircraft (M5 step 5a); 3 a tour of vehicle seats for the seat gate (M5 step 13)" );
+idCVar g_determinismTest( "g_determinismTest", "0", CVAR_GAME | CVAR_INTEGER, "execute a tick-indexed determinism test input stream: 1 on foot, then a titan; 2 a ground vehicle, then an aircraft (M5 step 5a); 3 a tour of vehicle seats for the seat gate (M5 step 13); 4 a drive of each vehicle class for the hull-lead measurement (M5 step 14b)" );
 
 /*
 ================
@@ -5283,6 +5283,8 @@ void idGameLocal::RunFrame( const usercmd_t *clientCmds, int elapsedTime ) {
 			RunVehicleDeterminismSchedule( usercmds );
 		} else if ( g_determinismTest.GetInteger() == 3 ) {
 			RunSeatGateSchedule( usercmds );
+		} else if ( g_determinismTest.GetInteger() == 4 ) {
+			RunLeadMeasureSchedule( usercmds );
 		} else if ( g_determinismTest.GetInteger() == 1 ) {
 			int tick = framenum;
 			idPlayer* p = GetLocalPlayer();
@@ -11999,6 +12001,155 @@ void idGameLocal::RunVehicleDeterminismSchedule( usercmd_t* cmds ) {
 
 /*
 ===============
+idGameLocal::RunLeadMeasureSchedule
+
+OpenETQW (M5 step 14b, docs/hull-lead.md step 2), g_determinismTest 4: a tick-indexed
+drive of each rigid-body vehicle class, for tools/analysis/veh_pred.py. Each class gets a
+segment of LEAD_SEGMENT ticks: it is spawned on the badger's start spot in schedule 2
+(open ground, heading 67 degrees, towards the wall schedule 2's badger hits; every
+vehicle on the map is removed before each segment), entered by name,
+driven (ground: throttle, a right and a left turn at speed, brake and reverse, forward
+again) or flown (aircraft: lift-off, nose down, a yaw and roll ramp, level, descent),
+left and removed. The goliath (a walker, not a rigid body) and the platypus (it needs
+water) are not in it. As in schedule 2, the schedule replaces the live input from tick
+21 on, so input the client happens to send cannot change the run.
+===============
+*/
+void idGameLocal::RunLeadMeasureSchedule( usercmd_t* cmds ) {
+	struct leadClass_t {
+		const char*	classname;
+		bool		aircraft;
+	};
+	static const leadClass_t classes[] = {
+		{ "vehicle_titan", false }, { "vehicle_hog", false }, { "vehicle_desecrator", false },
+		{ "vehicle_husky", false }, { "vehicle_badger", false }, { "vehicle_trojan", false },
+		{ "vehicle_anansi", true }, { "vehicle_bumblebee", true }, { "vehicle_hornet", true },
+	};
+	static const int numClasses = sizeof( classes ) / sizeof( classes[ 0 ] );
+	static const int LEAD_START = 21;
+	static const int LEAD_SEGMENT = 200;
+	static idEntityPtr< idEntity > spawned;
+
+	const int tick = framenum;
+	idPlayer* p = GetLocalPlayer();
+	if ( p == NULL ) {
+		p = GetClient( 0 );
+	}
+	if ( p == NULL ) {
+		return;
+	}
+	usercmd_t& cmd = cmds[ p->entityNumber ];
+
+	static short baseAngles[ 3 ];
+	static bool baseAnglesValid = false;
+	if ( tick < LEAD_START ) {
+		baseAnglesValid = false;
+		if ( p->IsSpectating() ) {
+			p->SetGameTeam( &sdTeamManager::GetInstance().GetTeam( "gdf" ) );
+			p->SpawnFromSpawnSpot();
+		}
+		return;
+	}
+	if ( !baseAnglesValid ) {
+		baseAngles[ 0 ] = cmd.angles[ 0 ];
+		baseAngles[ 1 ] = cmd.angles[ 1 ];
+		baseAngles[ 2 ] = cmd.angles[ 2 ];
+		baseAnglesValid = true;
+	}
+	cmd.forwardmove = 0;
+	cmd.rightmove = 0;
+	cmd.upmove = 0;
+	cmd.buttons.btnValue = 0;
+	cmd.buttons.btn.run = true;
+	cmd.impulse = 0;
+	cmd.angles[ 0 ] = baseAngles[ 0 ];
+	cmd.angles[ 1 ] = baseAngles[ 1 ];
+	cmd.angles[ 2 ] = baseAngles[ 2 ];
+
+	const int segment = ( tick - LEAD_START ) / LEAD_SEGMENT;
+	const int local = ( tick - LEAD_START ) % LEAD_SEGMENT;
+	if ( segment >= numClasses ) {
+		if ( local == 0 ) {
+			cmdSystem->BufferCommandText( CMD_EXEC_APPEND, "quit\n" );
+		}
+		return;
+	}
+	const leadClass_t& lc = classes[ segment ];
+
+	{
+		// every other vehicle goes, on every tick: the spawn spot is the map badger's, and
+		// valley's construction module respawns a badger there about 20 s after it is gone,
+		// which would otherwise land in a later segment and collide unseen
+		idStaticList< idEntity*, MAX_GENTITIES > transports;
+		for ( idEntity* ent = spawnedEntities.Next(); ent != NULL; ent = ent->spawnNode.Next() ) {
+			if ( ent->Cast< sdTransport >() != NULL && ( local == 0 || ent != spawned.GetEntity() ) ) {
+				transports.Append( ent );
+			}
+		}
+		for ( int i = 0; i < transports.Num(); i++ ) {
+			if ( tick > LEAD_START ) {
+				common->Printf( "LEAD_FOREIGN: tick=%d removed %s\n", tick, transports[ i ]->GetName() );
+			}
+			transports[ i ]->ProcessEvent( &EV_Remove );
+		}
+	}
+	if ( local == 0 ) {
+		idDict args;
+		args.Set( "classname", lc.classname );
+		args.SetVector( "origin", idVec3( 8964.94f, -10349.27f, 1440.0f ) );
+		args.SetFloat( "angle", 67.0f );
+		idEntity* ent = NULL;
+		if ( !SpawnEntityDef( args, true, &ent ) || ent == NULL ) {
+			Warning( "g_determinismTest 4: could not spawn %s", lc.classname );
+		}
+		spawned = ent;
+		common->Printf( "LEAD_SEGMENT: tick=%d class=%s ent=%d\n", tick, lc.classname, ent != NULL ? ent->entityNumber : -1 );
+	} else if ( local == 2 ) {
+		if ( spawned.GetEntity() != NULL ) {
+			cmdSystem->BufferCommandText( CMD_EXEC_NOW, va( "enterVehicle %d %s", p->entityNumber, spawned.GetEntity()->name.c_str() ) );
+		}
+	} else if ( local == 185 ) {
+		cmdSystem->BufferCommandText( CMD_EXEC_NOW, va( "exitVehicle %d", p->entityNumber ) );
+	} else if ( local == 190 ) {
+		if ( spawned.GetEntity() != NULL ) {
+			spawned.GetEntity()->ProcessEvent( &EV_Remove );
+		}
+		spawned = NULL;
+	} else if ( local > 2 && local < 185 && !lc.aircraft ) {
+		if ( local <= 44 ) {
+			cmd.forwardmove = 127;						// throttle
+		} else if ( local <= 74 ) {
+			cmd.forwardmove = 127;
+			cmd.rightmove = 127;						// a right turn at speed
+		} else if ( local <= 94 ) {
+			cmd.forwardmove = 127;
+			cmd.rightmove = -127;						// a left turn
+		} else if ( local <= 129 ) {
+			cmd.forwardmove = -127;						// brake, then reverse
+		} else if ( local <= 179 ) {
+			cmd.forwardmove = 127;						// forward again
+		}
+	} else if ( local > 2 && local < 185 ) {
+		if ( local <= 39 ) {
+			cmd.forwardmove = 127;						// collective: lift off
+		} else if ( local <= 74 ) {
+			cmd.forwardmove = 40;
+			cmd.angles[ PITCH ] += ANGLE2SHORT( 0.4f * ( local - 39 ) );	// nose down, a ramp
+		} else if ( local <= 109 ) {
+			cmd.forwardmove = 40;
+			cmd.rightmove = 127;						// the pedals: yaw (sdAirVehicleControl, unless the player swaps yaw and roll)
+			cmd.angles[ PITCH ] += ANGLE2SHORT( 14.0f );
+			cmd.angles[ YAW ] += ANGLE2SHORT( 0.8f * ( local - 74 ) );		// the mouse's yaw axis rolls an aircraft: a roll ramp
+		} else if ( local <= 149 ) {
+			cmd.forwardmove = 40;						// level
+		} else if ( local <= 179 ) {
+			cmd.forwardmove = -127;						// collective down
+		}
+	}
+}
+
+/*
+===============
 idGameLocal::RunSeatGateSchedule
 
 OpenETQW (M5 step 13), g_determinismTest 3: a tick-indexed tour of vehicle seats for
@@ -12129,6 +12280,15 @@ void idGameLocal::EmitVehicleTrace( void ) {
 			org.x, org.y, org.z, quat.x, quat.y, quat.z, quat.w,
 			lin.x, lin.y, lin.z, ang.x, ang.y, ang.z,
 			phys->IsAtRest() ? 1 : 0, phys->GetLastCollision().time, control.c_str() );
+		if ( g_determinismTest.GetInteger() == 4 ) {
+			// the hull-lead measurement (M5 step 14b, docs/hull-lead.md): what VEH_TRACE does
+			// not print and the physics-step predictor needs; schedule 4 only, so that the
+			// output of the other schedules (and the vehicle-physics golden) is unchanged
+			const idVec3& com = phys->GetMainCenterOfMass();
+			common->Printf( "VEH_BODY: tick=%d ent=%d com=(%.9g,%.9g,%.9g) ground=%d contacts=%d\n",
+				framenum, transport->entityNumber, com.x, com.y, com.z,
+				phys->HasGroundContacts() ? 1 : 0, phys->GetNumContacts() );
+		}
 	}
 }
 
