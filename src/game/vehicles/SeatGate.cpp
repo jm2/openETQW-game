@@ -420,6 +420,110 @@ void sdSeatGate::MakeKey( const sdTransport& transport, const sdVehiclePosition&
 
 /*
 ================
+leadList_t
+
+g_unlock_vehicleLead as parsed (M5 step 14b); parsed again whenever the string changes.
+The built-in list is empty: a class gets a lead by default only after its measurement
+and the owner's review (docs/hull-lead.md 4)
+================
+*/
+struct leadItem_t {
+	idStr							pattern;		// a vehicle script, wildcards * and ?
+	float							lead;
+	char							predictor;		// 0: the class's own
+};
+
+struct leadList_t {
+	bool							parsed;
+	idStr							value;
+	idList< leadItem_t >			items;
+};
+
+static leadList_t leadList;
+
+static const leadItem_t builtInLeads[] = {
+	{ "", 0.0f, 0 },	// none yet
+};
+
+// docs/hull-lead.md 2.1: the hybrid (the physics step in the air, the samples on the
+// ground) for every class but the hover tanks, whose pads hold them without ground contacts
+static char ClassPredictor( const char* vehicleScript ) {
+	return !idStr::Icmp( vehicleScript, "desecrator" ) ? 'S' : 'H';
+}
+
+static const leadList_t& ParsedLeadList( void ) {
+	const char* value = g_unlock_vehicleLead.GetString();
+	if ( leadList.parsed && !leadList.value.Cmp( value ) ) {
+		return leadList;
+	}
+	leadList.parsed = true;
+	leadList.value = value;
+	leadList.items.Clear();
+	idStr stripped;
+	StripSpace( value, stripped );
+	idStrList items;
+	SplitComma( stripped, items );
+	for ( int i = 0; i < items.Num(); i++ ) {
+		const idStr& item = items[ i ];
+		if ( !item.Icmp( "default" ) ) {
+			for ( int j = 0; j < static_cast< int >( sizeof( builtInLeads ) / sizeof( builtInLeads[ 0 ] ) ); j++ ) {
+				if ( builtInLeads[ j ].pattern[ 0 ] != '\0' ) {
+					leadList.items.Append( builtInLeads[ j ] );
+				}
+			}
+			continue;
+		}
+		idStrList fields;
+		int start = 0;
+		for ( int c = 0; c <= item.Length(); c++ ) {
+			if ( c == item.Length() || item[ c ] == ':' ) {
+				fields.Append( idStr( item.c_str() + start, 0, c - start ) );
+				start = c + 1;
+			}
+		}
+		leadItem_t parsed;
+		parsed.predictor = 0;
+		bool ok = ( fields.Num() == 2 || fields.Num() == 3 ) && fields[ 0 ].Length() > 0 && fields[ 1 ].IsNumeric();
+		if ( ok && fields.Num() == 3 ) {
+			const char p = idStr::ToUpper( fields[ 2 ].Length() == 1 ? fields[ 2 ][ 0 ] : '?' );
+			ok = p == 'S' || p == 'P' || p == 'H';
+			parsed.predictor = p;
+		}
+		if ( !ok ) {
+			gameLocal.Warning( "g_unlock_vehicleLead: ignoring '%s': an item is 'default' or vehicleScript:L[:S|P|H]", item.c_str() );
+			continue;
+		}
+		parsed.pattern = fields[ 0 ];
+		parsed.lead = idMath::ClampFloat( 0.0f, 1.0f, static_cast< float >( atof( fields[ 1 ].c_str() ) ) );
+		leadList.items.Append( parsed );
+	}
+	return leadList;
+}
+
+/*
+================
+sdSeatGate::LeadForClass
+================
+*/
+bool sdSeatGate::LeadForClass( const char* vehicleScript, float& lead, char& predictor ) {
+	const leadList_t& list = ParsedLeadList();
+	for ( int i = 0; i < list.items.Num(); i++ ) {
+		const leadItem_t& item = list.items[ i ];
+		if ( GlobMatch( item.pattern.c_str(), item.pattern.Length(), vehicleScript, idStr::Length( vehicleScript ) ) ) {
+			lead = item.lead;
+			predictor = item.predictor != 0 ? item.predictor : ClassPredictor( vehicleScript );
+			const char* forced = g_vehicleLeadPredictor.GetString();
+			if ( forced[ 0 ] == 'S' || forced[ 0 ] == 'P' || forced[ 0 ] == 'H' ) {
+				predictor = forced[ 0 ];
+			}
+			return lead > 0.0f;
+		}
+	}
+	return false;
+}
+
+/*
+================
 sdSeatGate::FindRecipe
 
 The built-in recipes, then (for transports only) the view classes g_seatGateTestRecipe
