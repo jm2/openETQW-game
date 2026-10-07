@@ -12,6 +12,7 @@
 #include "vehicles/VehicleView.h"
 #include "vehicles/SeatGate.h"
 #include "client/ClientEntity.h"
+#include "physics/Physics_RigidBodyMultiple.h"
 
 // the continuity guard's limits (vehicle-responsiveness stage 3): a pose that moved
 // further than this between two ticks is drawn unblended
@@ -22,11 +23,18 @@ static const float	PRESENT_MAX_TURN = 45.0f;		// degrees
 static const float	PRESENT_MAX_CAMERA_MOVE = 32.0f;	// u
 static const float	ORBIT_EPSILON = 0.5f;			// u: a chase camera this far off the ray from its focus was moved by a clip or damping
 
+// the angle between two rotations, in degrees
+static float AngleBetween( const idMat3& a, const idMat3& b );
+
 // the cosine of half the angle between two rotations, from their quaternions
 static float HalfAngleCos( const idMat3& a, const idMat3& b ) {
 	const idQuat qa = a.ToQuat();
 	const idQuat qb = b.ToQuat();
 	return idMath::Fabs( qa.x * qb.x + qa.y * qb.y + qa.z * qb.z + qa.w * qb.w );
+}
+
+static float AngleBetween( const idMat3& a, const idMat3& b ) {
+	return RAD2DEG( 2.0f * idMath::ACos( Min( 1.0f, HalfAngleCos( a, b ) ) ) );
 }
 
 /*
@@ -35,7 +43,14 @@ sdPresentation::Clear
 ================
 */
 void sdPresentation::Clear( void ) {
-	for ( int i = 0; i < 2; i++ ) {
+	drawLeadAlpha = -1.0f;
+	drawLeadVector.Zero();
+	fadeFrame = -1;
+	leadFrame = -1;
+	fadeStartMsec = 0.0f;
+	fadeOffset.Zero();
+	fadeRot.Set( 0.0f, 0.0f, 0.0f, 1.0f );
+	for ( int i = 0; i < 3; i++ ) {
 		samples[ i ].valid = false;
 		samples[ i ].framenum = -1;
 	}
@@ -64,7 +79,7 @@ void sdPresentation::SampleTick( idPlayer* viewPlayer ) {
 	blendedDraws = 0;
 	preparedBeforeTick = preparedDraws;
 	preparedDraws = 0;
-	sample_t& s = samples[ gameLocal.framenum & 1 ];
+	sample_t& s = samples[ gameLocal.framenum % 3 ];
 	s.valid = false;
 	s.framenum = gameLocal.framenum;
 	if ( viewPlayer == NULL || !gameLocal.unlock.seatAllowed ) {
@@ -127,6 +142,138 @@ void sdPresentation::SampleTick( idPlayer* viewPlayer ) {
 	s.lookBase = s.tickAngles.ToMat3().Transpose() * s.camAxis;
 	s.speed = const_cast< sdTransport* >( seat.transport )->GetPhysics()->GetLinearVelocity().Length();
 	s.valid = true;
+	SampleLead( s, Sample( gameLocal.framenum - 1 ), Sample( gameLocal.framenum - 2 ), *seat.transport );
+}
+
+/*
+================
+sdPresentation::SampleLead
+
+M5 step 14b (docs/hull-lead.md 3.1): the one-tick predictions made on tick n, for every
+presented seat whether or not its class has a lead (VEH_PRED measures them all):
+  S: the samples, lead = delta(n) + k x ( delta(n) - delta(n-1) ), k 0 for the spiking
+     tick and 3 more (the impact guard, 3.3), and the last tick's rotation again;
+  P: the physics state's own step with no external force (they are zeroed after Evaluate):
+     the centre of mass moves by ( v + g x dt ) x dt, gravity added back only off the
+     ground, the axis turns by w x dt, and the origin follows from the centre of mass; only
+     the delta reaches the draw, on top of the post-decay render pose. It reads the physics
+     pose at tick time, the stated exception to vehicle-responsiveness 3.1 rule 2.
+Reads only.
+================
+*/
+void sdPresentation::SampleLead( sample_t& s, const sample_t& prev, const sample_t& prevPrev, const sdTransport& transport ) const {
+	const sdDeclVehicleScript* script = transport.GetVehicleScript();
+	idStr::Copynz( s.vehicleClass, script != NULL ? script->GetName() : "", sizeof( s.vehicleClass ) );
+	s.lead = 0.0f;
+	s.predictor = 'S';
+	if ( !sdSeatGate::LeadForClass( s.vehicleClass, s.lead, s.predictor ) ) {
+		s.lead = 0.0f;
+	}
+
+	s.leadS.Zero();
+	s.rotS.Identity();
+	s.spikeHold = 0;
+	if ( SamplesContinue( prev, s ) ) {
+		const idVec3 delta = s.hullOrigin - prev.hullOrigin;
+		s.leadS = delta;
+		s.rotS = prev.hullAxis.Transpose() * s.hullAxis;	// axis(n) = axis(n-1) x rot
+		if ( SamplesContinue( prevPrev, prev ) ) {
+			const idVec3 change = delta - ( prev.hullOrigin - prevPrev.hullOrigin );
+			s.spikeHold = change.LengthSqr() > Square( g_vehicleLeadSpike.GetFloat() ) ? 4 : Max( prev.spikeHold - 1, 0 );
+			if ( s.spikeHold == 0 ) {
+				s.leadS += change;
+			}
+		}
+	}
+
+	s.leadP.Zero();
+	s.rotP.Identity();
+	s.hasPhysics = false;
+	s.grounded = true;
+	s.lastCollision = -1;
+	// the physics step only where it can be drawn or is measured (a listed class, VEH_PRED)
+	const sdTransport_RB* rb = const_cast< sdTransport& >( transport ).Cast< sdTransport_RB >();
+	const sdPhysics_RigidBodyMultiple* phys = rb != NULL ? rb->GetRBPhysics() : NULL;
+	if ( phys != NULL && ( s.lead > 0.0f || g_logVehiclePred.GetBool() ) ) {
+		const float dt = MS2SEC( USERCMD_MSEC );
+		s.grounded = phys->HasGroundContacts();
+		s.lastCollision = phys->GetLastCollision().time;
+		const idVec3& origin = phys->GetOrigin();
+		const idMat3& axis = phys->GetAxis();
+		const idVec3& com = phys->GetMainCenterOfMass();
+		const idVec3 w = phys->GetAngularVelocity();	// copies: both getters return a static
+		const float speed = w.Length();
+		idMat3 turn = mat3_identity;
+		if ( speed > idMath::FLT_EPSILON ) {
+			turn = idRotation( vec3_origin, w / speed, -RAD2DEG( speed * dt ) ).ToMat3();
+		}
+		idVec3 velocity = phys->GetLinearVelocity();
+		if ( !s.grounded ) {
+			velocity += phys->GetGravity() * dt;	// the momentum Evaluate adds back for its step
+		}
+		const idMat3 nextAxis = axis * turn;
+		const idVec3 nextOrigin = origin + com * axis + velocity * dt - com * nextAxis;
+		s.leadP = nextOrigin - origin;
+		s.rotP = turn;
+		s.hasPhysics = true;
+	}
+
+	if ( g_logVehiclePred.GetBool() && prev.valid && SamplesContinue( prev, s ) ) {
+		// how far each predictor's guess for this tick, made on the last, landed from it
+		const float errS = ( prev.hullOrigin + prev.leadS - s.hullOrigin ).Length();
+		const float errP = prev.hasPhysics ? ( prev.hullOrigin + prev.leadP - s.hullOrigin ).Length() : -1.0f;
+		const bool hybridP = prev.hasPhysics && !prev.grounded;
+		const float errH = hybridP ? errP : errS;
+		const float rotS = AngleBetween( prev.hullAxis * prev.rotS, s.hullAxis );
+		const float rotP = prev.hasPhysics ? AngleBetween( prev.hullAxis * prev.rotP, s.hullAxis ) : -1.0f;
+		gameLocal.Printf( "VEH_PRED: tick=%d class=%s L=%.2f pred=%c k=%d ground=%d errS=%.3f errP=%.3f errH=%.3f rotS=%.3f rotP=%.3f move=%.3f coll=%d\n",
+			s.framenum, s.vehicleClass, prev.lead, prev.predictor, prev.spikeHold > 0 ? 0 : 1, prev.grounded ? 1 : 0,
+			errS, errP, errH, rotS, rotP, ( s.hullOrigin - prev.hullOrigin ).Length(), s.lastCollision );
+	}
+}
+
+/*
+================
+sdPresentation::LeadOf
+
+the one-tick lead tick s predicts with its class's predictor, held to g_vehicleLeadMaxLength
+================
+*/
+bool sdPresentation::LeadOf( const sample_t& s, idVec3& lead, idMat3& rot ) const {
+	const bool physics = s.hasPhysics && ( s.predictor == 'P' || ( s.predictor == 'H' && !s.grounded ) );
+	lead = physics ? s.leadP : s.leadS;
+	rot = physics ? s.rotP : s.rotS;
+	const float maxLength = g_vehicleLeadMaxLength.GetFloat();
+	if ( maxLength > 0.0f && lead.LengthSqr() > Square( maxLength ) ) {
+		lead *= maxLength / lead.Length();
+	}
+	return true;
+}
+
+/*
+================
+sdPresentation::HullAt
+
+the hull t ticks past tick n-1 (prev): t <= 1 between the samples, as stage 3 blends them;
+past tick n, alpha = t - 1 of tick n's lead
+================
+*/
+void sdPresentation::HullAt( const sample_t& prev, const sample_t& cur, float t, idVec3& origin, idMat3& axis ) const {
+	if ( t <= 1.0f ) {
+		idQuat q;
+		q.Slerp( prev.hullAxis.ToQuat(), cur.hullAxis.ToQuat(), t );
+		axis = q.ToMat3();
+		origin.Lerp( prev.hullOrigin, cur.hullOrigin, t );
+		return;
+	}
+	const float alpha = t - 1.0f;
+	idVec3 lead;
+	idMat3 rot;
+	LeadOf( cur, lead, rot );
+	idQuat q;
+	q.Slerp( mat3_identity.ToQuat(), rot.ToQuat(), alpha );
+	origin = cur.hullOrigin + lead * alpha;
+	axis = cur.hullAxis * q.ToMat3();
 }
 
 /*
@@ -186,8 +333,9 @@ void sdPresentation::PrepareDraw( float fraction, const usercmd_t* cmd ) {
 	prepared = true;
 	preparedDraws++;
 	drawFrame = gameLocal.framenum;
-	const sample_t& prev = samples[ ( gameLocal.framenum + 1 ) & 1 ];
-	const sample_t& cur = samples[ gameLocal.framenum & 1 ];
+	drawLeadAlpha = -1.0f;
+	const sample_t& prev = Sample( gameLocal.framenum - 1 );
+	const sample_t& cur = Sample( gameLocal.framenum );
 	if ( !cur.valid || cur.framenum != gameLocal.framenum || !SamplesContinue( prev, cur ) ) {
 		return;
 	}
@@ -210,10 +358,17 @@ void sdPresentation::PrepareDraw( float fraction, const usercmd_t* cmd ) {
 	}
 
 	const float f = idMath::ClampFloat( 0.0f, 1.0f, fraction );
-	idQuat hullQuat;
-	hullQuat.Slerp( prev.hullAxis.ToQuat(), cur.hullAxis.ToQuat(), f );
-	drawHullAxis = hullQuat.ToMat3();
-	drawHullOrigin.Lerp( prev.hullOrigin, cur.hullOrigin, f );
+	// step 14b: the hull t = f + L ticks past tick n-1; a chase view has no lead (its camera
+	// is damped behind the hull; docs/hull-lead.md 3.2)
+	const float L = cur.thirdPerson ? 0.0f : cur.lead;
+	const float t = f + L;
+	HullAt( prev, cur, t, drawHullOrigin, drawHullAxis );
+	if ( t > 1.0f ) {
+		drawLeadAlpha = t - 1.0f;
+		idMat3 unusedRot;
+		LeadOf( cur, drawLeadVector, unusedRot );
+	}
+	ApplyLeadCorrection( prev, cur, L, f, t );
 
 	// stage 5 (late look): the mouse turn made since the tick, every angle difference the
 	// shortest arc (usercmd angles wrap in 16 bits)
@@ -254,8 +409,13 @@ void sdPresentation::PrepareDraw( float fraction, const usercmd_t* cmd ) {
 			OrbitView( extra, cur, prev, f, *seat.view );
 		}
 	} else {
+		// the camera in the hull at the frame's own fraction: the hull leads (step 14b) and the
+		// camera rides it, but the damped view's own motion in the hull is blended as before,
+		// since blending it at the hull's time would step it by L x its per-tick change at
+		// each tick (review of #42)
+		const float cf = f;
 		idVec3 camOffset;
-		camOffset.Lerp( prev.camOffset, cur.camOffset, f );
+		camOffset.Lerp( prev.camOffset, cur.camOffset, cf );
 		drawViewOrigin = drawHullOrigin + camOffset * drawHullAxis;
 		if ( lateLook ) {
 			// stage 5 (late look): A = A_n - (1 - f) r_n + clampPure( A_n + mouse turn since
@@ -269,17 +429,85 @@ void sdPresentation::PrepareDraw( float fraction, const usercmd_t* cmd ) {
 			}
 			seat.view->ClampViewAnglesPure( drawn, cur.tickAngles, cur.ownerAxis, f * MS2SEC( USERCMD_MSEC ) );
 			idQuat baseQuat;
-			baseQuat.Slerp( prev.lookBase.ToQuat(), cur.lookBase.ToQuat(), f );
+			baseQuat.Slerp( prev.lookBase.ToQuat(), cur.lookBase.ToQuat(), cf );
 			drawViewAxis = drawn.ToMat3() * baseQuat.ToMat3() * drawHullAxis;
 		} else {
 			idQuat camQuat;
-			camQuat.Slerp( prev.camAxis.ToQuat(), cur.camAxis.ToQuat(), f );
+			camQuat.Slerp( prev.camAxis.ToQuat(), cur.camAxis.ToQuat(), cf );
 			drawViewAxis = camQuat.ToMat3() * drawHullAxis;
 		}
 	}
 	drawProxySpawnId = cur.proxySpawnId;
 	blending = true;
 	blendedDraws++;
+}
+
+/*
+================
+sdPresentation::ApplyLeadCorrection
+
+step 14b (docs/hull-lead.md 3.2): at a new tick's first draw, the pose the last tick's lead
+would draw now (with what is left of its own fade) against the pose this tick draws; the
+difference is added back and faded out over g_vehicleLeadFadeMsec, so the hull does not
+step at the tick. A difference over the jump guard snaps instead. Writes only this
+presentation's members and the drawn hull.
+================
+*/
+void sdPresentation::ApplyLeadCorrection( const sample_t& prev, const sample_t& cur, float L, float f, float t ) {
+	const float fadeMsec = static_cast< float >( g_vehicleLeadFadeMsec.GetInteger() );
+	const float nowMsec = static_cast< float >( gameLocal.time ) + f * USERCMD_MSEC;
+	if ( L <= 0.0f || fadeMsec <= 0.0f ) {
+		fadeFrame = -1;
+		fadeOffset.Zero();
+		fadeRot.Set( 0.0f, 0.0f, 0.0f, 1.0f );
+		return;
+	}
+	if ( fadeFrame != cur.framenum ) {
+		const float kept = idMath::ClampFloat( 0.0f, 1.0f, 1.0f - ( nowMsec - fadeStartMsec ) / fadeMsec );
+		idQuat keptRot;
+		keptRot.Slerp( idQuat( 0.0f, 0.0f, 0.0f, 1.0f ), fadeRot, kept );
+		const idVec3 keptOffset = fadeOffset * kept;
+		fadeOffset.Zero();
+		fadeRot.Set( 0.0f, 0.0f, 0.0f, 1.0f );
+		const sample_t& prevPrev = Sample( cur.framenum - 2 );
+		if ( leadFrame == prev.framenum && SamplesContinue( prevPrev, prev ) ) {
+			// the last tick's draw for this moment: t ticks past n-1 is t + 1 past n-2
+			idVec3 oldOrigin;
+			idMat3 oldAxis;
+			HullAt( prevPrev, prev, t + 1.0f, oldOrigin, oldAxis );
+			oldOrigin += keptOffset;
+			oldAxis = oldAxis * keptRot.ToMat3();
+			const idVec3 correction = oldOrigin - drawHullOrigin;
+			if ( correction.LengthSqr() <= Square( PRESENT_MIN_JUMP ) ) {
+				fadeOffset = correction;
+				fadeRot = ( drawHullAxis.Transpose() * oldAxis ).ToQuat();
+			}
+		}
+		fadeFrame = cur.framenum;
+		fadeStartMsec = nowMsec;
+	}
+	leadFrame = cur.framenum;
+	const float w = idMath::ClampFloat( 0.0f, 1.0f, 1.0f - ( nowMsec - fadeStartMsec ) / fadeMsec );
+	if ( w > 0.0f ) {
+		idQuat rot;
+		rot.Slerp( idQuat( 0.0f, 0.0f, 0.0f, 1.0f ), fadeRot, w );
+		drawHullOrigin += fadeOffset * w;
+		drawHullAxis = drawHullAxis * rot.ToMat3();
+	}
+}
+
+/*
+================
+sdPresentation::DrawLead
+================
+*/
+bool sdPresentation::DrawLead( float& alpha, idVec3& lead ) const {
+	if ( !blending || !IsPrepared() || drawLeadAlpha < 0.0f ) {
+		return false;
+	}
+	alpha = drawLeadAlpha;
+	lead = drawLeadVector;
+	return true;
 }
 
 /*

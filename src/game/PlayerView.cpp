@@ -322,6 +322,12 @@ static void LogFramePose( idPlayer* viewPlayer, const renderView_t* view ) {
 		line += " seat=-";
 	}
 	AppendRenderPose( line, "veh", proxy != NULL ? proxy->GetModelDefHandle() : -1 );
+	// M5 step 14b: the hull lead this draw used, alpha ticks past the last tick along its lead
+	float leadAlpha;
+	idVec3 leadVector;
+	if ( gameLocal.presentation.DrawLead( leadAlpha, leadVector ) ) {
+		line += va( " lead=%.4f,%.3f,%.3f,%.3f", leadAlpha, leadVector.x, leadVector.y, leadVector.z );
+	}
 
 	// Printf formats into MAX_STRING_CHARS (1024) and cuts the rest, newline included, so
 	// the line is kept to about 250 characters plus at most 8 players of about 75 each
