@@ -158,7 +158,7 @@ sdVehicleView::ClampViewAngles
 ================
 */
 // OpenETQW (M5 step 14, stage 5): ClampViewAnglesPure follows this for a draw; a class that
-// overrides it must override UsesBaseClamp to return false
+// overrides it must override ClampViewAnglesPure too, or HasPureClamp to return false
 void sdVehicleView::ClampViewAngles( idAngles& viewAngles, const idAngles& oldViewAngles ) const {
 
 	idAngles oldAngles = oldViewAngles;
@@ -190,7 +190,7 @@ static void ClampAnglePure( idAngles& newAngles, const idAngles& oldAngles, cons
 	}
 }
 
-void sdVehicleView::ClampViewAnglesPure( idAngles& viewAngles, const idAngles& oldViewAngles, float elapsedSec ) const {
+void sdVehicleView::ClampViewAnglesPure( idAngles& viewAngles, const idAngles& oldViewAngles, const idMat3& ownerAxis, float elapsedSec ) const {
 	ClampAnglePure( viewAngles, oldViewAngles, viewMode.clampPitch, 0, elapsedSec );
 	ClampAnglePure( viewAngles, oldViewAngles, viewMode.clampYaw, 1, elapsedSec );
 }
@@ -972,6 +972,47 @@ void sdSmoothVehicleView::ClampViewAngles( idAngles& viewAngles, const idAngles&
 
 /*
 ================
+sdSmoothVehicleView::ClampViewAnglesPure
+
+OpenETQW (M5 step 14, stage 5): ClampViewAngles for a draw: no fresh-entry handling, the
+owner's axis as the tick had it, rate limits over the elapsed time. Const
+================
+*/
+void sdSmoothVehicleView::ClampViewAnglesPure( idAngles& viewAngles, const idAngles& oldViewAngles, const idMat3& ownerAxes, float elapsedSec ) const {
+	idAngles oldAngles = oldViewAngles;
+	const idMat3 ownerAxesT = ownerAxes.Transpose();
+
+	// pitch is not relative to the vehicle but yaw is
+	idAngles ownerAngles = ownerAxes.ToAngles();
+	viewAngles.yaw += ownerAngles.yaw;
+	oldAngles.yaw += ownerAngles.yaw;
+
+	idAngles localSpaceViewAngles = ( viewAngles.ToMat3() * ownerAxesT ).ToAngles();
+	idAngles localSpaceOldAngles = ( oldAngles.ToMat3() * ownerAxesT ).ToAngles();
+	ClampAnglePure( localSpaceViewAngles, localSpaceOldAngles, viewMode.clampPitch, 0, elapsedSec );
+	ClampAnglePure( localSpaceViewAngles, localSpaceOldAngles, viewMode.clampYaw, 1, elapsedSec );
+
+	viewAngles = ( localSpaceViewAngles.ToMat3() * ownerAxes )[ 0 ].ToAngles();
+	viewAngles.yaw -= ownerAngles.yaw;
+	viewAngles.roll = 0.0f;
+}
+
+/*
+================
+sdSmoothVehicleView::GetOrbitFocus
+
+OpenETQW (M5 step 14, stage 5): the focus point the tick's CalculateViewPos aimed the
+camera at (the transport's pushed origin or eye joint plus cameraHeight), as it left it
+in evalState. Reads only
+================
+*/
+bool sdSmoothVehicleView::GetOrbitFocus( idVec3& focus ) const {
+	focus = evalState.focusPoint;
+	return true;
+}
+
+/*
+================
 sdSmoothVehicleView::CalcNewViewAngles
 ================
 */
@@ -1349,6 +1390,23 @@ void sdSmoothVehicleView_Free::ClampViewAngles( idAngles& viewAngles, const idAn
 	viewAngles = ( localSpaceViewAngles.ToMat3() * ownerAxes ).ToAngles();
 
 	// clean out the roll, it has a habit of accumulating little values
+	viewAngles.roll = 0.0f;
+}
+
+/*
+================
+sdSmoothVehicleView_Free::ClampViewAnglesPure
+
+OpenETQW (M5 step 14, stage 5): as sdSmoothVehicleView's, with world-relative angles
+================
+*/
+void sdSmoothVehicleView_Free::ClampViewAnglesPure( idAngles& viewAngles, const idAngles& oldViewAngles, const idMat3& ownerAxes, float elapsedSec ) const {
+	const idMat3 ownerAxesT = ownerAxes.Transpose();
+	idAngles localSpaceViewAngles = ( viewAngles.ToMat3() * ownerAxesT ).ToAngles();
+	idAngles localSpaceOldAngles = ( oldViewAngles.ToMat3() * ownerAxesT ).ToAngles();
+	ClampAnglePure( localSpaceViewAngles, localSpaceOldAngles, viewMode.clampPitch, 0, elapsedSec );
+	ClampAnglePure( localSpaceViewAngles, localSpaceOldAngles, viewMode.clampYaw, 1, elapsedSec );
+	viewAngles = ( localSpaceViewAngles.ToMat3() * ownerAxes ).ToAngles();
 	viewAngles.roll = 0.0f;
 }
 

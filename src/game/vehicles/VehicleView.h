@@ -89,10 +89,13 @@ public:
 	bool							IsFreshEntry( void ) const { return freshEntry; }
 	// OpenETQW (M5 step 14, stage 5): the base ClampViewAngles for a draw: no fresh-entry
 	// handling (it would clear freshEntry), and rate limits over the elapsed time. Const
-	void							ClampViewAnglesPure( idAngles& viewAngles, const idAngles& oldViewAngles, float elapsedSec ) const;
-	// whether the class's ClampViewAngles is the base one, which ClampViewAnglesPure follows;
-	// a class that overrides it returns false
-	virtual bool					UsesBaseClamp( void ) const { return true; }
+	// ownerAxis: the transport's physics axis at the tick (the smooth classes clamp in it)
+	virtual void					ClampViewAnglesPure( idAngles& viewAngles, const idAngles& oldViewAngles, const idMat3& ownerAxis, float elapsedSec ) const;
+	// whether ClampViewAnglesPure follows the class's ClampViewAngles; a class that
+	// overrides ClampViewAngles without a pure copy returns false
+	virtual bool					HasPureClamp( void ) const { return true; }
+	// a chase view's orbit focus at the tick (the point its camera looks at), if it has one
+	virtual bool					GetOrbitFocus( idVec3& focus ) const { return false; }
 
 private:
 	static sdVehicleViewFactory	viewFactory;
@@ -164,7 +167,7 @@ public:
 
 	virtual void				CalculateViewPos( idPlayer* player, idVec3& origin, idMat3& axis, bool fullUpdate );
 	virtual void				ClampViewAngles( idAngles& viewAngles, const idAngles& oldAngles ) const;
-	virtual bool				UsesBaseClamp( void ) const { return false; }	// OpenETQW: stage 5
+	virtual bool				HasPureClamp( void ) const { return false; }	// OpenETQW: stage 5
 
 protected:
 	virtual void				GetDampingAxis( idMat3& axis ) const;
@@ -205,7 +208,9 @@ public:
 	virtual void					CalculateViewPos( idPlayer* player, idVec3& origin, idMat3& axis, bool fullUpdate );
 
 	virtual void					ClampViewAngles( idAngles& viewAngles, const idAngles& oldAngles ) const;
-	virtual bool					UsesBaseClamp( void ) const { return false; }	// OpenETQW: stage 5
+	// OpenETQW (M5 step 14, stage 5): the late look's clamp and orbit
+	virtual void					ClampViewAnglesPure( idAngles& viewAngles, const idAngles& oldViewAngles, const idMat3& ownerAxis, float elapsedSec ) const;
+	virtual bool					GetOrbitFocus( idVec3& focus ) const;
 
 	virtual const idAngles			GetRequiredViewAngles( const idVec3& aimPosition ) const;
 
@@ -285,6 +290,7 @@ public:
 	static const char*				TypeName() { return "smooth_free"; }
 
 	virtual void					ClampViewAngles( idAngles& viewAngles, const idAngles& oldAngles ) const;
+	virtual void					ClampViewAnglesPure( idAngles& viewAngles, const idAngles& oldViewAngles, const idMat3& ownerAxis, float elapsedSec ) const;	// OpenETQW: stage 5
 
 protected:
 	virtual void					CalcNewViewAngles( idAngles& angles ) const;
@@ -307,6 +313,8 @@ public:
 	static const char*				TypeName() { return "smooth_locked"; }
 
 	virtual void					ClampViewAngles( idAngles& viewAngles, const idAngles& oldAngles ) const;
+	virtual bool					HasPureClamp( void ) const { return false; }	// OpenETQW: stage 5 (its look follows the tophat)
+	virtual bool					GetOrbitFocus( idVec3& focus ) const { return false; }	// OpenETQW: stage 5 (none yet)
 	virtual void					CalculateViewPos( idPlayer* player, idVec3& origin, idMat3& axis, bool fullUpdate );
 
 	virtual void					OnPlayerSwitched( idPlayer* player, bool newPosition );

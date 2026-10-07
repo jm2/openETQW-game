@@ -43,11 +43,11 @@ extern idCVar g_simHash;
 // A view whose thirdPerson flag does not match its recipe (valley has two third-person
 // standard views) is not drawn: sdPresentation's tick sample refuses it.
 static const seatRecipe_t seatRecipes[] = {
-	// standard: late look (stage 5, its first tier: the base class's extent clamps); the
-	// chase views orbit, and get it later
+	// late look (stage 5): standard turns its view angles; smooth and smooth_free orbit their
+	// focus; smooth_locked turns only with the tophat and gets it later
 	{ SPK_TRANSPORT, "standard", false, true, false, true },
-	{ SPK_TRANSPORT, "smooth", false, true, true, false },
-	{ SPK_TRANSPORT, "smooth_free", false, true, true, false },
+	{ SPK_TRANSPORT, "smooth", false, true, true, true },
+	{ SPK_TRANSPORT, "smooth_free", false, true, true, true },
 	{ SPK_TRANSPORT, "smooth_locked", false, true, true, false },
 	{ SPK_NONE, NULL, false, false, false, false },
 };
