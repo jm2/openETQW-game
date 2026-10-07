@@ -98,6 +98,8 @@ private:
 	bool					LeadOf( const sample_t& s, idVec3& lead, idMat3& rot ) const;
 	void					HullAt( const sample_t& prev, const sample_t& cur, float t, idVec3& origin, idMat3& axis ) const;
 	void					ApplyLeadCorrection( const sample_t& prev, const sample_t& cur, float L, float f, float t );
+	// the slot tick framenum's sample lives in; it may hold an older tick (check its framenum,
+	// as SamplesContinue does), and framenum may be negative for the ticks before the first
 	const sample_t&			Sample( int framenum ) const { return samples[ ( ( framenum % 3 ) + 3 ) % 3 ]; }
 
 	bool					SamplesContinue( const sample_t& a, const sample_t& b ) const;
@@ -123,7 +125,7 @@ private:
 	float					drawLeadAlpha;
 	idVec3					drawLeadVector;
 	int						fadeFrame;		// the tick the correction below was taken at
-	int						leadFrame;		// the last tick a draw was led on (alpha >= 0)
+	int						leadFrame;		// the last tick drawn with a lead (L > 0)
 	float					fadeStartMsec;	// gameLocal.time + fraction, when it was taken
 	idVec3					fadeOffset;		// added to the drawn hull, weighted down to 0
 	idQuat					fadeRot;		// the same for the axis (drawn = axis x slerp( 1, fadeRot, w ))

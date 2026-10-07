@@ -191,16 +191,17 @@ void sdPresentation::SampleLead( sample_t& s, const sample_t& prev, const sample
 	s.hasPhysics = false;
 	s.grounded = true;
 	s.lastCollision = -1;
+	// the physics step only where it can be drawn or is measured (a listed class, VEH_PRED)
 	const sdTransport_RB* rb = const_cast< sdTransport& >( transport ).Cast< sdTransport_RB >();
-	const sdPhysics_RigidBodyMultiple* phys = rb != NULL ? const_cast< sdTransport_RB* >( rb )->GetRBPhysics() : NULL;
-	if ( phys != NULL ) {
+	const sdPhysics_RigidBodyMultiple* phys = rb != NULL ? rb->GetRBPhysics() : NULL;
+	if ( phys != NULL && ( s.lead > 0.0f || g_logVehiclePred.GetBool() ) ) {
 		const float dt = MS2SEC( USERCMD_MSEC );
 		s.grounded = phys->HasGroundContacts();
 		s.lastCollision = phys->GetLastCollision().time;
 		const idVec3& origin = phys->GetOrigin();
 		const idMat3& axis = phys->GetAxis();
 		const idVec3& com = phys->GetMainCenterOfMass();
-		const idVec3& w = phys->GetAngularVelocity();
+		const idVec3 w = phys->GetAngularVelocity();	// copies: both getters return a static
 		const float speed = w.Length();
 		idMat3 turn = mat3_identity;
 		if ( speed > idMath::FLT_EPSILON ) {
@@ -408,9 +409,11 @@ void sdPresentation::PrepareDraw( float fraction, const usercmd_t* cmd ) {
 			OrbitView( extra, cur, prev, f, *seat.view );
 		}
 	} else {
-		// the camera in the hull at the hull's own time, held at tick n's past it (step 14b:
-		// the damped view's own motion is not extrapolated)
-		const float cf = Min( t, 1.0f );
+		// the camera in the hull at the frame's own fraction: the hull leads (step 14b) and the
+		// camera rides it, but the damped view's own motion in the hull is blended as before,
+		// since blending it at the hull's time would step it by L x its per-tick change at
+		// each tick (review of #42)
+		const float cf = f;
 		idVec3 camOffset;
 		camOffset.Lerp( prev.camOffset, cur.camOffset, cf );
 		drawViewOrigin = drawHullOrigin + camOffset * drawHullAxis;

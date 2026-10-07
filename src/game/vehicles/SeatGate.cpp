@@ -483,7 +483,9 @@ static const leadList_t& ParsedLeadList( void ) {
 		}
 		leadItem_t parsed;
 		parsed.predictor = 0;
-		bool ok = ( fields.Num() == 2 || fields.Num() == 3 ) && fields[ 0 ].Length() > 0 && fields[ 1 ].IsNumeric();
+		// IsNumeric accepts "", "." and "-": L needs a digit as well
+		bool ok = ( fields.Num() == 2 || fields.Num() == 3 ) && fields[ 0 ].Length() > 0 && fields[ 1 ].IsNumeric() &&
+			strpbrk( fields[ 1 ].c_str(), "0123456789" ) != NULL;
 		if ( ok && fields.Num() == 3 ) {
 			const char p = idStr::ToUpper( fields[ 2 ].Length() == 1 ? fields[ 2 ][ 0 ] : '?' );
 			ok = p == 'S' || p == 'P' || p == 'H';
@@ -512,9 +514,9 @@ bool sdSeatGate::LeadForClass( const char* vehicleScript, float& lead, char& pre
 		if ( GlobMatch( item.pattern.c_str(), item.pattern.Length(), vehicleScript, idStr::Length( vehicleScript ) ) ) {
 			lead = item.lead;
 			predictor = item.predictor != 0 ? item.predictor : ClassPredictor( vehicleScript );
-			const char* forced = g_vehicleLeadPredictor.GetString();
-			if ( forced[ 0 ] == 'S' || forced[ 0 ] == 'P' || forced[ 0 ] == 'H' ) {
-				predictor = forced[ 0 ];
+			const char forced = idStr::ToUpper( g_vehicleLeadPredictor.GetString()[ 0 ] );
+			if ( forced == 'S' || forced == 'P' || forced == 'H' ) {
+				predictor = forced;
 			}
 			return lead > 0.0f;
 		}
