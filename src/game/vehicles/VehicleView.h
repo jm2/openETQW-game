@@ -96,6 +96,11 @@ public:
 	virtual bool					HasPureClamp( void ) const { return true; }
 	// a chase view's orbit focus at the tick (the point its camera looks at), if it has one
 	virtual bool					GetOrbitFocus( idVec3& focus ) const { return false; }
+	// whether the class lets a mouse turn change its view for this command (a class whose
+	// look depends on a button state the tick latches says no while it is not held)
+	virtual bool					LateLookAllowed( const idPlayer* player, const usercmd_t& cmd ) const { return true; }
+	// the constraints a chase view's tick holds its camera axis to (ClampToViewConstraints)
+	virtual void					GetOrbitConstraints( angleClamp_t& pitch, angleClamp_t& yaw ) const { pitch = viewMode.clampPitch; yaw = viewMode.clampYaw; }
 
 private:
 	static sdVehicleViewFactory	viewFactory;
@@ -313,14 +318,17 @@ public:
 	static const char*				TypeName() { return "smooth_locked"; }
 
 	virtual void					ClampViewAngles( idAngles& viewAngles, const idAngles& oldAngles ) const;
-	virtual bool					HasPureClamp( void ) const { return false; }	// OpenETQW: stage 5 (its look follows the tophat)
-	virtual bool					GetOrbitFocus( idVec3& focus ) const { return false; }	// OpenETQW: stage 5 (none yet)
+	// OpenETQW (M5 step 14, stage 5): the late look, only in tophat mode
+	virtual void					ClampViewAnglesPure( idAngles& viewAngles, const idAngles& oldViewAngles, const idMat3& ownerAxis, float elapsedSec ) const;
+	virtual bool					LateLookAllowed( const idPlayer* player, const usercmd_t& cmd ) const;
+	virtual void					GetOrbitConstraints( angleClamp_t& pitch, angleClamp_t& yaw ) const;
 	virtual void					CalculateViewPos( idPlayer* player, idVec3& origin, idMat3& axis, bool fullUpdate );
 
 	virtual void					OnPlayerSwitched( idPlayer* player, bool newPosition );
 
 protected:
 	bool							InTophat( const idPlayer* player ) const;
+	static bool						InTophat( const idPlayer* player, const usercmd_t& cmd );	// OpenETQW: for a given command
 
 	virtual void					CalcNewViewAngles( idAngles& angles ) const;
 

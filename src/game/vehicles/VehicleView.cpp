@@ -1455,12 +1455,65 @@ bool sdSmoothVehicleView_Locked::InTophat( const idPlayer* player ) const {
 	if ( player == NULL ) {
 		return false;
 	}
+	return InTophat( player, player->usercmd );
+}
 
+/*
+================
+sdSmoothVehicleView_Locked::InTophat
+
+OpenETQW (M5 step 14, stage 5): the same for a given command (the draw's)
+================
+*/
+bool sdSmoothVehicleView_Locked::InTophat( const idPlayer* player, const usercmd_t& cmd ) {
 	if ( player->GetUserInfo().drivingCameraFreelook ) {
-		return !player->usercmd.buttons.btn.tophat;
+		return !cmd.buttons.btn.tophat;
 	} else {
-		return player->usercmd.buttons.btn.tophat;
+		return cmd.buttons.btn.tophat;
 	}
+}
+
+/*
+================
+sdSmoothVehicleView_Locked::LateLookAllowed
+
+OpenETQW (M5 step 14, stage 5): the mouse turns this camera only in tophat mode, once the
+transition into it is complete (CalculateCameraDelta: the camera then follows the view
+angles alone, DampenMotion is skipped)
+================
+*/
+bool sdSmoothVehicleView_Locked::LateLookAllowed( const idPlayer* player, const usercmd_t& cmd ) const {
+	return player != NULL && InTophat( player, cmd ) && topHatTransition >= 1.0f;
+}
+
+/*
+================
+sdSmoothVehicleView_Locked::ClampViewAnglesPure
+
+OpenETQW (M5 step 14, stage 5): ClampViewAngles in tophat mode, without the fresh entry
+================
+*/
+void sdSmoothVehicleView_Locked::ClampViewAnglesPure( idAngles& viewAngles, const idAngles& oldViewAngles, const idMat3& ownerAxis, float elapsedSec ) const {
+	viewAngles.Normalize180();
+	viewAngles.pitch = idMath::ClampFloat( -40.0f, 40.0f, viewAngles.pitch );
+}
+
+/*
+================
+sdSmoothVehicleView_Locked::GetOrbitConstraints
+
+OpenETQW (M5 step 14, stage 5): ClampToViewConstraints in tophat mode: pitch within 40
+degrees of the owner's, yaw free
+================
+*/
+void sdSmoothVehicleView_Locked::GetOrbitConstraints( angleClamp_t& pitch, angleClamp_t& yaw ) const {
+	pitch = viewMode.clampPitch;
+	pitch.flags.enabled = true;
+	pitch.flags.limitRate = false;
+	pitch.extents.Set( -40.0f, 40.0f );
+	yaw = viewMode.clampYaw;
+	yaw.flags.enabled = false;
+	yaw.flags.limitRate = false;
 }
 
 /*
