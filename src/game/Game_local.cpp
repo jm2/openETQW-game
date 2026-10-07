@@ -12076,16 +12076,20 @@ void idGameLocal::RunLeadMeasureSchedule( usercmd_t* cmds ) {
 	}
 	const leadClass_t& lc = classes[ segment ];
 
-	if ( local == 0 ) {
-		// every vehicle goes before each segment: the spawn spot is the map badger's, and
-		// valley's construction module respawns a badger there about 20 s after it is gone
+	{
+		// every other vehicle goes, on every tick: the spawn spot is the map badger's, and
+		// valley's construction module respawns a badger there about 20 s after it is gone,
+		// which would otherwise land in a later segment and collide unseen
 		idStaticList< idEntity*, MAX_GENTITIES > transports;
 		for ( idEntity* ent = spawnedEntities.Next(); ent != NULL; ent = ent->spawnNode.Next() ) {
-			if ( ent->Cast< sdTransport >() != NULL ) {
+			if ( ent->Cast< sdTransport >() != NULL && ( local == 0 || ent != spawned.GetEntity() ) ) {
 				transports.Append( ent );
 			}
 		}
 		for ( int i = 0; i < transports.Num(); i++ ) {
+			if ( tick > LEAD_START ) {
+				common->Printf( "LEAD_FOREIGN: tick=%d removed %s\n", tick, transports[ i ]->GetName() );
+			}
 			transports[ i ]->ProcessEvent( &EV_Remove );
 		}
 	}
@@ -12133,9 +12137,9 @@ void idGameLocal::RunLeadMeasureSchedule( usercmd_t* cmds ) {
 			cmd.angles[ PITCH ] += ANGLE2SHORT( 0.4f * ( local - 39 ) );	// nose down, a ramp
 		} else if ( local <= 109 ) {
 			cmd.forwardmove = 40;
-			cmd.rightmove = 127;						// yaw input
+			cmd.rightmove = 127;						// the pedals: yaw (sdAirVehicleControl, unless the player swaps yaw and roll)
 			cmd.angles[ PITCH ] += ANGLE2SHORT( 14.0f );
-			cmd.angles[ YAW ] += ANGLE2SHORT( 0.8f * ( local - 74 ) );		// and a roll, a ramp
+			cmd.angles[ YAW ] += ANGLE2SHORT( 0.8f * ( local - 74 ) );		// the mouse's yaw axis rolls an aircraft: a roll ramp
 		} else if ( local <= 149 ) {
 			cmd.forwardmove = 40;						// level
 		} else if ( local <= 179 ) {
