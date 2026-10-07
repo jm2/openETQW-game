@@ -49,6 +49,10 @@ static const seatRecipe_t seatRecipes[] = {
 	{ SPK_TRANSPORT, "smooth", false, true, true, true },
 	{ SPK_TRANSPORT, "smooth_free", false, true, true, true },
 	{ SPK_TRANSPORT, "smooth_locked", false, true, true, true },
+	// gunner views (vehicle-responsiveness 3.6): first person on the turret's eye joint, drawn
+	// with the transport's blended joints; their late look is a later tier
+	{ SPK_TRANSPORT, "pivot", false, true, false, false },
+	{ SPK_TRANSPORT, "freepivot", false, true, false, false },
 	{ SPK_NONE, NULL, false, false, false, false },
 };
 

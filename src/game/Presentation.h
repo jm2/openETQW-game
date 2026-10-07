@@ -92,6 +92,9 @@ private:
 		bool				hasPhysics;		// leadP and rotP were computed
 		int					spikeHold;		// ticks left with k = 0 (the impact guard)
 		int					lastCollision;	// the physics' last collision time (VEH_PRED)
+		// gunner views (vehicle-responsiveness 3.6): the transport's joints in model space as the
+		// tick posed them (turret, IK arms, wheels, suspension), blended per draw
+		idList< idJointMat >	joints;
 		bool				valid;
 	};
 
@@ -101,6 +104,8 @@ private:
 	void					ApplyLeadCorrection( const sample_t& prev, const sample_t& cur, float L, float f, float t );
 	// the slot tick framenum's sample lives in; it may hold an older tick (check its framenum,
 	// as SamplesContinue does), and framenum may be negative for the ticks before the first
+	void					SampleJoints( sample_t& s, const sdTransport& transport ) const;
+	void					BlendJoints( const sample_t& prev, const sample_t& cur, float f );
 	const sample_t&			Sample( int framenum ) const { return samples[ ( ( framenum % 3 ) + 3 ) % 3 ]; }
 
 	bool					SamplesContinue( const sample_t& a, const sample_t& b ) const;
@@ -130,6 +135,9 @@ private:
 	float					fadeStartMsec;	// gameLocal.time + fraction, when it was taken
 	idVec3					fadeOffset;		// added to the drawn hull, weighted down to 0
 	idQuat					fadeRot;		// the same for the axis (drawn = axis x slerp( 1, fadeRot, w ))
+	// gunner views: this draw's blended joints for the hull copy (drawJointsValid: in use)
+	idList< idJointMat >	drawJoints;
+	bool					drawJointsValid;
 };
 
 #endif // __GAME_PRESENTATION_H__

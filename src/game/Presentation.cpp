@@ -44,6 +44,7 @@ sdPresentation::Clear
 */
 void sdPresentation::Clear( void ) {
 	drawLeadAlpha = -1.0f;
+	drawJointsValid = false;
 	drawLeadVector.Zero();
 	fadeFrame = -1;
 	leadFrame = -1;
@@ -144,6 +145,70 @@ void sdPresentation::SampleTick( idPlayer* viewPlayer ) {
 	s.speed = const_cast< sdTransport* >( seat.transport )->GetPhysics()->GetLinearVelocity().Length();
 	s.valid = true;
 	SampleLead( s, Sample( gameLocal.framenum - 1 ), Sample( gameLocal.framenum - 2 ), *seat.transport );
+	SampleJoints( s, *seat.transport );
+}
+
+/*
+================
+sdPresentation::SampleJoints
+
+gunner views (vehicle-responsiveness 3.6): the transport's joints as this tick poses them.
+With SMP off the renderer builds an animator's frame lazily, in the model callback of the
+first draw after the tick (idEntity::UpdateRenderEntity); this builds the same frame (the
+same time) now, as Present does when SMP is on, and copies it. Tick code: a draw-time
+CreateFrame would add animator writes the renderer's culling would otherwise skip.
+================
+*/
+void sdPresentation::SampleJoints( sample_t& s, const sdTransport& transport ) const {
+	s.joints.SetNum( 0, false );
+	idAnimator* animator = const_cast< sdTransport& >( transport ).GetAnimator();
+	if ( animator == NULL ) {
+		return;
+	}
+	animator->CreateFrame( gameLocal.time, false );
+	const renderEntity_t* re = transport.GetRenderEntity();
+	if ( re == NULL || re->joints == NULL || re->numJoints <= 0 ) {
+		return;
+	}
+	s.joints.SetNum( re->numJoints, false );
+	memcpy( s.joints.Begin(), re->joints, re->numJoints * sizeof( idJointMat ) );
+}
+
+/*
+================
+sdPresentation::BlendJoints
+
+this draw's joints: each joint's model-space rotation slerped and its translation lerped
+from tick n-1's to tick n's at f; a joint that turned more than 90 degrees in the tick (a
+wheel at speed) keeps tick n's. Without matching samples the hull copy keeps the tick's
+joints (drawJointsValid false).
+================
+*/
+void sdPresentation::BlendJoints( const sample_t& prev, const sample_t& cur, float f ) {
+	drawJointsValid = false;
+	const int num = cur.joints.Num();
+	if ( num <= 0 || prev.joints.Num() != num ) {
+		return;
+	}
+	drawJoints.SetNum( num, false );
+	for ( int i = 0; i < num; i++ ) {
+		const idJointMat& a = prev.joints[ i ];
+		const idJointMat& b = cur.joints[ i ];
+		const idMat3 ra = a.ToMat3();
+		const idMat3 rb = b.ToMat3();
+		idJointMat& out = drawJoints[ i ];
+		if ( HalfAngleCos( ra, rb ) < 0.70710678f ) {	// more than 90 degrees
+			out = b;
+			continue;
+		}
+		idQuat q;
+		q.Slerp( ra.ToQuat(), rb.ToQuat(), f );
+		idVec3 t;
+		t.Lerp( a.ToVec3(), b.ToVec3(), f );
+		out.SetRotation( q.ToMat3() );
+		out.SetTranslation( t );
+	}
+	drawJointsValid = true;
 }
 
 /*
@@ -335,6 +400,7 @@ void sdPresentation::PrepareDraw( float fraction, const usercmd_t* cmd ) {
 	preparedDraws++;
 	drawFrame = gameLocal.framenum;
 	drawLeadAlpha = -1.0f;
+	drawJointsValid = false;
 	const sample_t& prev = Sample( gameLocal.framenum - 1 );
 	const sample_t& cur = Sample( gameLocal.framenum );
 	if ( !cur.valid || cur.framenum != gameLocal.framenum || !SamplesContinue( prev, cur ) ) {
@@ -441,6 +507,8 @@ void sdPresentation::PrepareDraw( float fraction, const usercmd_t* cmd ) {
 			drawViewAxis = camQuat.ToMat3() * drawHullAxis;
 		}
 	}
+	// the joints at the frame's own fraction, as the in-hull camera (they are in the hull's frame)
+	BlendJoints( prev, cur, f );
 	drawProxySpawnId = cur.proxySpawnId;
 	blending = true;
 	blendedDraws++;
@@ -638,6 +706,11 @@ void sdPresentation::SubmitCopies( void ) const {
 	renderEntity_t copy = *hull;
 	copy.origin = drawHullOrigin;
 	copy.axis = drawHullAxis;
+	if ( drawJointsValid && drawJoints.Num() == hull->numJoints ) {
+		// the blended joints; no callback, or the renderer would pose the tick's frame again
+		copy.joints = const_cast< idJointMat* >( drawJoints.Begin() );
+		copy.callback = NULL;
+	}
 	gameLocal.SubmitPresentationCopy( transport->GetModelDefHandle(), copy, transport, NULL );
 	SubmitCarried( transport->clientEntities, hull->origin, inverseHull );
 
