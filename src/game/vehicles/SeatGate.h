@@ -65,6 +65,11 @@ public:
 	static bool						IsListed( const char* key );						// by g_unlock_vehicleSeats
 	static bool						MatchItem( const char* item, const char* key );	// one list item against one key
 
+	// M5 step 14b (docs/hull-lead.md 3.4): the hull lead g_unlock_vehicleLead gives a vehicle
+	// script ("badger"): false (no lead) unless an item matches; lead in [0, 1], predictor
+	// 'S', 'P' or 'H' (the class's own unless the item or g_vehicleLeadPredictor names one)
+	static bool						LeadForClass( const char* vehicleScript, float& lead, char& predictor );
+
 	// the proxy part of idPlayer::IsSeatPresentationAllowed; reads state only
 	static bool						AllowsSeat( const idPlayer* viewPlayer );
 
