@@ -1153,6 +1153,68 @@ void Cmd_EnterVehicle_f( const idCmdArgs &args ) {
 
 /*
 ==================
+Cmd_ResetVehicle_f
+
+OpenETQW test diagnostic (a cheat): 'resetVehicle <vehicle> mark' remembers a transport's
+pose; 'resetVehicle <vehicle>' puts it back there, at rest, riders and all (sdTransport::
+SetOrigin/SetAxis reset the prediction-error decay and present it). A vehicle's spawn args
+cannot serve: valley's construction module spawns its badgers without an origin. meson
+seat-poses resets the badger before each drive phase: the drive legs leave it further from
+its start every phase (it reverses slower than it drives), onto ground that throws it
+(issue #84).
+==================
+*/
+struct resetVehicleMark_t {
+	int				spawnId;
+	idVec3			origin;
+	idMat3			axis;
+};
+static resetVehicleMark_t resetVehicleMarks[ MAX_GENTITIES ];
+
+void Cmd_ResetVehicle_f( const idCmdArgs &args ) {
+	if ( args.Argc() < 2 ) {
+		gameLocal.Printf( "usage: resetVehicle <vehicle entity name or entityDef> [mark]\n" );
+		return;
+	}
+	sdTransport* vehicle = NULL;
+	idEntity* ent = gameLocal.FindEntity( args.Argv( 1 ) );
+	if ( ent != NULL ) {
+		vehicle = ent->Cast< sdTransport >();
+	} else {
+		for ( ent = gameLocal.spawnedEntities.Next(); ent != NULL && vehicle == NULL; ent = ent->spawnNode.Next() ) {
+			sdTransport* trans = ent->Cast< sdTransport >();
+			if ( trans != NULL && trans->GetHealth() > 0 && !idStr::Icmp( trans->spawnArgs.GetString( "classname" ), args.Argv( 1 ) ) ) {
+				vehicle = trans;
+			}
+		}
+	}
+	if ( vehicle == NULL ) {
+		gameLocal.Printf( "RESET_VEHICLE: no vehicle '%s'\n", args.Argv( 1 ) );
+		return;
+	}
+	resetVehicleMark_t& mark = resetVehicleMarks[ vehicle->entityNumber ];
+	const int spawnId = gameLocal.GetSpawnId( vehicle );
+	if ( args.Argc() > 2 && !idStr::Icmp( args.Argv( 2 ), "mark" ) ) {
+		mark.spawnId = spawnId;
+		mark.origin = vehicle->GetPhysics()->GetOrigin();
+		mark.axis = vehicle->GetPhysics()->GetAxis();
+		gameLocal.Printf( "RESET_VEHICLE: %s marked at (%.1f %.1f %.1f)\n", vehicle->name.c_str(), mark.origin.x, mark.origin.y, mark.origin.z );
+		return;
+	}
+	if ( mark.spawnId != spawnId ) {
+		gameLocal.Printf( "RESET_VEHICLE: no mark for %s\n", vehicle->name.c_str() );
+		return;
+	}
+	vehicle->GetPhysics()->SetLinearVelocity( vec3_origin );
+	vehicle->GetPhysics()->SetAngularVelocity( vec3_origin );
+	vehicle->SetAxis( mark.axis );
+	vehicle->SetOrigin( mark.origin );
+	vehicle->ActivatePhysics();
+	gameLocal.Printf( "RESET_VEHICLE: %s to (%.1f %.1f %.1f)\n", vehicle->name.c_str(), mark.origin.x, mark.origin.y, mark.origin.z );
+}
+
+/*
+==================
 Cmd_ExitVehicle_f
 ==================
 */
@@ -3750,6 +3812,7 @@ void idGameLocal::InitConsoleCommands( void ) {
 	cmdSystem->AddCommand( "vehicleStatus",				Cmd_VehicleStatus_f,			CMD_FL_GAME,		"prints vehicle status for a player" );
 	cmdSystem->AddCommand( "enterVehicle",				Cmd_EnterVehicle_f,				CMD_FL_GAME,		"places player in vehicle" );
 	cmdSystem->AddCommand( "exitVehicle",				Cmd_ExitVehicle_f,				CMD_FL_GAME,		"ejects player from vehicle" );
+	cmdSystem->AddCommand( "resetVehicle",				Cmd_ResetVehicle_f,				CMD_FL_GAME|CMD_FL_CHEAT,	"OpenETQW test diagnostic: 'resetVehicle <vehicle> mark' remembers a vehicle's pose, 'resetVehicle <vehicle>' puts it back there at rest" );
 	cmdSystem->AddCommand( "swapVehicleSeat",			Cmd_SwapVehicleSeat_f,			CMD_FL_GAME,		"swaps vehicle seat for player" );
 	cmdSystem->AddCommand( "cycleVehicleCamera",		Cmd_CycleVehicleCamera_f,		CMD_FL_GAME,		"cycles a player's vehicle camera to the seat's next view" );
 	cmdSystem->AddCommand( "deployStatus",				Cmd_DeployStatus_f,				CMD_FL_GAME,		"prints deployable status" );
@@ -3770,6 +3833,7 @@ void idGameLocal::ShutdownConsoleCommands( void ) {
 	cmdSystem->RemoveCommand( "vehicleStatus" );
 	cmdSystem->RemoveCommand( "enterVehicle" );
 	cmdSystem->RemoveCommand( "exitVehicle" );
+	cmdSystem->RemoveCommand( "resetVehicle" );
 	cmdSystem->RemoveCommand( "swapVehicleSeat" );
 	cmdSystem->RemoveCommand( "cycleVehicleCamera" );
 	cmdSystem->RemoveCommand( "deployStatus" );

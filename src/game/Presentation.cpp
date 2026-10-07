@@ -134,7 +134,8 @@ void sdPresentation::SampleTick( idPlayer* viewPlayer ) {
 	// ClampViewAngles, idPlayer::UpdateViewAngles): if not, the command's angle change is
 	// not input the tick showed, and the draws must not show it either
 	s.turnAllowed = TurnAllowed( *seat.transport, seat.positionId, *viewPlayer );
-	s.inputTaken = s.turnAllowed && !( parms.tophatRequired && !viewPlayer->usercmd.buttons.btn.tophat );
+	s.lookActive = seat.view->LateLookAllowed( viewPlayer, viewPlayer->usercmd );
+	s.inputTaken = s.turnAllowed && s.lookActive && !( parms.tophatRequired && !viewPlayer->usercmd.buttons.btn.tophat );
 	s.tickAngles = viewPlayer->clientViewAngles;
 	for ( int i = 0; i < 3; i++ ) {
 		s.cmdAngles[ i ] = viewPlayer->usercmd.angles[ i ];
@@ -374,7 +375,8 @@ void sdPresentation::PrepareDraw( float fraction, const usercmd_t* cmd ) {
 	// shortest arc (usercmd angles wrap in 16 bits)
 	const bool lateLook = cur.lateLook && prev.lateLook && g_unlock_vehicleLook.GetBool();
 	idAngles turn( 0.0f, 0.0f, 0.0f );
-	if ( lateLook && cmd != NULL && cur.turnAllowed && !( seat.view->GetViewParms().tophatRequired && !cmd->buttons.btn.tophat ) ) {
+	if ( lateLook && cmd != NULL && cur.turnAllowed && cur.lookActive && seat.view->LateLookAllowed( viewPlayer, *cmd ) &&
+		 !( seat.view->GetViewParms().tophatRequired && !cmd->buttons.btn.tophat ) ) {
 		for ( int i = 0; i < 2; i++ ) {
 			turn[ i ] = idMath::AngleNormalize180( SHORT2ANGLE( static_cast< short >( cmd->angles[ i ] - cur.cmdAngles[ i ] ) ) );
 		}
@@ -387,7 +389,7 @@ void sdPresentation::PrepareDraw( float fraction, const usercmd_t* cmd ) {
 		idQuat camQuat;
 		camQuat.Slerp( prev.camWorldAxis.ToQuat(), cur.camWorldAxis.ToQuat(), f );
 		drawViewAxis = camQuat.ToMat3();
-		if ( lateLook && cur.orbitValid ) {
+		if ( lateLook && cur.orbitValid && cur.lookActive ) {
 			// stage 5 for a chase view: the blend shows tick n's own turn spread over the
 			// tick, so the draw adds what of it is still to come, (1 - f) x the input the tick
 			// took, and the clamped turn since the tick; as an orbit about the blended focus,
@@ -403,8 +405,10 @@ void sdPresentation::PrepareDraw( float fraction, const usercmd_t* cmd ) {
 				// what the tick's clamps let through of it
 				input = input * change > 0.0f ? ( idMath::Fabs( input ) < idMath::Fabs( change ) ? input : change ) : 0.0f;
 				// the part of tick n's turn still to come only if the last interval drew its
-				// own late turn: else this draw would step by it as the orbit comes back
-				extra[ i ] = ( prev.orbitValid ? ( 1.0f - f ) * input : 0.0f ) + idMath::AngleNormalize180( turned[ i ] - base[ i ] );
+				// own late turn (an orbit, the look active, the turn allowed): else this draw
+				// would step by it as the late look comes back
+				const bool lastDrewTurn = prev.orbitValid && prev.lookActive && prev.turnAllowed;
+				extra[ i ] = ( lastDrewTurn ? ( 1.0f - f ) * input : 0.0f ) + idMath::AngleNormalize180( turned[ i ] - base[ i ] );
 			}
 			OrbitView( extra, cur, prev, f, *seat.view );
 		}
@@ -530,12 +534,13 @@ void sdPresentation::OrbitView( const idAngles& extra, const sample_t& cur, cons
 	turned.yaw += extra.yaw;
 	turned.Normalize180();
 
-	const positionViewMode_t& parms = view.GetViewParms();
+	angleClamp_t pitchClamp, yawClamp;
+	view.GetOrbitConstraints( pitchClamp, yawClamp );
 	const idMat3 hullT = drawHullAxis.Transpose();
 	idAngles before = ( forward.ToMat3() * hullT ).ToAngles();
 	idAngles after = ( turned.ToMat3() * hullT ).ToAngles();
 	bool clamped = false;
-	const angleClamp_t* clamps[ 2 ] = { &parms.clampPitch, &parms.clampYaw };
+	const angleClamp_t* clamps[ 2 ] = { &pitchClamp, &yawClamp };
 	for ( int i = 0; i < 2; i++ ) {
 		if ( !clamps[ i ]->flags.enabled ) {
 			continue;

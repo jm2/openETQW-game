@@ -70,6 +70,7 @@ private:
 		bool				thirdPerson;	// a chase view: blended in the world, not in the hull
 		bool				lateLook;		// stage 5: the view angles below are shown with the mouse turn since the tick
 		bool				turnAllowed;	// the tick let a mouse turn change the angles (the tophat aside)
+		bool				lookActive;		// the class let the mouse turn its view at the tick (smooth_locked: the tophat)
 		bool				inputTaken;		// and took its own command's turn
 		idMat3				ownerAxis;		// the transport's physics axis (the smooth classes' clamps)
 		idVec3				focus;			// a chase view's orbit focus, in the world
