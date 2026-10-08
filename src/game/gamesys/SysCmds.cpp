@@ -3842,14 +3842,14 @@ void idGameLocal::InitConsoleCommands( void ) {
 
 	cmdSystem->AddCommand( "getRepeaterStatus",			Cmd_GetRepeaterStatus_f,		CMD_FL_GAME,		"displays whether there the repeater server is running on the server the client is currently connected to" );
 
-	cmdSystem->AddCommand( "completeObjective",			Cmd_CompleteObjective_f,		CMD_FL_GAME,		"completes an objective by index" );
+	cmdSystem->AddCommand( "completeObjective",			Cmd_CompleteObjective_f,		CMD_FL_GAME|CMD_FL_CHEAT,		"completes an objective by index" );
 	cmdSystem->AddCommand( "objectiveStatus",			Cmd_ObjectiveStatus_f,			CMD_FL_GAME,		"prints objective and match status" );
-	cmdSystem->AddCommand( "deploy",					Cmd_Deploy_f,					CMD_FL_GAME,		"deploys a deployable object for a player" );
+	cmdSystem->AddCommand( "deploy",					Cmd_Deploy_f,					CMD_FL_GAME|CMD_FL_CHEAT,		"deploys a deployable object for a player" );
 	cmdSystem->AddCommand( "vehicleStatus",				Cmd_VehicleStatus_f,			CMD_FL_GAME,		"prints vehicle status for a player" );
-	cmdSystem->AddCommand( "enterVehicle",				Cmd_EnterVehicle_f,				CMD_FL_GAME,		"places player in vehicle" );
-	cmdSystem->AddCommand( "exitVehicle",				Cmd_ExitVehicle_f,				CMD_FL_GAME,		"ejects player from vehicle" );
+	cmdSystem->AddCommand( "enterVehicle",				Cmd_EnterVehicle_f,				CMD_FL_GAME|CMD_FL_CHEAT,		"places player in vehicle" );
+	cmdSystem->AddCommand( "exitVehicle",				Cmd_ExitVehicle_f,				CMD_FL_GAME|CMD_FL_CHEAT,		"ejects player from vehicle" );
 	cmdSystem->AddCommand( "resetVehicle",				Cmd_ResetVehicle_f,				CMD_FL_GAME|CMD_FL_CHEAT,	"OpenETQW test diagnostic: 'resetVehicle <vehicle> mark' remembers a vehicle's pose, 'resetVehicle <vehicle>' puts it back there at rest" );
-	cmdSystem->AddCommand( "swapVehicleSeat",			Cmd_SwapVehicleSeat_f,			CMD_FL_GAME,		"swaps vehicle seat for player" );
+	cmdSystem->AddCommand( "swapVehicleSeat",			Cmd_SwapVehicleSeat_f,			CMD_FL_GAME|CMD_FL_CHEAT,		"swaps vehicle seat for player" );
 	cmdSystem->AddCommand( "cycleVehicleCamera",		Cmd_CycleVehicleCamera_f,		CMD_FL_GAME,		"cycles a player's vehicle camera to the seat's next view" );
 	cmdSystem->AddCommand( "deployStatus",				Cmd_DeployStatus_f,				CMD_FL_GAME,		"prints deployable status" );
 	cmdSystem->AddCommand( "listSeatViews",				sdSeatGate::ListSeatViews_f,	CMD_FL_GAME|CMD_FL_CHEAT,	"prints each vehicle seat's view classes, flags, clamps, eye joint and seat-gate key: listSeatViews [all|<filter>]" );
