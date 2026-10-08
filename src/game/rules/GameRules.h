@@ -230,6 +230,10 @@ public:
 	bool						IsWarmup( void ) const { return gameState == GS_WARMUP || gameState == GS_COUNTDOWN; }
 	bool						IsCountDown( void ) const { return gameState == GS_COUNTDOWN; }
 	bool						IsEndGame( void ) const { return gameState == GS_GAMEREVIEW; }
+	// OpenETQW: the game has ended, or its switch to game review is already scheduled. EndGame runs once per
+	// game: a second call (the last objective's script run twice) re-ran the end-game script, whose stats
+	// piled up until SendEndGameStats overflowed its message and the server stopped with an error
+	bool						EndGamePending( void ) const { return gameState == GS_GAMEREVIEW || nextState == GS_GAMEREVIEW; }
 	bool						IsPureReady( void ) const { return pureReady; }
 
 	void						BackupPlayerTeams( void );

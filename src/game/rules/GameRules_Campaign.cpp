@@ -356,7 +356,7 @@ sdGameRulesCampaign::EndGame
 ================
 */
 void sdGameRulesCampaign::EndGame( void ) {
-	if ( IsWarmup() ) {
+	if ( IsWarmup() || EndGamePending() ) {
 		return;
 	}
 
