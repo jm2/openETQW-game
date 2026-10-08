@@ -182,8 +182,8 @@ sdPresentation::BlendJoints
 
 this draw's joints: each joint's model-space rotation slerped and its translation lerped
 from tick n-1's to tick n's at f; a joint that turned more than 90 degrees in the tick (a
-wheel at speed) keeps tick n's rotation (its translation still moves). Without matching samples the hull copy keeps the tick's
-joints (drawJointsValid false).
+wheel at speed) keeps tick n's rotation (its translation still moves). Without matching
+samples the hull copy keeps the tick's joints (drawJointsValid false).
 ================
 */
 void sdPresentation::BlendJoints( const sample_t& prev, const sample_t& cur, float f ) {
@@ -689,10 +689,12 @@ bool sdPresentation::ApplyView( renderView_t& view ) const {
 ================
 sdPresentation::SubmitCopies
 
-The hull at the presented pose, and what it carries by the carrier rule: a rider's or the
-cockpit's pose this tick, taken relative to the hull's pose this tick, applied to the
-presented hull (presented x ( hull(n)^-1 x child(n) )). Nothing is written to the
-entities; idGameLocal restores the replaced defs after the draw.
+The hull at the presented pose with this draw's blended joints, and what it carries: by the
+carrier rule (a child's tick pose relative to the tick hull, applied to the presented hull:
+presented x ( hull(n)^-1 x child(n) )), or, for a rider or client entity bound to one of the
+transport's joints, relative to that joint as it is drawn (JointCarry); nested children
+follow their parent. Nothing is written to the entities; idGameLocal restores the replaced
+defs after the draw.
 ================
 */
 void sdPresentation::SubmitCopies( void ) const {
@@ -741,7 +743,8 @@ void sdPresentation::SubmitCopies( void ) const {
 	// the cockpit
 	// (not when it is bound to the transport: SubmitCarried copied it with the hull's models)
 	sdClientAnimated* cockpit = gameLocal.playerView.GetCockpit().GetEntity();
-	if ( cockpit != NULL && cockpit->bindNode.ListHead() != &transport->clientEntities &&
+	// (and not when it is bound to anything else, a rider: SubmitCarried drew it with its parent)
+	if ( cockpit != NULL && !cockpit->bindNode.InList() &&
 		 cockpit->GetRenderEntityHandle() >= 0 && !cockpit->IsHidden() ) {
 		renderEntity_t cockpitCopy = *cockpit->GetRenderEntity();
 		hullCarry.Apply( cockpitCopy.origin, cockpitCopy.axis, cockpitCopy.origin, cockpitCopy.axis );
@@ -774,7 +777,10 @@ joints are not blended this draw (the hull rule then holds)
 */
 bool sdPresentation::JointCarry( const renderEntity_t& hull, jointHandle_t joint, carry_t& carry ) const {
 	const sample_t& cur = Sample( drawFrame );
-	if ( !drawJointsValid || joint == INVALID_JOINT || joint >= drawJoints.Num() || joint >= cur.joints.Num() ) {
+	// as the hull copy: blended joints only when they match the hull's (else it draws the
+	// tick's, and so must its children)
+	if ( !drawJointsValid || drawJoints.Num() != hull.numJoints || joint == INVALID_JOINT || joint >= drawJoints.Num() ||
+		 joint >= cur.joints.Num() ) {
 		return false;
 	}
 	const idMat3 tickR = cur.joints[ joint ].ToMat3();

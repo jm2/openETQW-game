@@ -376,6 +376,11 @@ def test_presentation_contract(scratch: Path) -> None:
     check(code == 0, "CreateFrame inside SampleJoints passes", out)
     code, out = tree("frame-draw", "void sdPresentation::PrepareDraw( float f ) {\n\tanimator->CreateFrame( t, false );\n}\n")
     check(code == 1 and "calls CreateFrame outside SampleJoints" in out, "CreateFrame in a draw fails", out)
+    code, out = tree("frame-free", "void sdPresentation::SampleJoints( sample_t& s ) {\n\tx = 1;\n}\n"
+                     "static void Helper( void ) {\n\tanimator->CreateFrame( t, false );\n}\n")
+    check(code == 1 and "calls CreateFrame outside SampleJoints" in out, "CreateFrame in a later free function fails", out)
+    code, out = tree("frame-indirect", "void sdPresentation::PrepareDraw( float f ) {\n\tSampleJoints( samples[ 0 ], *t );\n}\n")
+    check(code == 1 and "calls SampleJoints outside SampleTick" in out, "SampleJoints from a draw fails", out)
     code, out = tree("ref", "", "void f() { gameLocal.presentation.Clear(); }\n")
     check(code == 1 and "outside its hooks" in out, "a reference outside the hooks fails", out)
 
