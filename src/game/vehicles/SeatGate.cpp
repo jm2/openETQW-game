@@ -40,7 +40,7 @@ extern idCVar g_simHash;
 // whose own tick cameras it blends in the world. pivot and freepivot views (the gunners)
 // follow a turret or gun joint, which the presentation blends with the transport's other
 // joints since the gunner views (vehicle-responsiveness 3.6); their late look (stage 5) is a
-// later tier, and the jetpack comes later.
+// later tier. The jetpack has its own recipe (icarus).
 // A view whose thirdPerson flag does not match its recipe (valley has two third-person
 // standard views) is not drawn: sdPresentation's tick sample refuses it.
 static const seatRecipe_t seatRecipes[] = {
@@ -54,6 +54,10 @@ static const seatRecipe_t seatRecipes[] = {
 	// with the transport's blended joints; their late look is a later tier
 	{ SPK_TRANSPORT, "pivot", false, true, false, false },
 	{ SPK_TRANSPORT, "freepivot", false, true, false, false },
+	// the jetpack (an sdJetPack, its own proxy kind): first person at its origin plus the eye
+	// offset, the view angles in the world; drawn as the standard view, with its late look
+	// (its clamp is the base one, pitch extents only)
+	{ SPK_JETPACK, "icarus", false, true, false, true },
 	{ SPK_NONE, NULL, false, false, false, false },
 };
 
