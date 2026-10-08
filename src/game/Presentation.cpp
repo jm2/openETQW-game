@@ -37,6 +37,21 @@ static float AngleBetween( const idMat3& a, const idMat3& b ) {
 	return RAD2DEG( 2.0f * idMath::ACos( Min( 1.0f, HalfAngleCos( a, b ) ) ) );
 }
 
+// a pivot view's arm rotation for its view angles (sdDampedVehicleView_Pivot::CalcViewOrigin)
+static idMat3 PivotRotation( const idAngles& angles, bool followPitch, bool followYaw ) {
+	idMat3 rotation = mat3_identity;
+	idMat3 temp;
+	if ( followPitch ) {
+		idAngles::PitchToMat3( angles.pitch, temp );
+		rotation *= temp;
+	}
+	if ( followYaw ) {
+		idAngles::YawToMat3( angles.yaw, temp );
+		rotation *= temp;
+	}
+	return rotation;
+}
+
 /*
 ================
 sdPresentation::Clear
@@ -120,8 +135,9 @@ void sdPresentation::SampleTick( idPlayer* viewPlayer ) {
 	// or hull-relative final clamp (ClampFinalAxis), and never in a seat that needs the
 	// tophat (the pilots: their mouse flies the vehicle)
 	const positionViewMode_t& parms = seat.view->GetViewParms();
+	// (rate limits are followed: the pure clamp limits the late turn to the rate over the
+	// elapsed time, and the input a tick took is the rate-limited one)
 	s.lateLook = recipe->lateLook && seat.view->HasPureClamp() && !parms.tophatRequired
-		&& !parms.clampYaw.flags.limitRate && !parms.clampPitch.flags.limitRate
 		&& !parms.clampDampedYaw.flags.enabled && !parms.clampDampedPitch.flags.enabled;
 	s.ownerAxis = const_cast< sdTransport* >( seat.transport )->GetPhysics()->GetAxis();
 	// a chase view orbits its focus: CalculateViewPos puts the camera at focus - forward x
@@ -144,6 +160,12 @@ void sdPresentation::SampleTick( idPlayer* viewPlayer ) {
 		s.cmdAngles[ i ] = viewPlayer->usercmd.angles[ i ];
 	}
 	s.lookBase = s.tickAngles.ToMat3().Transpose() * s.camAxis;
+	// a pivot view: the camera = pivot + arm x rotation( view angles ), so the pivot in the hull's
+	// frame is what the tick's camera less its arm leaves
+	s.hasPivot = !s.thirdPerson && seat.view->GetPivotArm( s.pivotArm, s.followPitch, s.followYaw );
+	if ( s.hasPivot ) {
+		s.pivotHull = s.camOffset - s.pivotArm * PivotRotation( s.tickAngles, s.followPitch, s.followYaw );
+	}
 	s.speed = const_cast< sdTransport* >( seat.transport )->GetPhysics()->GetLinearVelocity().Length();
 	s.valid = true;
 	SampleLead( s, Sample( gameLocal.framenum - 1 ), Sample( gameLocal.framenum - 2 ), *seat.transport );
@@ -497,7 +519,14 @@ void sdPresentation::PrepareDraw( float fraction, const usercmd_t* cmd ) {
 			// (auto-centre, clamps), spread over the tick so it does not step at its end
 			idAngles drawn = cur.tickAngles;
 			for ( int i = 0; i < 2; i++ ) {
-				const float input = cur.inputTaken ? idMath::AngleNormalize180( SHORT2ANGLE( static_cast< short >( cur.cmdAngles[ i ] - prev.cmdAngles[ i ] ) ) ) : 0.0f;
+				float input = cur.inputTaken ? idMath::AngleNormalize180( SHORT2ANGLE( static_cast< short >( cur.cmdAngles[ i ] - prev.cmdAngles[ i ] ) ) ) : 0.0f;
+				// a rate-limited class took at most its rate over the tick (ClampAngle): the rest of
+				// the input is not a residual to spread, the tick never showed it
+				const angleClamp_t& clamp = i == 0 ? seat.view->GetViewParms().clampPitch : seat.view->GetViewParms().clampYaw;
+				if ( clamp.flags.limitRate ) {
+					const float rate = clamp.rate[ 0 ] * MS2SEC( USERCMD_MSEC );
+					input = idMath::ClampFloat( -rate, rate, input );
+				}
 				const float residual = idMath::AngleNormalize180( idMath::AngleNormalize180( cur.tickAngles[ i ] - prev.tickAngles[ i ] ) - input );
 				drawn[ i ] = idMath::AngleNormalize180( cur.tickAngles[ i ] - ( 1.0f - f ) * residual + turn[ i ] );
 			}
@@ -505,6 +534,12 @@ void sdPresentation::PrepareDraw( float fraction, const usercmd_t* cmd ) {
 			idQuat baseQuat;
 			baseQuat.Slerp( prev.lookBase.ToQuat(), cur.lookBase.ToQuat(), cf );
 			drawViewAxis = drawn.ToMat3() * baseQuat.ToMat3() * drawHullAxis;
+			if ( cur.hasPivot && prev.hasPivot ) {
+				// the eye swings on its arm with the drawn angles
+				idVec3 pivot;
+				pivot.Lerp( prev.pivotHull, cur.pivotHull, cf );
+				drawViewOrigin = drawHullOrigin + ( pivot + cur.pivotArm * PivotRotation( drawn, cur.followPitch, cur.followYaw ) ) * drawHullAxis;
+			}
 		} else {
 			idQuat camQuat;
 			camQuat.Slerp( prev.camAxis.ToQuat(), cur.camAxis.ToQuat(), cf );
