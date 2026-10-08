@@ -372,6 +372,10 @@ def test_presentation_contract(scratch: Path) -> None:
     check(code == 1 and "assigns renderView" in out, "assigning the player's renderView fails", out)
     code, out = tree("state", "void f() { gameLocal.unlock.seatAllowed = false; }\n")
     check(code == 1 and "writes game state" in out, "writing a gameLocal field fails", out)
+    code, out = tree("frame", "void sdPresentation::SampleJoints( sample_t& s ) {\n\tanimator->CreateFrame( t, false );\n}\n")
+    check(code == 0, "CreateFrame inside SampleJoints passes", out)
+    code, out = tree("frame-draw", "void sdPresentation::PrepareDraw( float f ) {\n\tanimator->CreateFrame( t, false );\n}\n")
+    check(code == 1 and "calls CreateFrame outside SampleJoints" in out, "CreateFrame in a draw fails", out)
     code, out = tree("ref", "", "void f() { gameLocal.presentation.Clear(); }\n")
     check(code == 1 and "outside its hooks" in out, "a reference outside the hooks fails", out)
 

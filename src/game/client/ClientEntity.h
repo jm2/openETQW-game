@@ -129,6 +129,9 @@ public:
 
 	idLinkList< idClass >			instanceNode;
 
+	// OpenETQW (M5 step 14, gunner views): the joint of its bind master it is bound to, if any
+	jointHandle_t					GetBindJoint( void ) const { return bindJoint; }
+
 protected:
 
 	idVec3						worldOrigin;

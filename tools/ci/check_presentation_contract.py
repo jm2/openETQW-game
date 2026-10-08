@@ -8,6 +8,8 @@ do: write only the presentation's own members, the drawn view and renderer defs 
 copies that are restored after the draw; never call anything that changes game state.
 This checks the presentation's source, with comments and strings removed:
 
+* CreateFrame only in sdPresentation::SampleJoints (the tick sample builds the frame the
+  first draw after the tick would);
 * no call of Present, BecomeActive, UpdateVisuals, UpdateModelTransform, GetWorldOrigin,
   GetWorldAxis, LinkCombat, ClipView, ClampViewAngles, CalculateViewPos, Decay, Think,
   RunPhysics, SetOrigin, SetAxis, UpdateEntityDef or the game's random number generator
@@ -39,6 +41,10 @@ FORBIDDEN_CALLS = (
     "Think", "RunPhysics", "SetOrigin", "SetAxis", "UpdateEntityDef",
 )
 FORBIDDEN_TOKENS = ("gameLocal.random", "random.RandomInt", "random.RandomFloat")
+# calls allowed only inside one function of the presentation (gunner views: the tick sample
+# builds the animator frame the first draw after the tick would, vehicle-responsiveness 3.6)
+ALLOWED_ONLY_IN = {"CreateFrame": {"SampleJoints"}}
+FUNCTION_DEF = re.compile(r"^[A-Za-z_][\w\s:<>*&,]*?\bsdPresentation::(\w+)\s*\(")
 FORBIDDEN_TARGETS = re.compile(
     r"(?<![\w.])(?:[\w>.\-]*(?:->|\.))?(lastPushedOrigin|lastPushedAxis|renderEntity|viewAngles|clientViewAngles"
     r"|vehicleEye\w*|firstPersonView\w*|renderView)\s*(?:\.\w+\s*)*(?:\[[^\]]*\]\s*)*=(?!=)")
@@ -73,7 +79,14 @@ def strip_comments_and_strings(text: str) -> str:
 def check_presentation(path: Path) -> list[str]:
     problems = []
     code = strip_comments_and_strings(path.read_text(encoding="utf-8", errors="replace"))
+    function = None
     for lineno, line in enumerate(code.splitlines(), 1):
+        d = FUNCTION_DEF.match(line)
+        if d:
+            function = d.group(1)
+        for name, allowed in ALLOWED_ONLY_IN.items():
+            if re.search(rf"(?<![\w])(?:[\w>.\-]*(?:->|\.|::))?{name}\s*\(", line) and function not in allowed:
+                problems.append(f"{path.name}:{lineno}: calls {name} outside {', '.join(sorted(allowed))}: {line.strip()}")
         for name in FORBIDDEN_CALLS:
             if re.search(rf"(?<![\w])(?:[\w>.\-]*(?:->|\.|::))?{name}\s*\(", line) and \
                     not re.search(rf"\b(?:void|bool|int|float)\s+[\w:]*{name}\s*\(", line):

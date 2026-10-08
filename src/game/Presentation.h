@@ -102,16 +102,24 @@ private:
 	bool					LeadOf( const sample_t& s, idVec3& lead, idMat3& rot ) const;
 	void					HullAt( const sample_t& prev, const sample_t& cur, float t, idVec3& origin, idMat3& axis ) const;
 	void					ApplyLeadCorrection( const sample_t& prev, const sample_t& cur, float L, float f, float t );
-	// the slot tick framenum's sample lives in; it may hold an older tick (check its framenum,
-	// as SamplesContinue does), and framenum may be negative for the ticks before the first
 	void					SampleJoints( sample_t& s, const sdTransport& transport ) const;
 	void					BlendJoints( const sample_t& prev, const sample_t& cur, float f );
+	// the slot tick framenum's sample lives in; it may hold an older tick (check its framenum,
+	// as SamplesContinue does), and framenum may be negative for the ticks before the first
 	const sample_t&			Sample( int framenum ) const { return samples[ ( ( framenum % 3 ) + 3 ) % 3 ]; }
 
 	bool					SamplesContinue( const sample_t& a, const sample_t& b ) const;
 	void					OrbitView( const idAngles& extra, const sample_t& cur, const sample_t& prev, float f, const sdVehicleView& view );
 	bool					TurnAllowed( const sdTransport& transport, int positionId, idPlayer& player ) const;
-	void					SubmitCarried( idLinkList< rvClientEntity >& carried, const idVec3& hullOrigin, const idMat3& inverseHull ) const;
+	// a rigid map from a carried thing's tick pose to its drawn pose: p' = p x axis + origin
+	struct carry_t {
+		idMat3				axis;
+		idVec3				origin;
+		void				Apply( const idVec3& o, const idMat3& a, idVec3& outOrigin, idMat3& outAxis ) const { outOrigin = o * axis + origin; outAxis = a * axis; }
+	};
+	void					HullCarry( const renderEntity_t& hull, carry_t& carry ) const;
+	bool					JointCarry( const renderEntity_t& hull, jointHandle_t joint, carry_t& carry ) const;
+	void					SubmitCarried( idLinkList< rvClientEntity >& carried, const carry_t& parent, const renderEntity_t* jointHull ) const;
 
 	sample_t				samples[ 3 ];	// by framenum % 3: ticks n-2, n-1 and n
 

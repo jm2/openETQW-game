@@ -328,13 +328,21 @@ static void LogFramePose( idPlayer* viewPlayer, const renderView_t* view ) {
 	{
 		const renderEntity_t* re = ( proxy != NULL && proxy->GetModelDefHandle() >= 0 ) ? gameRenderWorld->GetRenderEntity( proxy->GetModelDefHandle() ) : NULL;
 		if ( re != NULL && re->joints != NULL && re->numJoints > 0 ) {
+			// weighted, so a rotation's sine terms do not cancel (a yaw turns it by 6c - 2s) and
+			// two joints moving opposite ways do not hide each other
 			double sum = 0.0;
 			for ( int i = 0; i < re->numJoints; i++ ) {
 				const idMat3 r = re->joints[ i ].ToMat3();
 				const idVec3 t = re->joints[ i ].ToVec3();
-				sum += t.x + t.y + t.z + r[ 0 ][ 0 ] + r[ 0 ][ 1 ] + r[ 0 ][ 2 ] + r[ 1 ][ 0 ] + r[ 1 ][ 1 ] + r[ 1 ][ 2 ] + r[ 2 ][ 0 ] + r[ 2 ][ 1 ] + r[ 2 ][ 2 ];
+				double joint = t.x + 2.0 * t.y + 3.0 * t.z;
+				for ( int a = 0; a < 3; a++ ) {
+					for ( int b = 0; b < 3; b++ ) {
+						joint += ( 1 + 3 * a + b ) * r[ a ][ b ];
+					}
+				}
+				sum += ( 1.0 + 0.01 * i ) * joint;
 			}
-			line += va( " jnt=%.4f", sum );
+			line += va( " jnt=%.6f", sum );
 		}
 	}
 	// M5 step 14b: the hull lead this draw used, alpha ticks past the last tick along its lead
