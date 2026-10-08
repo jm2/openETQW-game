@@ -322,6 +322,29 @@ static void LogFramePose( idPlayer* viewPlayer, const renderView_t* view ) {
 		line += " seat=-";
 	}
 	AppendRenderPose( line, "veh", proxy != NULL ? proxy->GetModelDefHandle() : -1 );
+	// gunner views (vehicle-responsiveness 3.6): a checksum of the joints the hull is drawn with
+	// (the presentation's blended ones when it submitted a copy), so a test sees the turret,
+	// wheels and suspension change between draws
+	{
+		const renderEntity_t* re = ( proxy != NULL && proxy->GetModelDefHandle() >= 0 ) ? gameRenderWorld->GetRenderEntity( proxy->GetModelDefHandle() ) : NULL;
+		if ( re != NULL && re->joints != NULL && re->numJoints > 0 ) {
+			// weighted, so a rotation's sine terms do not cancel (a yaw turns it by 6c - 2s) and
+			// two joints moving opposite ways do not hide each other
+			double sum = 0.0;
+			for ( int i = 0; i < re->numJoints; i++ ) {
+				const idMat3 r = re->joints[ i ].ToMat3();
+				const idVec3 t = re->joints[ i ].ToVec3();
+				double joint = t.x + 2.0 * t.y + 3.0 * t.z;
+				for ( int a = 0; a < 3; a++ ) {
+					for ( int b = 0; b < 3; b++ ) {
+						joint += ( 1 + 3 * a + b ) * r[ a ][ b ];
+					}
+				}
+				sum += ( 1.0 + 0.01 * i ) * joint;
+			}
+			line += va( " jnt=%.6f", sum );
+		}
+	}
 	// M5 step 14b: the hull lead this draw used, alpha ticks past the last tick along its lead
 	float leadAlpha;
 	idVec3 leadVector;

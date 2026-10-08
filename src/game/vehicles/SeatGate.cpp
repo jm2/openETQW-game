@@ -37,9 +37,10 @@ extern idCVar g_simHash;
 // (kind, view class) -> recipe; ends with a NULL viewType
 // M5 step 14 (stage 3): the first-person standard view, whose camera sdPresentation draws
 // in the blended hull's frame, and the chase views (smooth, smooth_free, smooth_locked),
-// whose own tick cameras it blends in the world. pivot and freepivot views follow a turret
-// or gun joint that the presentation does not blend (the gun would lag the view by up to a
-// tick of its rotation), and they are angle-driven (stage 5); the jetpack comes later.
+// whose own tick cameras it blends in the world. pivot and freepivot views (the gunners)
+// follow a turret or gun joint, which the presentation blends with the transport's other
+// joints since the gunner views (vehicle-responsiveness 3.6); their late look (stage 5) is a
+// later tier, and the jetpack comes later.
 // A view whose thirdPerson flag does not match its recipe (valley has two third-person
 // standard views) is not drawn: sdPresentation's tick sample refuses it.
 static const seatRecipe_t seatRecipes[] = {
@@ -49,6 +50,10 @@ static const seatRecipe_t seatRecipes[] = {
 	{ SPK_TRANSPORT, "smooth", false, true, true, true },
 	{ SPK_TRANSPORT, "smooth_free", false, true, true, true },
 	{ SPK_TRANSPORT, "smooth_locked", false, true, true, true },
+	// gunner views (vehicle-responsiveness 3.6): first person on the turret's eye joint, drawn
+	// with the transport's blended joints; their late look is a later tier
+	{ SPK_TRANSPORT, "pivot", false, true, false, false },
+	{ SPK_TRANSPORT, "freepivot", false, true, false, false },
 	{ SPK_NONE, NULL, false, false, false, false },
 };
 

@@ -44,6 +44,7 @@ sdPresentation::Clear
 */
 void sdPresentation::Clear( void ) {
 	drawLeadAlpha = -1.0f;
+	drawJointsValid = false;
 	drawLeadVector.Zero();
 	fadeFrame = -1;
 	leadFrame = -1;
@@ -71,7 +72,9 @@ sdPresentation::SampleTick
 The tick's hull and camera, taken where the tick logs its pose. Only for a seat whose
 presentation the seat gate allows at this tick's latch and whose recipe is presentable;
 a sample is the transport's render entity (post-decay, as Present pushed it) and the
-camera the tick computed, as an offset and axis in the hull's frame. Reads only.
+camera the tick computed, as an offset and axis in the hull's frame. Reads only, apart from
+the transport's animator frame for this tick that SampleJoints builds (the frame the first
+draw after the tick would build).
 ================
 */
 void sdPresentation::SampleTick( idPlayer* viewPlayer ) {
@@ -144,6 +147,72 @@ void sdPresentation::SampleTick( idPlayer* viewPlayer ) {
 	s.speed = const_cast< sdTransport* >( seat.transport )->GetPhysics()->GetLinearVelocity().Length();
 	s.valid = true;
 	SampleLead( s, Sample( gameLocal.framenum - 1 ), Sample( gameLocal.framenum - 2 ), *seat.transport );
+	SampleJoints( s, *seat.transport );
+}
+
+/*
+================
+sdPresentation::SampleJoints
+
+gunner views (vehicle-responsiveness 3.6): the transport's joints as this tick poses them.
+With SMP off the renderer builds an animator's frame lazily, in the model callback of the
+first draw after the tick (idEntity::UpdateRenderEntity); this builds the same frame (the
+same time) now, as Present does when SMP is on, and copies it. Tick code: a draw-time
+CreateFrame would add animator writes the renderer's culling would otherwise skip.
+================
+*/
+void sdPresentation::SampleJoints( sample_t& s, const sdTransport& transport ) const {
+	s.joints.SetNum( 0, false );
+	idAnimator* animator = const_cast< sdTransport& >( transport ).GetAnimator();
+	if ( animator == NULL ) {
+		return;
+	}
+	animator->CreateFrame( gameLocal.time, false );
+	const renderEntity_t* re = transport.GetRenderEntity();
+	if ( re == NULL || re->joints == NULL || re->numJoints <= 0 ) {
+		return;
+	}
+	s.joints.SetNum( re->numJoints, false );
+	memcpy( s.joints.Begin(), re->joints, re->numJoints * sizeof( idJointMat ) );
+}
+
+/*
+================
+sdPresentation::BlendJoints
+
+this draw's joints: each joint's model-space rotation slerped and its translation lerped
+from tick n-1's to tick n's at f; a joint that turned more than 90 degrees in the tick (a
+wheel at speed) keeps tick n's rotation (its translation still moves). Without matching
+samples the hull copy keeps the tick's joints (drawJointsValid false).
+================
+*/
+void sdPresentation::BlendJoints( const sample_t& prev, const sample_t& cur, float f ) {
+	drawJointsValid = false;
+	const int num = cur.joints.Num();
+	if ( num <= 0 || prev.joints.Num() != num ) {
+		return;
+	}
+	drawJoints.SetNum( num, false );
+	for ( int i = 0; i < num; i++ ) {
+		const idJointMat& a = prev.joints[ i ];
+		const idJointMat& b = cur.joints[ i ];
+		const idMat3 ra = a.ToMat3();
+		const idMat3 rb = b.ToMat3();
+		idJointMat& out = drawJoints[ i ];
+		idVec3 t;
+		t.Lerp( a.ToVec3(), b.ToVec3(), f );
+		if ( HalfAngleCos( ra, rb ) < 0.70710678f ) {
+			// turned more than 90 degrees (a wheel at speed): tick n's rotation, but the
+			// translation still moves, so the joint stays on its axle
+			out.SetRotation( rb );
+		} else {
+			idQuat q;
+			q.Slerp( ra.ToQuat(), rb.ToQuat(), f );
+			out.SetRotation( q.ToMat3() );
+		}
+		out.SetTranslation( t );
+	}
+	drawJointsValid = true;
 }
 
 /*
@@ -335,6 +404,7 @@ void sdPresentation::PrepareDraw( float fraction, const usercmd_t* cmd ) {
 	preparedDraws++;
 	drawFrame = gameLocal.framenum;
 	drawLeadAlpha = -1.0f;
+	drawJointsValid = false;
 	const sample_t& prev = Sample( gameLocal.framenum - 1 );
 	const sample_t& cur = Sample( gameLocal.framenum );
 	if ( !cur.valid || cur.framenum != gameLocal.framenum || !SamplesContinue( prev, cur ) ) {
@@ -441,6 +511,8 @@ void sdPresentation::PrepareDraw( float fraction, const usercmd_t* cmd ) {
 			drawViewAxis = camQuat.ToMat3() * drawHullAxis;
 		}
 	}
+	// the joints at the frame's own fraction, as the in-hull camera (they are in the hull's frame)
+	BlendJoints( prev, cur, f );
 	drawProxySpawnId = cur.proxySpawnId;
 	blending = true;
 	blendedDraws++;
@@ -617,10 +689,12 @@ bool sdPresentation::ApplyView( renderView_t& view ) const {
 ================
 sdPresentation::SubmitCopies
 
-The hull at the presented pose, and what it carries by the carrier rule: a rider's or the
-cockpit's pose this tick, taken relative to the hull's pose this tick, applied to the
-presented hull (presented x ( hull(n)^-1 x child(n) )). Nothing is written to the
-entities; idGameLocal restores the replaced defs after the draw.
+The hull at the presented pose with this draw's blended joints, and what it carries: by the
+carrier rule (a child's tick pose relative to the tick hull, applied to the presented hull:
+presented x ( hull(n)^-1 x child(n) )), or, for a rider or client entity bound to one of the
+transport's joints, relative to that joint as it is drawn (JointCarry); nested children
+follow their parent. Nothing is written to the entities; idGameLocal restores the replaced
+defs after the draw.
 ================
 */
 void sdPresentation::SubmitCopies( void ) const {
@@ -633,13 +707,19 @@ void sdPresentation::SubmitCopies( void ) const {
 		return;
 	}
 	const renderEntity_t* hull = transport->GetRenderEntity();
-	const idMat3 inverseHull = hull->axis.Transpose();
 
 	renderEntity_t copy = *hull;
 	copy.origin = drawHullOrigin;
 	copy.axis = drawHullAxis;
+	if ( drawJointsValid && drawJoints.Num() == hull->numJoints ) {
+		// the blended joints; no callback, or the renderer would pose the tick's frame again
+		copy.joints = const_cast< idJointMat* >( drawJoints.Begin() );
+		copy.callback = NULL;
+	}
 	gameLocal.SubmitPresentationCopy( transport->GetModelDefHandle(), copy, transport, NULL );
-	SubmitCarried( transport->clientEntities, hull->origin, inverseHull );
+	carry_t hullCarry;
+	HullCarry( *hull, hullCarry );
+	SubmitCarried( transport->clientEntities, hullCarry, hull );
 
 	// riders
 	const sdTransportPositionManager& positions = transport->GetPositionManager();
@@ -649,46 +729,92 @@ void sdPresentation::SubmitCopies( void ) const {
 		if ( rider == NULL || rider->GetModelDefHandle() < 0 || rider->IsHidden() ) {
 			continue;
 		}
+		// a rider sits on its seat's attach joint (sdTransport::BindPlayerToPosition)
+		carry_t riderCarry = hullCarry;
+		if ( rider->GetBindMaster() == transport ) {
+			JointCarry( *hull, rider->GetBindJoint(), riderCarry );
+		}
 		renderEntity_t riderCopy = *rider->GetRenderEntity();
-		riderCopy.origin = drawHullOrigin + ( riderCopy.origin - hull->origin ) * inverseHull * drawHullAxis;
-		riderCopy.axis = riderCopy.axis * inverseHull * drawHullAxis;
+		riderCarry.Apply( riderCopy.origin, riderCopy.axis, riderCopy.origin, riderCopy.axis );
 		gameLocal.SubmitPresentationCopy( rider->GetModelDefHandle(), riderCopy, rider, NULL );
-		SubmitCarried( rider->clientEntities, hull->origin, inverseHull );
+		SubmitCarried( rider->clientEntities, riderCarry, NULL );
 	}
 
 	// the cockpit
 	// (not when it is bound to the transport: SubmitCarried copied it with the hull's models)
 	sdClientAnimated* cockpit = gameLocal.playerView.GetCockpit().GetEntity();
-	if ( cockpit != NULL && cockpit->bindNode.ListHead() != &transport->clientEntities &&
+	// (and not when it is bound to anything else, a rider: SubmitCarried drew it with its parent)
+	if ( cockpit != NULL && !cockpit->bindNode.InList() &&
 		 cockpit->GetRenderEntityHandle() >= 0 && !cockpit->IsHidden() ) {
 		renderEntity_t cockpitCopy = *cockpit->GetRenderEntity();
-		cockpitCopy.origin = drawHullOrigin + ( cockpitCopy.origin - hull->origin ) * inverseHull * drawHullAxis;
-		cockpitCopy.axis = cockpitCopy.axis * inverseHull * drawHullAxis;
+		hullCarry.Apply( cockpitCopy.origin, cockpitCopy.axis, cockpitCopy.origin, cockpitCopy.axis );
 		gameLocal.SubmitPresentationCopy( cockpit->GetRenderEntityHandle(), cockpitCopy, NULL, cockpit );
-		SubmitCarried( cockpit->clientEntities, hull->origin, inverseHull );
+		SubmitCarried( cockpit->clientEntities, hullCarry, NULL );
 	}
+}
+
+/*
+================
+sdPresentation::HullCarry
+
+the carrier rule: a thing rigid to the hull keeps its tick offset in the drawn hull
+================
+*/
+void sdPresentation::HullCarry( const renderEntity_t& hull, carry_t& carry ) const {
+	carry.axis = hull.axis.Transpose() * drawHullAxis;
+	carry.origin = drawHullOrigin - hull.origin * carry.axis;
+}
+
+/*
+================
+sdPresentation::JointCarry
+
+gunner views (review of #43): a thing bound to one of the transport's joints (a rider on
+its seat's attach joint, a client entity on a turret) keeps its tick offset in that joint
+as it is drawn: drawn hull x blended joint x tick joint^-1 x tick hull^-1. False when the
+joints are not blended this draw (the hull rule then holds)
+================
+*/
+bool sdPresentation::JointCarry( const renderEntity_t& hull, jointHandle_t joint, carry_t& carry ) const {
+	const sample_t& cur = Sample( drawFrame );
+	// as the hull copy: blended joints only when they match the hull's (else it draws the
+	// tick's, and so must its children)
+	if ( !drawJointsValid || drawJoints.Num() != hull.numJoints || joint == INVALID_JOINT || joint >= drawJoints.Num() ||
+		 joint >= cur.joints.Num() ) {
+		return false;
+	}
+	const idMat3 tickR = cur.joints[ joint ].ToMat3();
+	const idVec3 tickT = cur.joints[ joint ].ToVec3();
+	const idMat3 drawR = drawJoints[ joint ].ToMat3();
+	const idVec3 drawT = drawJoints[ joint ].ToVec3();
+	const idMat3 inJoint = tickR.Transpose() * drawR;	// the joint's turn from tick to draw, in model space
+	carry.axis = hull.axis.Transpose() * inJoint * drawHullAxis;
+	carry.origin = drawHullOrigin + ( drawT - tickT * inJoint ) * drawHullAxis - hull.origin * carry.axis;
+	return true;
 }
 
 /*
 ================
 sdPresentation::SubmitCarried
 
-The client models bound to something the hull carries (a rider's third-person weapon, a
-model on the hull or the cockpit), recursively, by the same rigid carrier rule. Client
-effects and lights have no render entity of their own here and keep the tick's pose, as
-do GUI surfaces (sdGuiSurface), which are positioned through their renderable.
+client entities carried by the hull (or by a rider or another carried entity): each drawn by
+its parent's carry, or, for one bound to a joint of the transport (jointHull set), by that
+joint's
 ================
 */
-void sdPresentation::SubmitCarried( idLinkList< rvClientEntity >& carried, const idVec3& hullOrigin, const idMat3& inverseHull ) const {
+void sdPresentation::SubmitCarried( idLinkList< rvClientEntity >& carried, const carry_t& parent, const renderEntity_t* jointHull ) const {
 	for ( rvClientEntity* cent = carried.Next(); cent != NULL; cent = cent->bindNode.Next() ) {
+		carry_t carry = parent;
+		if ( jointHull != NULL && cent->GetBindJoint() != INVALID_JOINT ) {
+			JointCarry( *jointHull, cent->GetBindJoint(), carry );
+		}
 		const renderEntity_t* re = cent->GetRenderEntity();
 		const int handle = cent->GetRenderEntityHandle();
 		if ( re != NULL && handle >= 0 && !cent->IsHidden() ) {
 			renderEntity_t copy = *re;
-			copy.origin = drawHullOrigin + ( re->origin - hullOrigin ) * inverseHull * drawHullAxis;
-			copy.axis = re->axis * inverseHull * drawHullAxis;
+			carry.Apply( re->origin, re->axis, copy.origin, copy.axis );
 			gameLocal.SubmitPresentationCopy( handle, copy, NULL, cent );
 		}
-		SubmitCarried( cent->clientEntities, hullOrigin, inverseHull );
+		SubmitCarried( cent->clientEntities, carry, NULL );
 	}
 }
