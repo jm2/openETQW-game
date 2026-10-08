@@ -2635,6 +2635,23 @@ void idPlayer::SpawnToPoint( const idVec3& spawnOrigin, const idAngles& spawnAng
 		GetGameTeam() ? GetGameTeam()->GetLookupName() : "none",
 		IsSpectating() ? 1 : 0 );
 
+	// OpenETQW test diagnostic (M4 tests): the class and the loadout this spawn gave
+	if ( g_logGameEvents.GetBool() && !gameLocal.isClient && !IsSpectating() ) {
+		const sdInventory& inv = GetInventory();
+		idStr items;
+		for ( int i = 0; i < inv.GetNumItems(); i++ ) {
+			const sdDeclInvItem* item = inv.GetItem( i );
+			if ( item != NULL ) {
+				items += items.Length() > 0 ? "," : "";
+				items += item->GetName();
+			}
+		}
+		gameLocal.Printf( "SPAWN: time=%d client=%d team=%s class=%s revive=%d health=%d weapon=%s items=%s\n", gameLocal.time,
+			entityNumber, GetGameTeam() ? GetGameTeam()->GetLookupName() : "none",
+			inv.GetClass() != NULL ? inv.GetClass()->GetName() : "none", revive ? 1 : 0, GetHealth(),
+			inv.GetCurrentItem() != NULL ? inv.GetCurrentItem()->GetName() : "none", items.c_str() );
+	}
+
 	damageAreasScale.Clear();
 	damageAreasScale.SetNum( LDA_COUNT );
 	damageAreasScale[ LDA_LEGS ] = spawnArgs.GetFloat( "loc_damage_area_damage_legs", "0.5" );
