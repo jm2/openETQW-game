@@ -396,7 +396,7 @@ void sdGameRulesCampaign::EndGame( void ) {
 		sys->SetServerInfo( "si_campaignInfo", newText );
 
 		// OpenETQW test diagnostic (M4 tests, g_logGameEvents): the map's result and the campaign's standing
-		if ( g_logGameEvents.GetBool() && campaignDecl != NULL ) {
+		if ( g_logGameEvents.GetBool() && campaignDecl != NULL && currentMapIndex < campaignDecl->GetNumMaps() ) {
 			idStr wins;
 			for ( int i = 0; i < manager.GetNumTeams(); i++ ) {
 				sdTeamInfo& team = manager.GetTeamByIndex( i );
