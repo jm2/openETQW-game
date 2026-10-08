@@ -2637,19 +2637,35 @@ void idPlayer::SpawnToPoint( const idVec3& spawnOrigin, const idAngles& spawnAng
 
 	// OpenETQW test diagnostic (M4 tests): the class and the loadout this spawn gave
 	if ( g_logGameEvents.GetBool() && !gameLocal.isClient && !IsSpectating() ) {
+		// the items go in SPAWN_ITEMS parts: Printf formats into MAX_STRING_CHARS, and a long kit would lose its end
 		const sdInventory& inv = GetInventory();
-		idStr items;
+		idStrList parts;
+		idStr part;
+		int numItems = 0;
 		for ( int i = 0; i < inv.GetNumItems(); i++ ) {
 			const sdDeclInvItem* item = inv.GetItem( i );
-			if ( item != NULL ) {
-				items += items.Length() > 0 ? "," : "";
-				items += item->GetName();
+			if ( item == NULL ) {
+				continue;
 			}
+			numItems++;
+			if ( part.Length() > 0 && part.Length() + 1 + idStr::Length( item->GetName() ) > 700 ) {
+				parts.Append( part );
+				part.Clear();
+			}
+			part += part.Length() > 0 ? "," : "";
+			part += item->GetName();
 		}
-		gameLocal.Printf( "SPAWN: time=%d client=%d team=%s class=%s revive=%d health=%d weapon=%s items=%s\n", gameLocal.time,
+		if ( part.Length() > 0 || parts.Num() == 0 ) {
+			parts.Append( part );
+		}
+		gameLocal.Printf( "SPAWN: time=%d client=%d team=%s class=%s revive=%d health=%d weapon=%s items=%d\n", gameLocal.time,
 			entityNumber, GetGameTeam() ? GetGameTeam()->GetLookupName() : "none",
 			inv.GetClass() != NULL ? inv.GetClass()->GetName() : "none", revive ? 1 : 0, GetHealth(),
-			inv.GetCurrentItem() != NULL ? inv.GetCurrentItem()->GetName() : "none", items.c_str() );
+			inv.GetCurrentItem() != NULL ? inv.GetCurrentItem()->GetName() : "none", numItems );
+		for ( int i = 0; i < parts.Num(); i++ ) {
+			gameLocal.Printf( "SPAWN_ITEMS: time=%d client=%d part=%d/%d items=%s\n", gameLocal.time, entityNumber, i + 1,
+				parts.Num(), parts[ i ].c_str() );
+		}
 	}
 
 	damageAreasScale.Clear();

@@ -1565,7 +1565,7 @@ void Cmd_DamageClient_f( const idCmdArgs &args ) {
 		return;
 	}
 	if ( args.Argc() < 4 || args.Argc() > 5 ) {
-		gameLocal.Printf( "usage: damageClient <victim client> <attacker client or -1 for the world> <damage scale> [damage decl, default damage_gpmg_trojan]\n" );
+		gameLocal.Printf( "usage: damageClient <victim client> <attacker client or -1 for the world> <damage scale 0-1000; 0 only reports> [damage decl, default damage_gpmg_trojan]\n" );
 		return;
 	}
 	idPlayer* victim = gameLocal.GetClient( atoi( args.Argv( 1 ) ) );
@@ -1577,10 +1577,19 @@ void Cmd_DamageClient_f( const idCmdArgs &args ) {
 		gameLocal.Printf( "DAMAGE_CLIENT: invalid victim, attacker or damage decl '%s'\n", declName );
 		return;
 	}
+	// a finite scale in [0, 1000] (an inf or a huge one would overflow health); 0 deals nothing and pushes
+	// nothing, it only reports the health and the spawn protection left
+	const float scale = static_cast< float >( atof( args.Argv( 3 ) ) );
+	if ( !( scale >= 0.0f && scale <= 1000.0f ) ) {
+		gameLocal.Printf( "DAMAGE_CLIENT: the scale must be a number from 0 to 1000, not '%s'\n", args.Argv( 3 ) );
+		return;
+	}
 	const int before = victim->GetHealth();
 	// spawn protection (the spawn script's makeInvulnerable) ignores damage until it ends: reported, so a test can wait
 	const int invulnerableMs = Max( 0, victim->invulnerableEndTime - gameLocal.time );
-	victim->Damage( attacker, attacker, idVec3( 0, 0, 1 ), damageDecl, static_cast< float >( atof( args.Argv( 3 ) ) ), NULL );
+	if ( scale > 0.0f ) {
+		victim->Damage( attacker, attacker, idVec3( 0, 0, 1 ), damageDecl, scale, NULL );
+	}
 	gameLocal.Printf( "DAMAGE_CLIENT: victim=%d attacker=%d decl=%s health %d -> %d inv=%d\n", victim->entityNumber,
 		attackerNum, damageDecl->GetName(), before, victim->GetHealth(), invulnerableMs );
 }
