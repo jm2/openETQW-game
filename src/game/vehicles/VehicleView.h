@@ -96,6 +96,8 @@ public:
 	virtual bool					HasPureClamp( void ) const { return true; }
 	// a chase view's orbit focus at the tick (the point its camera looks at), if it has one
 	virtual bool					GetOrbitFocus( idVec3& focus ) const { return false; }
+	// a pivot view's eye arm (its offset from the pivot, which the view angles swing), if it has one
+	virtual bool					GetPivotArm( idVec3& arm, bool& followPitch, bool& followYaw ) const { return false; }
 	// whether the class lets a mouse turn change its view for this command (a class whose
 	// look depends on a button state the tick latches says no while it is not held)
 	virtual bool					LateLookAllowed( const idPlayer* player, const usercmd_t& cmd ) const { return true; }
@@ -149,6 +151,13 @@ protected:
 
 class sdDampedVehicleView_Pivot : public sdDampedVehicleView {
 public:
+	// OpenETQW (M5 step 14, stage 5): CalcViewOrigin's arm, for the late look
+	virtual bool					GetPivotArm( idVec3& arm, bool& followPitch, bool& followYaw ) const {
+		arm = eyeOffset * eyeBaseAxis;
+		followPitch = viewMode.followPitch;
+		followYaw = viewMode.followYaw;
+		return true;
+	}
 	virtual const char*			GetTypeName() const { return TypeName(); }
 	static const char*			TypeName() { return "pivot"; }
 

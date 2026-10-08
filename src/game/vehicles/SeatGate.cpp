@@ -51,8 +51,9 @@ static const seatRecipe_t seatRecipes[] = {
 	{ SPK_TRANSPORT, "smooth_free", false, true, true, true },
 	{ SPK_TRANSPORT, "smooth_locked", false, true, true, true },
 	// gunner views (vehicle-responsiveness 3.6): first person on the turret's eye joint, drawn
-	// with the transport's blended joints; their late look is a later tier
-	{ SPK_TRANSPORT, "pivot", false, true, false, false },
+	// with the transport's blended joints; pivot with late look (its eye arm swings with the
+	// drawn angles); freepivot's clamp has no pure copy yet
+	{ SPK_TRANSPORT, "pivot", false, true, false, true },
 	{ SPK_TRANSPORT, "freepivot", false, true, false, false },
 	// the jetpack (an sdJetPack, its own proxy kind): first person at its origin plus the eye
 	// offset, the view angles in the world; drawn as the standard view, with its late look

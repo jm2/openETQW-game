@@ -73,6 +73,11 @@ private:
 		bool				lookActive;		// the class let the mouse turn its view at the tick (smooth_locked: the tophat)
 		bool				inputTaken;		// and took its own command's turn
 		idMat3				ownerAxis;		// the transport's physics axis (the smooth classes' clamps)
+		bool				hasPivot;		// a pivot view: the eye swings on an arm about a pivot with the view angles
+		bool				followPitch;
+		bool				followYaw;
+		idVec3				pivotArm;		// CalcViewOrigin's arm, and the pivot in the hull's frame
+		idVec3				pivotHull;
 		idVec3				focus;			// a chase view's orbit focus, in the world
 		bool				orbitValid;		// its camera lies on the ray back from the focus
 		idAngles			tickAngles;		// the tick's view angles (clientViewAngles) and its command's
