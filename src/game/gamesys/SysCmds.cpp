@@ -1568,9 +1568,18 @@ void Cmd_DamageClient_f( const idCmdArgs &args ) {
 		gameLocal.Printf( "usage: damageClient <victim client> <attacker client or -1 for the world> <damage scale 0-1000; 0 only reports> [damage decl, default damage_gpmg_trojan]\n" );
 		return;
 	}
-	idPlayer* victim = gameLocal.GetClient( atoi( args.Argv( 1 ) ) );
+	// client numbers are checked here: GetClient only asserts, so a bad one would index out of
+	// bounds in a release build (review of #45)
+	const int victimNum = atoi( args.Argv( 1 ) );
 	const int attackerNum = atoi( args.Argv( 2 ) );
-	idEntity* attacker = attackerNum < 0 ? static_cast< idEntity* >( gameLocal.world ) : gameLocal.GetClient( attackerNum );
+	idPlayer* victim = ( victimNum >= 0 && victimNum < MAX_CLIENTS && gameLocal.entities[ victimNum ] != NULL ) ?
+		gameLocal.entities[ victimNum ]->Cast< idPlayer >() : NULL;
+	idEntity* attacker = NULL;
+	if ( attackerNum == -1 ) {
+		attacker = gameLocal.world;
+	} else if ( attackerNum >= 0 && attackerNum < MAX_CLIENTS && gameLocal.entities[ attackerNum ] != NULL ) {
+		attacker = gameLocal.entities[ attackerNum ]->Cast< idPlayer >();
+	}
 	const char* declName = args.Argc() == 5 ? args.Argv( 4 ) : "damage_gpmg_trojan";
 	const sdDeclDamage* damageDecl = gameLocal.declDamageType.LocalFind( declName, false );
 	if ( victim == NULL || attacker == NULL || damageDecl == NULL ) {
