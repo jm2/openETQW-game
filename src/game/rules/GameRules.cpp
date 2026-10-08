@@ -1087,12 +1087,32 @@ int sdGameRules::NumActualClients( bool countSpectators, bool countBots ) {
 
 /*
 ================
+LogMatchEvent
+
+OpenETQW test diagnostic (M4 tests, g_logGameEvents): the server's record of the
+match: each state change, and why a game ended (the time limit, the script)
+================
+*/
+static void LogMatchEvent( sdGameRules* rules, const char* what, int state ) {
+	if ( !g_logGameEvents.GetBool() || gameLocal.isClient ) {
+		return;
+	}
+	static const char* const stateNames[] = { "inactive", "warmup", "countdown", "gameon", "gamereview", "nextgame", "nextmap" };
+	const sdTeamInfo* winner = rules->GetWinningTeam();
+	gameLocal.Printf( "MATCH: time=%d rules=%s %s state=%s winner=%s\n", gameLocal.time, rules->GetType()->classname, what,
+		state >= 0 && state < static_cast< int >( sizeof( stateNames ) / sizeof( stateNames[ 0 ] ) ) ? stateNames[ state ] : "?",
+		winner != NULL ? winner->GetLookupName() : "none" );
+}
+
+/*
+================
 sdGameRules::NewState
 ================
 */
 void sdGameRules::NewState( gameState_t news ) {
 
 	assert( news != gameState );
+	LogMatchEvent( this, "event=state", news );
 	switch( news ) {
 		case GS_GAMEON: {
 			sdGlobalStatsTracker::GetInstance().Clear();
@@ -2076,6 +2096,7 @@ sdGameRules::Event_EndGame
 ================
 */
 void sdGameRules::Event_EndGame( void ) {
+	LogMatchEvent( this, "event=scriptEndGame", gameState );
 	EndGame();
 }
 
@@ -2590,6 +2611,7 @@ sdGameRules::OnTimeLimitHit
 ============
 */
 void sdGameRules::OnTimeLimitHit( void ) {
+	LogMatchEvent( this, "event=timelimit", gameState );
 	sdScriptHelper h1;
 	scriptObject->CallNonBlockingScriptEvent( scriptObject->GetFunction( "OnTimeLimitHit" ), h1 );
 }

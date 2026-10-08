@@ -106,7 +106,7 @@ idCVar g_debugBounds(				"g_debugBounds",			"0",			CVAR_GAME | CVAR_BOOL, "check
 idCVar g_debugAnim(					"g_debugAnim",				"-1",			CVAR_GAME | CVAR_INTEGER, "displays information on which animations are playing on the specified entity number.  set to -1 to disable." );
 idCVar g_debugAnimStance(			"g_debugAnimStance",		"-1",			CVAR_GAME | CVAR_INTEGER, "displays information on which stances are set on the specified entity number.  set to -1 to disable." );
 idCVar g_debugDamage(				"g_debugDamage",			"0",			CVAR_GAME | CVAR_BOOL, "" );
-idCVar g_logGameEvents(			"g_logGameEvents",			"0",			CVAR_GAME | CVAR_BOOL | CVAR_NOCHEAT, "OpenETQW test diagnostic: the server prints a line for each gameplay event (KILL, SPAWN; the M4 tests read them)" );
+idCVar g_logGameEvents(			"g_logGameEvents",			"0",			CVAR_GAME | CVAR_BOOL | CVAR_NOCHEAT, "OpenETQW test diagnostic: the server prints a line for each gameplay event (KILL, SPAWN, MATCH; the M4 tests read them)" );
 idCVar g_debugWeapon(				"g_debugWeapon",			"0",			CVAR_GAME | CVAR_BOOL, "" );
 idCVar g_debugWeaponSpread(			"g_debugWeaponSpread",		"0",			CVAR_GAME | CVAR_BOOL, "displays the current spread value for the weapon" );
 idCVar g_debugScript(				"g_debugScript",			"0",			CVAR_GAME | CVAR_BOOL, "" );
