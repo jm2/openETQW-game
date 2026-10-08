@@ -1552,6 +1552,41 @@ void Cmd_NetworkSpawn_f( const idCmdArgs &args ) {
 
 /*
 ==================
+Cmd_DamageClient_f
+
+OpenETQW test hook (M4 tests): damage one player as another (a damage decl,
+scaled as Damage scales it), through the player's own Damage/Killed path, so a
+dedicated server can drive damage and kills. A cheat; unlike "damage" it needs
+no local player.
+==================
+*/
+void Cmd_DamageClient_f( const idCmdArgs &args ) {
+	if ( gameLocal.isClient || !gameLocal.CheatsOk( false ) ) {
+		return;
+	}
+	if ( args.Argc() < 4 || args.Argc() > 5 ) {
+		gameLocal.Printf( "usage: damageClient <victim client> <attacker client or -1 for the world> <damage scale> [damage decl, default damage_gpmg_trojan]\n" );
+		return;
+	}
+	idPlayer* victim = gameLocal.GetClient( atoi( args.Argv( 1 ) ) );
+	const int attackerNum = atoi( args.Argv( 2 ) );
+	idEntity* attacker = attackerNum < 0 ? static_cast< idEntity* >( gameLocal.world ) : gameLocal.GetClient( attackerNum );
+	const char* declName = args.Argc() == 5 ? args.Argv( 4 ) : "damage_gpmg_trojan";
+	const sdDeclDamage* damageDecl = gameLocal.declDamageType.LocalFind( declName, false );
+	if ( victim == NULL || attacker == NULL || damageDecl == NULL ) {
+		gameLocal.Printf( "DAMAGE_CLIENT: invalid victim, attacker or damage decl '%s'\n", declName );
+		return;
+	}
+	const int before = victim->GetHealth();
+	// spawn protection (the spawn script's makeInvulnerable) ignores damage until it ends: reported, so a test can wait
+	const int invulnerableMs = Max( 0, victim->invulnerableEndTime - gameLocal.time );
+	victim->Damage( attacker, attacker, idVec3( 0, 0, 1 ), damageDecl, static_cast< float >( atof( args.Argv( 3 ) ) ), NULL );
+	gameLocal.Printf( "DAMAGE_CLIENT: victim=%d attacker=%d decl=%s health %d -> %d inv=%d\n", victim->entityNumber,
+		attackerNum, damageDecl->GetName(), before, victim->GetHealth(), invulnerableMs );
+}
+
+/*
+==================
 Cmd_Damage_f
 
 Damages the specified entity
@@ -3655,6 +3690,7 @@ void idGameLocal::InitConsoleCommands( void ) {
 	cmdSystem->AddCommand( "trigger",				Cmd_Trigger_f,				CMD_FL_GAME|CMD_FL_CHEAT,	"triggers an entity", idGameLocal::ArgCompletion_EntityName );
 	cmdSystem->AddCommand( "spawn",					Cmd_Spawn_f,				CMD_FL_GAME|CMD_FL_CHEAT,	"spawns a game entity", idArgCompletionDecl_f< DECLTYPE_ENTITYDEF > );
 	cmdSystem->AddCommand( "networkSpawn",			Cmd_NetworkSpawn_f,			CMD_FL_GAME|CMD_FL_CHEAT,	"spawns a game entity during a network game", idArgCompletionDecl_f< DECLTYPE_ENTITYDEF > );
+	cmdSystem->AddCommand( "damageClient",			Cmd_DamageClient_f,			CMD_FL_GAME|CMD_FL_CHEAT,	"OpenETQW test hook: damage a player as another player, by a damage decl times a scale (works on a dedicated server)" );
 	cmdSystem->AddCommand( "damage",				Cmd_Damage_f,				CMD_FL_GAME|CMD_FL_CHEAT,	"apply damage to an entity", idGameLocal::ArgCompletion_EntityName );
 	cmdSystem->AddCommand( "remove",				Cmd_Remove_f,				CMD_FL_GAME|CMD_FL_CHEAT,	"removes an entity", idGameLocal::ArgCompletion_EntityName );
 	cmdSystem->AddCommand( "killMoveables",			Cmd_KillMovables_f,			CMD_FL_GAME|CMD_FL_CHEAT,	"removes all moveables" );

@@ -7430,6 +7430,18 @@ void idPlayer::Killed( idEntity *inflictor, idEntity *attacker, int damage, cons
 		GetInventory().LogDeath();
 	}
 
+	// OpenETQW test diagnostic (M4 tests): the server's record of each death
+	if ( g_logGameEvents.GetBool() && !gameLocal.isClient ) {
+		const idPlayer* killer = attacker != NULL ? attacker->Cast< idPlayer >() : NULL;
+		gameLocal.Printf( "KILL: time=%d victim=%d team=%s class=%s attacker=%d attackerTeam=%s attackerEnt=%s damage=%d decl=%s location=%d\n",
+			gameLocal.time, entityNumber, GetGameTeam() ? GetGameTeam()->GetLookupName() : "none",
+			GetInventory().GetClass() != NULL ? GetInventory().GetClass()->GetName() : "none",
+			killer != NULL ? killer->entityNumber : -1,
+			killer != NULL && killer->GetGameTeam() != NULL ? killer->GetGameTeam()->GetLookupName() : "none",
+			attacker != NULL ? attacker->GetName() : "none", damage,
+			damageDecl != NULL ? damageDecl->GetName() : "none", location );
+	}
+
 	DropDisguise();
 
 	if ( !gameLocal.isClient ) {
