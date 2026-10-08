@@ -395,6 +395,19 @@ void sdGameRulesCampaign::EndGame( void ) {
 		}
 		sys->SetServerInfo( "si_campaignInfo", newText );
 
+		// OpenETQW test diagnostic (M4 tests, g_logGameEvents): the map's result and the campaign's standing
+		if ( g_logGameEvents.GetBool() && campaignDecl != NULL ) {
+			idStr wins;
+			for ( int i = 0; i < manager.GetNumTeams(); i++ ) {
+				sdTeamInfo& team = manager.GetTeamByIndex( i );
+				wins += va( " %sWins=%d", team.GetLookupName(), team.GetNumWins() );
+			}
+			gameLocal.Printf( "CAMPAIGN: time=%d campaign=%s map=%d/%d mapName=%s winner=%s%s campaignWinner=%s info=%s\n",
+				gameLocal.time, campaignDecl->GetName(), currentMapIndex + 1, campaignDecl->GetNumMaps(),
+				campaignDecl->GetMap( currentMapIndex ), winningTeam != NULL ? winningTeam->GetLookupName() : "none",
+				wins.c_str(), campaignWinningTeam != NULL ? campaignWinningTeam->GetLookupName() : "none", newText.c_str() );
+		}
+
 		if ( currentMapIndex < campaignMapData.Num() ) {
 			mapData_t& mapData = campaignMapData[ currentMapIndex ];
 

@@ -300,6 +300,11 @@ void sdGameRulesStopWatch::EndGame( void ) {
 	NextStateDelayed( GS_GAMEREVIEW, 1000 );
 
 	if ( !gameLocal.isClient ) {
+		// OpenETQW test diagnostic (M4 tests, g_logGameEvents): the round, its time and the time to beat
+		const int roundTime = gameLocal.time - matchStartedTime;
+		const int previousTimeToBeat = timeToBeat;
+		const sdTeamInfo* attackers = attackingTeams[ progression ];
+
 		if ( progression == GP_FIRST_MATCH ) {
 			timeToBeat = gameLocal.time - matchStartedTime;
 			
@@ -311,6 +316,15 @@ void sdGameRulesStopWatch::EndGame( void ) {
 
 			RecordWinningTeam( winningTeam == firstMatchWinningTeam ? winningTeam : NULL, "stopwatch", false );
 			timeToBeat = 0;
+		}
+
+		if ( g_logGameEvents.GetBool() ) {
+			gameLocal.Printf( "STOPWATCH: time=%d round=%d roundTime=%d timeToBeat=%d attackers=%s winner=%s firstRoundWinner=%s\n",
+				gameLocal.time, progression == GP_FIRST_MATCH ? 1 : 2, roundTime,
+				progression == GP_FIRST_MATCH ? timeToBeat : previousTimeToBeat,
+				attackers != NULL ? attackers->GetLookupName() : "none",
+				winningTeam != NULL ? winningTeam->GetLookupName() : "none",
+				firstMatchWinningTeam != NULL ? firstMatchWinningTeam->GetLookupName() : "none" );
 		}
 
 		CallScriptEndGame();
