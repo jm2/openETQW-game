@@ -293,7 +293,7 @@ sdGameRulesStopWatch::EndGame
 ================
 */
 void sdGameRulesStopWatch::EndGame( void ) {
-	if ( IsWarmup() ) {
+	if ( IsWarmup() || EndGamePending() ) {
 		return;
 	}
 

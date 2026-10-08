@@ -1552,6 +1552,59 @@ void Cmd_NetworkSpawn_f( const idCmdArgs &args ) {
 
 /*
 ==================
+Cmd_DamageClient_f
+
+OpenETQW test hook (M4 tests): damage one player as another (a damage decl,
+scaled as Damage scales it), through the player's own Damage/Killed path, so a
+dedicated server can drive damage and kills. A cheat; unlike "damage" it needs
+no local player.
+==================
+*/
+void Cmd_DamageClient_f( const idCmdArgs &args ) {
+	if ( gameLocal.isClient || !gameLocal.CheatsOk( false ) ) {
+		return;
+	}
+	if ( args.Argc() < 4 || args.Argc() > 5 ) {
+		gameLocal.Printf( "usage: damageClient <victim client> <attacker client or -1 for the world> <damage scale 0-1000; 0 only reports> [damage decl, default damage_gpmg_trojan]\n" );
+		return;
+	}
+	// client numbers are checked here: GetClient only asserts, so a bad one would index out of
+	// bounds in a release build (review of #45)
+	const int victimNum = atoi( args.Argv( 1 ) );
+	const int attackerNum = atoi( args.Argv( 2 ) );
+	idPlayer* victim = ( victimNum >= 0 && victimNum < MAX_CLIENTS && gameLocal.entities[ victimNum ] != NULL ) ?
+		gameLocal.entities[ victimNum ]->Cast< idPlayer >() : NULL;
+	idEntity* attacker = NULL;
+	if ( attackerNum == -1 ) {
+		attacker = gameLocal.world;
+	} else if ( attackerNum >= 0 && attackerNum < MAX_CLIENTS && gameLocal.entities[ attackerNum ] != NULL ) {
+		attacker = gameLocal.entities[ attackerNum ]->Cast< idPlayer >();
+	}
+	const char* declName = args.Argc() == 5 ? args.Argv( 4 ) : "damage_gpmg_trojan";
+	const sdDeclDamage* damageDecl = gameLocal.declDamageType.LocalFind( declName, false );
+	if ( victim == NULL || attacker == NULL || damageDecl == NULL ) {
+		gameLocal.Printf( "DAMAGE_CLIENT: invalid victim, attacker or damage decl '%s'\n", declName );
+		return;
+	}
+	// a finite scale in [0, 1000] (an inf or a huge one would overflow health); 0 deals nothing and pushes
+	// nothing, it only reports the health and the spawn protection left
+	const float scale = static_cast< float >( atof( args.Argv( 3 ) ) );
+	if ( !( scale >= 0.0f && scale <= 1000.0f ) ) {
+		gameLocal.Printf( "DAMAGE_CLIENT: the scale must be a number from 0 to 1000, not '%s'\n", args.Argv( 3 ) );
+		return;
+	}
+	const int before = victim->GetHealth();
+	// spawn protection (the spawn script's makeInvulnerable) ignores damage until it ends: reported, so a test can wait
+	const int invulnerableMs = Max( 0, victim->invulnerableEndTime - gameLocal.time );
+	if ( scale > 0.0f ) {
+		victim->Damage( attacker, attacker, idVec3( 0, 0, 1 ), damageDecl, scale, NULL );
+	}
+	gameLocal.Printf( "DAMAGE_CLIENT: victim=%d attacker=%d decl=%s health %d -> %d inv=%d\n", victim->entityNumber,
+		attackerNum, damageDecl->GetName(), before, victim->GetHealth(), invulnerableMs );
+}
+
+/*
+==================
 Cmd_Damage_f
 
 Damages the specified entity
@@ -3655,6 +3708,7 @@ void idGameLocal::InitConsoleCommands( void ) {
 	cmdSystem->AddCommand( "trigger",				Cmd_Trigger_f,				CMD_FL_GAME|CMD_FL_CHEAT,	"triggers an entity", idGameLocal::ArgCompletion_EntityName );
 	cmdSystem->AddCommand( "spawn",					Cmd_Spawn_f,				CMD_FL_GAME|CMD_FL_CHEAT,	"spawns a game entity", idArgCompletionDecl_f< DECLTYPE_ENTITYDEF > );
 	cmdSystem->AddCommand( "networkSpawn",			Cmd_NetworkSpawn_f,			CMD_FL_GAME|CMD_FL_CHEAT,	"spawns a game entity during a network game", idArgCompletionDecl_f< DECLTYPE_ENTITYDEF > );
+	cmdSystem->AddCommand( "damageClient",			Cmd_DamageClient_f,			CMD_FL_GAME|CMD_FL_CHEAT,	"OpenETQW test hook: damage a player as another player, by a damage decl times a scale (works on a dedicated server)" );
 	cmdSystem->AddCommand( "damage",				Cmd_Damage_f,				CMD_FL_GAME|CMD_FL_CHEAT,	"apply damage to an entity", idGameLocal::ArgCompletion_EntityName );
 	cmdSystem->AddCommand( "remove",				Cmd_Remove_f,				CMD_FL_GAME|CMD_FL_CHEAT,	"removes an entity", idGameLocal::ArgCompletion_EntityName );
 	cmdSystem->AddCommand( "killMoveables",			Cmd_KillMovables_f,			CMD_FL_GAME|CMD_FL_CHEAT,	"removes all moveables" );
@@ -3806,14 +3860,14 @@ void idGameLocal::InitConsoleCommands( void ) {
 
 	cmdSystem->AddCommand( "getRepeaterStatus",			Cmd_GetRepeaterStatus_f,		CMD_FL_GAME,		"displays whether there the repeater server is running on the server the client is currently connected to" );
 
-	cmdSystem->AddCommand( "completeObjective",			Cmd_CompleteObjective_f,		CMD_FL_GAME,		"completes an objective by index" );
+	cmdSystem->AddCommand( "completeObjective",			Cmd_CompleteObjective_f,		CMD_FL_GAME|CMD_FL_CHEAT,		"completes an objective by index" );
 	cmdSystem->AddCommand( "objectiveStatus",			Cmd_ObjectiveStatus_f,			CMD_FL_GAME,		"prints objective and match status" );
-	cmdSystem->AddCommand( "deploy",					Cmd_Deploy_f,					CMD_FL_GAME,		"deploys a deployable object for a player" );
+	cmdSystem->AddCommand( "deploy",					Cmd_Deploy_f,					CMD_FL_GAME|CMD_FL_CHEAT,		"deploys a deployable object for a player" );
 	cmdSystem->AddCommand( "vehicleStatus",				Cmd_VehicleStatus_f,			CMD_FL_GAME,		"prints vehicle status for a player" );
-	cmdSystem->AddCommand( "enterVehicle",				Cmd_EnterVehicle_f,				CMD_FL_GAME,		"places player in vehicle" );
-	cmdSystem->AddCommand( "exitVehicle",				Cmd_ExitVehicle_f,				CMD_FL_GAME,		"ejects player from vehicle" );
+	cmdSystem->AddCommand( "enterVehicle",				Cmd_EnterVehicle_f,				CMD_FL_GAME|CMD_FL_CHEAT,		"places player in vehicle" );
+	cmdSystem->AddCommand( "exitVehicle",				Cmd_ExitVehicle_f,				CMD_FL_GAME|CMD_FL_CHEAT,		"ejects player from vehicle" );
 	cmdSystem->AddCommand( "resetVehicle",				Cmd_ResetVehicle_f,				CMD_FL_GAME|CMD_FL_CHEAT,	"OpenETQW test diagnostic: 'resetVehicle <vehicle> mark' remembers a vehicle's pose, 'resetVehicle <vehicle>' puts it back there at rest" );
-	cmdSystem->AddCommand( "swapVehicleSeat",			Cmd_SwapVehicleSeat_f,			CMD_FL_GAME,		"swaps vehicle seat for player" );
+	cmdSystem->AddCommand( "swapVehicleSeat",			Cmd_SwapVehicleSeat_f,			CMD_FL_GAME|CMD_FL_CHEAT,		"swaps vehicle seat for player" );
 	cmdSystem->AddCommand( "cycleVehicleCamera",		Cmd_CycleVehicleCamera_f,		CMD_FL_GAME,		"cycles a player's vehicle camera to the seat's next view" );
 	cmdSystem->AddCommand( "deployStatus",				Cmd_DeployStatus_f,				CMD_FL_GAME,		"prints deployable status" );
 	cmdSystem->AddCommand( "listSeatViews",				sdSeatGate::ListSeatViews_f,	CMD_FL_GAME|CMD_FL_CHEAT,	"prints each vehicle seat's view classes, flags, clamps, eye joint and seat-gate key: listSeatViews [all|<filter>]" );

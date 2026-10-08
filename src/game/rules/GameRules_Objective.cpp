@@ -229,7 +229,7 @@ sdGameRulesObjective::EndGame
 void sdGameRulesObjective::EndGame( void ) {
 	// retail behaviour ( matches sdGameRulesCampaign / sdGameRulesStopWatch ): a match that has not
 	// started cannot end. Use "admin startMatch" to leave warmup when no humans are ready.
-	if ( IsWarmup() ) {
+	if ( IsWarmup() || EndGamePending() ) {
 		return;
 	}
 
