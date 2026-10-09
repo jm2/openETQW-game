@@ -1335,9 +1335,10 @@ void sdPlayerProperties::OnActiveViewProxyChanged( idEntity* object ) {
 	// GUI scope is not registered there), as the scripts' "Tried to run a GUI
 	// command on the server" guard expects.  Without this, a dedicated binary
 	// connected as a client crashed when put in a vehicle: the overlay's load
-	// error shut the map down, whose OnActiveViewProxyChanged( NULL ) freed
-	// proxyOverlay inside its own InitGui.
-	if ( networkSystem->IsDedicated() ) {
+	// error (common->Error stops the session before throwing, and
+	// sdUserInterfaceLocal::Load catches the throw) shut the map down, whose
+	// OnActiveViewProxyChanged( NULL ) freed proxyOverlay inside its own InitGui.
+	if ( !gameLocal.DoClientSideStuff() ) {
 		return;
 	}
 
@@ -1346,12 +1347,17 @@ void sdPlayerProperties::OnActiveViewProxyChanged( idEntity* object ) {
 		if ( iface != NULL ) {
 			const sdDeclGUI* gui = iface->GetOverlayGUI();
 			if ( gui != NULL ) {
-				proxyOverlay.Reset( new sdPassiveHudModule );
-				proxyOverlay->InitGui( gui->GetName(), false );
-				if ( proxyOverlay.Get() == NULL ) {
-					return;	// the load re-entered this function and cleared the overlay
+				// Built in a local owner: a failed load can re-enter this function
+				// (its error stops the session first), which must not free the
+				// module InitGui is still writing to.  If the active view changed
+				// meanwhile, the overlay is dropped here instead.
+				sdAutoPtr< sdPassiveHudModule > overlay( new sdPassiveHudModule );
+				overlay->InitGui( gui->GetName(), false );
+				if ( activeObjectView.GetEntity() != object ) {
+					return;
 				}
-				proxyOverlay->SetSort( object->spawnArgs.GetInt( "hud_sort", "0" ) );
+				overlay->SetSort( object->spawnArgs.GetInt( "hud_sort", "0" ) );
+				proxyOverlay.Reset( overlay.Release() );
 			}
 		}
 	}
