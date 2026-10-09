@@ -1208,6 +1208,7 @@ public:
 
 	bool							CheatsOk( bool requirePlayer = true );
 	gameState_t						GameState( void ) const;
+	int								MapShutdownCount( void ) const { return mapShutdownCount; }	// OpenETQW: map teardowns so far (game #49)
 
 	template< typename T > 
 	T* SpawnEntityTypeT( bool callPostMapSpawn, const idDict *args = NULL ) {
@@ -1533,6 +1534,7 @@ private:
 
 	idVec3													gravity;				// global gravity vector
 	gameState_t												gamestate;				// keeps track of whether we're spawning, shutting down, or normal gameplay
+	int														mapShutdownCount;		// OpenETQW: map teardowns so far (MapShutdown past its NOMAP early return); never reset
 
 	clientNetworkInfo_t										clientNetworkInfo[ MAX_CLIENTS ];
 	clientNetworkInfo_t										demoClientNetworkInfo;

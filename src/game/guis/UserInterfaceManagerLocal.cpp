@@ -191,7 +191,15 @@ guiHandle_t sdUserInterfaceManagerLocal::AllocUI( const char* name, bool require
 			instances[ i ] = new sdUserInterfaceLocal( nextIndex++, requireUnique, permanent, module );
 			instances[ i ]->SetTheme( theme	);
 			instances[ i ]->ApplyLatchedTheme();
-			instances[ i ]->Load( name );
+			try {
+				instances[ i ]->Load( name );
+			} catch ( ... ) {
+				// the load passed on a drop (game #49): no half-built instance
+				// stays findable by name, holding a module that is going away
+				delete instances[ i ];
+				instances[ i ] = NULL;
+				throw;
+			}
 			return GetHandle( i );
 		}
 	}
@@ -200,7 +208,12 @@ guiHandle_t sdUserInterfaceManagerLocal::AllocUI( const char* name, bool require
 		sdUserInterfaceLocal* instance = new sdUserInterfaceLocal( nextIndex++, requireUnique, permanent, module );
 		instance->SetTheme( theme );
 		instance->ApplyLatchedTheme();
-		instance->Load( name );
+		try {
+			instance->Load( name );
+		} catch ( ... ) {
+			delete instance;
+			throw;
+		}
 		return GetHandle( instances.Append( instance ) );
 	}
 

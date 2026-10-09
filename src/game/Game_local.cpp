@@ -1538,7 +1538,8 @@ idGameLocal::idGameLocal
 ============
 */
 idGameLocal::idGameLocal( void ) :
-	systemNotifications( 1 ) {
+	systemNotifications( 1 ),
+	mapShutdownCount( 0 ) {
 	rulesStateObject.Init( this );
 
 	proficiencyLog = NULL;
@@ -4140,6 +4141,7 @@ void idGameLocal::MapShutdown( void ) {
 
 	Printf( "--------- Game Map Shutdown ----------\n" );
 
+	mapShutdownCount++;
 	gamestate = GAMESTATE_SHUTDOWN;
 
 	botThread->StopThread();
