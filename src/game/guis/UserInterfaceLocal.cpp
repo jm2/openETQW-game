@@ -647,12 +647,15 @@ bool sdUserInterfaceLocal::Load( const char* name ) {
 	idTokenCache& tokenCache = declManager->GetGlobalTokenCache();
 
 	// A parse error reaches us as the idException common->Error throws, and
-	// common->Error has already stopped the session by then: with a map loaded
-	// it is shut down.  Swallowing that let the caller carry on in the unloaded
-	// world (game #49), so the error goes on to the engine's frame loop, which
-	// handles the drop it already is.  Without a map (the menus) nothing was
-	// shut down, and a failed load stays a warning.
-	const gameState_t stateBeforeLoad = gameLocal.GameState();
+	// common->Error has already stopped the session by then: if a map was
+	// loaded (or being restarted) it has been shut down.  Swallowing that let
+	// the caller carry on in the unloaded world (game #49), so the error goes
+	// on to the engine's frame loop, which handles the drop it already is.
+	// MapShutdown's counter tells: without a map (the menus), or during the
+	// first load of a map (which Stop unloads without MapShutdown, mapSpawned
+	// being still false), nothing was shut down and a failed load stays a
+	// warning, as before.
+	const int shutdownsBeforeLoad = gameLocal.MapShutdownCount();
 
 	try {
 		sdUIWindow::SetupProperties( scriptState.GetPropertyHandler(), guiDecl->GetProperties(), this, tokenCache );
@@ -731,9 +734,7 @@ bool sdUserInterfaceLocal::Load( const char* name ) {
 	} catch ( idException& exception ) {
 		PrintStackTrace();
 		PopTrace();
-		const gameState_t stateAfterError = gameLocal.GameState();
-		if ( ( stateBeforeLoad == GAMESTATE_ACTIVE || stateBeforeLoad == GAMESTATE_STARTUP ) &&
-			stateAfterError != stateBeforeLoad ) {
+		if ( gameLocal.MapShutdownCount() != shutdownsBeforeLoad ) {
 			gameLocal.Printf( "sdUserInterfaceLocal::Load: '%s' failed and the error dropped the map; passing it on\n", name );
 			throw;
 		}
