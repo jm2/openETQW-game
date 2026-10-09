@@ -1330,13 +1330,27 @@ void sdPlayerProperties::OnActiveViewProxyChanged( idEntity* object ) {
 	proxyOverlay.Reset();
 
 	activeObjectView = object;
+
+	// A dedicated binary has no HUD: its GUIs cannot even parse (the "player"
+	// GUI scope is not registered there), as the scripts' "Tried to run a GUI
+	// command on the server" guard expects.  Without this, a dedicated binary
+	// connected as a client crashed when put in a vehicle: the overlay's load
+	// error shut the map down, whose OnActiveViewProxyChanged( NULL ) freed
+	// proxyOverlay inside its own InitGui.
+	if ( networkSystem->IsDedicated() ) {
+		return;
+	}
+
 	if ( object != NULL ) {
 		sdUsableInterface* iface = object->GetUsableInterface();
 		if ( iface != NULL ) {
 			const sdDeclGUI* gui = iface->GetOverlayGUI();
 			if ( gui != NULL ) {
 				proxyOverlay.Reset( new sdPassiveHudModule );
-				proxyOverlay->InitGui( gui->GetName(), false );				
+				proxyOverlay->InitGui( gui->GetName(), false );
+				if ( proxyOverlay.Get() == NULL ) {
+					return;	// the load re-entered this function and cleared the overlay
+				}
 				proxyOverlay->SetSort( object->spawnArgs.GetInt( "hud_sort", "0" ) );
 			}
 		}
