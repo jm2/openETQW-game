@@ -49,7 +49,7 @@ OpenETQW speaks its own network protocol, 20293.5 (defined in the engine's `src/
 
 ## Status
 
-The game module and idLib build on macOS arm64 (Apple Clang), Linux x86_64 (GCC) and Windows x64 (MSVC), and the game runs on all three through the engine's test suite (maps, bots, network play). The engine repository's `STATUS.md` has the evidence, the known failures and the open items.
+The game module and idLib build on five platforms: macOS arm64 (Apple Clang), Linux x86_64 and arm64 (GCC), and Windows x64 and arm64 (MSVC). The game runs on all of them through the engine's test suite: maps, bots, network play, and LAN play between Linux x86_64, Windows x64 and macOS arm64 in both directions. Agents working on either repository start with the engine repository's `AGENTS.md` and `docs/queue.md`. The engine repository's `STATUS.md` has the evidence, the known failures and the open items.
 
 ## Build on macOS
 
