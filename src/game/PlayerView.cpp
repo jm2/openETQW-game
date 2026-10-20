@@ -345,6 +345,14 @@ static void LogFramePose( idPlayer* viewPlayer, const renderView_t* view ) {
 			line += va( " jnt=%.6f", sum );
 		}
 	}
+	// M5 step 3, seats: the cockpit model the seat view draws (the presentation carries it
+	// with the hull), so a test sees it change between draws as the viewmodel does on foot
+	{
+		sdClientAnimated* cockpit = proxy != NULL ? gameLocal.playerView.GetCockpit().GetEntity() : NULL;
+		if ( cockpit != NULL && !cockpit->IsHidden() ) {
+			AppendRenderPose( line, "ckp", cockpit->GetRenderEntityHandle() );
+		}
+	}
 	// M5 step 14b: the hull lead this draw used, alpha ticks past the last tick along its lead
 	float leadAlpha;
 	idVec3 leadVector;
@@ -353,7 +361,7 @@ static void LogFramePose( idPlayer* viewPlayer, const renderView_t* view ) {
 	}
 
 	// Printf formats into MAX_STRING_CHARS (1024) and cuts the rest, newline included, so
-	// the line is kept to about 250 characters plus at most 8 players of about 75 each
+	// the line is kept to about 300 characters plus at most 8 players of about 75 each
 	const int maxPlayers = Min( g_logFramePoses.GetInteger(), 8 );
 	int logged = 0;
 	for ( int i = 0; i < MAX_CLIENTS && logged < maxPlayers; i++ ) {
