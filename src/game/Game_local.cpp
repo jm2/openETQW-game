@@ -5174,6 +5174,7 @@ idCVar g_fpuExceptions( "g_fpuExceptions", "0", CVAR_BOOL | CVAR_GAME | CVAR_NOC
 idCVar g_debugStatsSetup( "g_debugStatsSetup", "0", CVAR_GAME | CVAR_BOOL | CVAR_NOCHEAT, "prints any problems with calculating a client rank when they connect to a server" );
 idCVar g_simHash( "g_simHash", "0", CVAR_GAME | CVAR_BOOL, "emit authoritative simulation state hash (SIM_HASH line) every tick; off by default, tests that need it set it explicitly" );
 idCVar g_determinismTest( "g_determinismTest", "0", CVAR_GAME | CVAR_INTEGER, "execute a tick-indexed determinism test input stream: 1 on foot, then a titan; 2 a ground vehicle, then an aircraft (M5 step 5a); 3 a tour of vehicle seats for the seat gate (M5 step 13); 4 a drive of each vehicle class for the hull-lead measurement (M5 step 14b)" );
+idCVar g_leadMeasureDrive( "g_leadMeasureDrive", "1", CVAR_GAME | CVAR_BOOL, "OpenETQW test diagnostic, g_determinismTest 4: 1 the schedule drives each class; 0 it only spawns, enters and removes them, and the player's own commands drive (a network client's measurement, docs/hull-lead.md 6)" );
 
 /*
 ================
@@ -12015,6 +12016,11 @@ again) or flown (aircraft: lift-off, nose down, a yaw and roll ramp, level, desc
 left and removed. The goliath (a walker, not a rigid body) and the platypus (it needs
 water) are not in it. As in schedule 2, the schedule replaces the live input from tick
 21 on, so input the client happens to send cannot change the run.
+With g_leadMeasureDrive 0 the player's own commands drive instead (the engine's
+lead-measure-join/-listen: a network client's input that the server replaced would be
+mispredicted). The schedule still spawns, enters, leaves and removes each class, and its
+segments start LEAD_CLIENT_SETTLE ticks after the player is first seen spawned (a client
+joins long after tick 21); LEAD_DONE marks the end instead of a quit.
 ===============
 */
 void idGameLocal::RunLeadMeasureSchedule( usercmd_t* cmds ) {
@@ -12030,7 +12036,9 @@ void idGameLocal::RunLeadMeasureSchedule( usercmd_t* cmds ) {
 	static const int numClasses = sizeof( classes ) / sizeof( classes[ 0 ] );
 	static const int LEAD_START = 21;
 	static const int LEAD_SEGMENT = 200;
+	static const int LEAD_CLIENT_SETTLE = 60;
 	static idEntityPtr< idEntity > spawned;
+	static int clientStart = -1;
 
 	const int tick = framenum;
 	idPlayer* p = GetLocalPlayer();
@@ -12041,38 +12049,58 @@ void idGameLocal::RunLeadMeasureSchedule( usercmd_t* cmds ) {
 		return;
 	}
 	usercmd_t& cmd = cmds[ p->entityNumber ];
+	const bool scripted = g_leadMeasureDrive.GetBool();
 
 	static short baseAngles[ 3 ];
 	static bool baseAnglesValid = false;
-	if ( tick < LEAD_START ) {
-		baseAnglesValid = false;
-		if ( p->IsSpectating() ) {
-			p->SetGameTeam( &sdTeamManager::GetInstance().GetTeam( "gdf" ) );
-			p->SpawnFromSpawnSpot();
+	int start = LEAD_START;
+	if ( !scripted ) {
+		if ( clientStart < 0 ) {
+			if ( p->IsSpectating() ) {
+				return;
+			}
+			clientStart = tick + LEAD_CLIENT_SETTLE;
+			common->Printf( "LEAD_START: tick=%d client=%d\n", clientStart, p->entityNumber );
 		}
-		return;
+		start = clientStart;
+		if ( tick < start ) {
+			return;
+		}
+	} else {
+		if ( tick < LEAD_START ) {
+			baseAnglesValid = false;
+			if ( p->IsSpectating() ) {
+				p->SetGameTeam( &sdTeamManager::GetInstance().GetTeam( "gdf" ) );
+				p->SpawnFromSpawnSpot();
+			}
+			return;
+		}
+		if ( !baseAnglesValid ) {
+			baseAngles[ 0 ] = cmd.angles[ 0 ];
+			baseAngles[ 1 ] = cmd.angles[ 1 ];
+			baseAngles[ 2 ] = cmd.angles[ 2 ];
+			baseAnglesValid = true;
+		}
+		cmd.forwardmove = 0;
+		cmd.rightmove = 0;
+		cmd.upmove = 0;
+		cmd.buttons.btnValue = 0;
+		cmd.buttons.btn.run = true;
+		cmd.impulse = 0;
+		cmd.angles[ 0 ] = baseAngles[ 0 ];
+		cmd.angles[ 1 ] = baseAngles[ 1 ];
+		cmd.angles[ 2 ] = baseAngles[ 2 ];
 	}
-	if ( !baseAnglesValid ) {
-		baseAngles[ 0 ] = cmd.angles[ 0 ];
-		baseAngles[ 1 ] = cmd.angles[ 1 ];
-		baseAngles[ 2 ] = cmd.angles[ 2 ];
-		baseAnglesValid = true;
-	}
-	cmd.forwardmove = 0;
-	cmd.rightmove = 0;
-	cmd.upmove = 0;
-	cmd.buttons.btnValue = 0;
-	cmd.buttons.btn.run = true;
-	cmd.impulse = 0;
-	cmd.angles[ 0 ] = baseAngles[ 0 ];
-	cmd.angles[ 1 ] = baseAngles[ 1 ];
-	cmd.angles[ 2 ] = baseAngles[ 2 ];
 
-	const int segment = ( tick - LEAD_START ) / LEAD_SEGMENT;
-	const int local = ( tick - LEAD_START ) % LEAD_SEGMENT;
+	const int segment = ( tick - start ) / LEAD_SEGMENT;
+	const int local = ( tick - start ) % LEAD_SEGMENT;
 	if ( segment >= numClasses ) {
 		if ( local == 0 ) {
-			cmdSystem->BufferCommandText( CMD_EXEC_APPEND, "quit\n" );
+			if ( scripted ) {
+				cmdSystem->BufferCommandText( CMD_EXEC_APPEND, "quit\n" );
+			} else if ( segment == numClasses ) {
+				common->Printf( "LEAD_DONE: tick=%d\n", tick );
+			}
 		}
 		return;
 	}
@@ -12089,7 +12117,7 @@ void idGameLocal::RunLeadMeasureSchedule( usercmd_t* cmds ) {
 			}
 		}
 		for ( int i = 0; i < transports.Num(); i++ ) {
-			if ( tick > LEAD_START ) {
+			if ( tick > start ) {
 				common->Printf( "LEAD_FOREIGN: tick=%d removed %s\n", tick, transports[ i ]->GetName() );
 			}
 			transports[ i ]->ProcessEvent( &EV_Remove );
@@ -12117,6 +12145,8 @@ void idGameLocal::RunLeadMeasureSchedule( usercmd_t* cmds ) {
 			spawned.GetEntity()->ProcessEvent( &EV_Remove );
 		}
 		spawned = NULL;
+	} else if ( !scripted ) {
+		// the player's own commands drive
 	} else if ( local > 2 && local < 185 && !lc.aircraft ) {
 		if ( local <= 44 ) {
 			cmd.forwardmove = 127;						// throttle
