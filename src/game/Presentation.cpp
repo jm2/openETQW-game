@@ -146,11 +146,12 @@ void sdPresentation::SampleTick( idPlayer* viewPlayer ) {
 	if ( !seat.view->GetLastReturnedAxis( s.lastAxis ) ) {
 		s.lastAxis = s.camWorldAxis;
 	}
-	// the field of view ClampFinalAxis leaves room for (the tick's, the one the next tick's clamp
-	// will see)
-	const renderView_t& fovView = gameLocal.playerView.GetCurrentView();
-	s.fovX = fovView.fov_x;
-	s.fovY = fovView.fov_y;
+	// the field of view ClampFinalAxis leaves room for: the one these draws render with (the
+	// tick's view), which the next tick's clamp reads too (from the last drawn view), so a
+	// change (an aspect ratio, a zoom) reaches the draws' clamp with the screen, not a tick
+	// after it (review)
+	s.fovX = view->fov_x;
+	s.fovY = view->fov_y;
 	// a chase view orbits its focus: CalculateViewPos puts the camera at focus - forward x
 	// length unless the world clip, the lift over the hull or the distance damping moved
 	// it, and only then is a turn about the focus what the next tick would show
