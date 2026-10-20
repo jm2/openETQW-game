@@ -12055,6 +12055,9 @@ void idGameLocal::RunLeadMeasureSchedule( usercmd_t* cmds ) {
 	static bool baseAnglesValid = false;
 	int start = LEAD_START;
 	if ( !scripted ) {
+		if ( clientStart >= 0 && tick < clientStart - LEAD_CLIENT_SETTLE ) {
+			clientStart = -1;	// a new map: framenum started again
+		}
 		if ( clientStart < 0 ) {
 			if ( p->IsSpectating() ) {
 				return;
