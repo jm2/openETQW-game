@@ -39,8 +39,8 @@ extern idCVar g_simHash;
 // in the blended hull's frame, and the chase views (smooth, smooth_free, smooth_locked),
 // whose own tick cameras it blends in the world. pivot and freepivot views (the gunners)
 // follow a turret or gun joint, which the presentation blends with the transport's other
-// joints since the gunner views (vehicle-responsiveness 3.6); their late look (stage 5) is a
-// later tier. The jetpack has its own recipe (icarus).
+// joints since the gunner views (vehicle-responsiveness 3.6), and both have late look (stage
+// 5). The jetpack has its own recipe (icarus).
 // A view whose thirdPerson flag does not match its recipe (valley has two third-person
 // standard views) is not drawn: sdPresentation's tick sample refuses it.
 static const seatRecipe_t seatRecipes[] = {
@@ -51,10 +51,10 @@ static const seatRecipe_t seatRecipes[] = {
 	{ SPK_TRANSPORT, "smooth_free", false, true, true, true },
 	{ SPK_TRANSPORT, "smooth_locked", false, true, true, true },
 	// gunner views (vehicle-responsiveness 3.6): first person on the turret's eye joint, drawn
-	// with the transport's blended joints; pivot with late look (its eye arm swings with the
-	// drawn angles); freepivot's clamp has no pure copy yet
+	// with the transport's blended joints, both with late look: pivot's eye arm swings with the
+	// drawn angles, freepivot's with its drawn axis (the angles in the world, the hull's up)
 	{ SPK_TRANSPORT, "pivot", false, true, false, true },
-	{ SPK_TRANSPORT, "freepivot", false, true, false, false },
+	{ SPK_TRANSPORT, "freepivot", false, true, false, true },
 	// the jetpack (an sdJetPack, its own proxy kind): first person at its origin plus the eye
 	// offset, the view angles in the world; drawn as the standard view, with its late look
 	// (its clamp is the base one, pitch extents only)

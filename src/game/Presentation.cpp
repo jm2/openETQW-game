@@ -130,16 +130,28 @@ void sdPresentation::SampleTick( idPlayer* viewPlayer ) {
 	s.camWorldAxis = view->viewaxis;
 	s.thirdPerson = recipe->worldCamera;
 	// stage 5, the damped first-person view: camera = viewAngles x eye (VehicleView.cpp,
-	// CalcViewAxes), so the camera without the angles is what the tick's eye and clamps left
-	// review of #38: only where the class's clamp is the base one and has no rate limit
-	// or hull-relative final clamp (ClampFinalAxis), and never in a seat that needs the
-	// tophat (the pilots: their mouse flies the vehicle)
+	// CalcViewAxes), so the camera without the angles is what the tick's eye and clamps left.
+	// Only where the class has a pure copy of its clamp (HasPureClamp) and, with a
+	// hull-relative final clamp (ClampFinalAxis), a draw can follow it (GetFinalClampJoint), and
+	// never in a seat that needs the tophat (the pilots: their mouse flies the vehicle)
 	const positionViewMode_t& parms = seat.view->GetViewParms();
 	// (rate limits are followed: the pure clamp limits the late turn to the rate over the
-	// elapsed time, and the input a tick took is the rate-limited one)
-	s.lateLook = recipe->lateLook && seat.view->HasPureClamp() && !parms.tophatRequired
-		&& !parms.clampDampedYaw.flags.enabled && !parms.clampDampedPitch.flags.enabled;
-	s.ownerAxis = const_cast< sdTransport* >( seat.transport )->GetPhysics()->GetAxis();
+	// elapsed time, and the input a tick took is the rate-limited one; the damped first-person
+	// view's clampDamped* clamp of its final axis is ClampFinalAxisPure at the draw)
+	const bool damped = parms.clampDampedYaw.flags.enabled || parms.clampDampedPitch.flags.enabled;
+	s.finalClamp = !s.thirdPerson && damped && seat.view->GetFinalClampJoint( s.finalJoint );
+	s.lateLook = recipe->lateLook && seat.view->HasPureClamp() && !parms.tophatRequired && ( !damped || s.finalClamp );
+	seat.view->GetClampAxis( s.ownerAxis );
+	// the axis the tick's view returned: the next tick's clamp turns its input by it (freepivot)
+	if ( !seat.view->GetLastReturnedAxis( s.lastAxis ) ) {
+		s.lastAxis = s.camWorldAxis;
+	}
+	// the field of view ClampFinalAxis leaves room for: the one these draws render with (the
+	// tick's view), which the next tick's clamp reads too (from the last drawn view), so a
+	// change (an aspect ratio, a zoom) reaches the draws' clamp with the screen, not a tick
+	// after it (review)
+	s.fovX = view->fov_x;
+	s.fovY = view->fov_y;
 	// a chase view orbits its focus: CalculateViewPos puts the camera at focus - forward x
 	// length unless the world clip, the lift over the hull or the distance damping moved
 	// it, and only then is a turn about the focus what the next tick would show
@@ -165,6 +177,13 @@ void sdPresentation::SampleTick( idPlayer* viewPlayer ) {
 	s.hasPivot = !s.thirdPerson && seat.view->GetPivotArm( s.pivotArm, s.followPitch, s.followYaw );
 	if ( s.hasPivot ) {
 		s.pivotHull = s.camOffset - s.pivotArm * PivotRotation( s.tickAngles, s.followPitch, s.followYaw );
+	}
+	// a freepivot view: camera = pivot + arm x axis, axis = the angles in the world times the eye
+	// axis (damped towards the world), with the hull's up axis (CalculateViewPos, CalcViewAxes)
+	s.freePivot = !s.thirdPerson && seat.view->GetFreePivotArm( s.pivotArm );
+	if ( s.freePivot ) {
+		s.eyeAxis = viewPlayer->vehicleEyeAxis;
+		s.pivotHull = s.camOffset - ( s.pivotArm * s.camWorldAxis ) * inverseHull;
 	}
 	s.speed = const_cast< sdTransport* >( seat.transport )->GetPhysics()->GetLinearVelocity().Length();
 	s.valid = true;
@@ -463,6 +482,10 @@ void sdPresentation::PrepareDraw( float fraction, const usercmd_t* cmd ) {
 	}
 	ApplyLeadCorrection( prev, cur, L, f, t );
 
+	// the joints at the frame's own fraction, as the in-hull camera (they are in the hull's
+	// frame); before the camera, whose final clamp can take its base from one
+	BlendJoints( prev, cur, f );
+
 	// stage 5 (late look): the mouse turn made since the tick, every angle difference the
 	// shortest arc (usercmd angles wrap in 16 bits)
 	const bool lateLook = cur.lateLook && prev.lateLook && g_unlock_vehicleLook.GetBool();
@@ -518,23 +541,57 @@ void sdPresentation::PrepareDraw( float fraction, const usercmd_t* cmd ) {
 			// the tick ), r_n the part of the tick's angle change its input did not cause
 			// (auto-centre, clamps), spread over the tick so it does not step at its end
 			idAngles drawn = cur.tickAngles;
+			// the input as each tick's clamp took it: freepivot turns it into screen space by the
+			// roll of the axis the view returned before (tick n-1's for tick n's own turn)
+			idAngles input( 0.0f, 0.0f, 0.0f );
+			if ( cur.inputTaken ) {
+				for ( int i = 0; i < 2; i++ ) {
+					input[ i ] = idMath::AngleNormalize180( SHORT2ANGLE( static_cast< short >( cur.cmdAngles[ i ] - prev.cmdAngles[ i ] ) ) );
+				}
+				input = seat.view->LateLookTurn( input, prev.lastAxis );
+			}
+			const idAngles lateTurn = seat.view->LateLookTurn( turn, cur.lastAxis );
 			for ( int i = 0; i < 2; i++ ) {
-				float input = cur.inputTaken ? idMath::AngleNormalize180( SHORT2ANGLE( static_cast< short >( cur.cmdAngles[ i ] - prev.cmdAngles[ i ] ) ) ) : 0.0f;
 				// a rate-limited class took at most its rate over the tick (ClampAngle): the rest of
 				// the input is not a residual to spread, the tick never showed it
 				const angleClamp_t& clamp = i == 0 ? seat.view->GetViewParms().clampPitch : seat.view->GetViewParms().clampYaw;
 				if ( clamp.flags.limitRate ) {
 					const float rate = clamp.rate[ 0 ] * MS2SEC( USERCMD_MSEC );
-					input = idMath::ClampFloat( -rate, rate, input );
+					input[ i ] = idMath::ClampFloat( -rate, rate, input[ i ] );
 				}
-				const float residual = idMath::AngleNormalize180( idMath::AngleNormalize180( cur.tickAngles[ i ] - prev.tickAngles[ i ] ) - input );
-				drawn[ i ] = idMath::AngleNormalize180( cur.tickAngles[ i ] - ( 1.0f - f ) * residual + turn[ i ] );
+				const float residual = idMath::AngleNormalize180( idMath::AngleNormalize180( cur.tickAngles[ i ] - prev.tickAngles[ i ] ) - input[ i ] );
+				drawn[ i ] = idMath::AngleNormalize180( cur.tickAngles[ i ] - ( 1.0f - f ) * residual + lateTurn[ i ] );
 			}
-			seat.view->ClampViewAnglesPure( drawn, cur.tickAngles, cur.ownerAxis, f * MS2SEC( USERCMD_MSEC ) );
-			idQuat baseQuat;
-			baseQuat.Slerp( prev.lookBase.ToQuat(), cur.lookBase.ToQuat(), cf );
-			drawViewAxis = drawn.ToMat3() * baseQuat.ToMat3() * drawHullAxis;
-			if ( cur.hasPivot && prev.hasPivot ) {
+			// freepivot's angles are in the world and it clamps them in its hull's frame: the drawn
+			// hull's, or a gun held at an extent while the hull turns would be held one tick's turn
+			// off the drawn hull and step at each tick (review)
+			seat.view->ClampViewAnglesPure( drawn, cur.tickAngles, cur.freePivot ? drawHullAxis : cur.ownerAxis, f * MS2SEC( USERCMD_MSEC ) );
+			if ( cur.freePivot && prev.freePivot ) {
+				// freepivot (CalcViewAxes): the angles in the world times its eye axis, with the
+				// drawn hull's up axis
+				idQuat eyeQuat;
+				eyeQuat.Slerp( prev.eyeAxis.ToQuat(), cur.eyeAxis.ToQuat(), cf );
+				drawViewAxis = drawn.ToMat3() * eyeQuat.ToMat3();
+				drawViewAxis[ 2 ] = drawHullAxis[ 2 ];
+				drawViewAxis[ 1 ].Cross( drawViewAxis[ 2 ], drawViewAxis[ 0 ] );
+				drawViewAxis[ 1 ].Normalize();
+				drawViewAxis[ 2 ].Cross( drawViewAxis[ 0 ], drawViewAxis[ 1 ] );
+				drawViewAxis[ 2 ].Normalize();
+			} else {
+				idQuat baseQuat;
+				baseQuat.Slerp( prev.lookBase.ToQuat(), cur.lookBase.ToQuat(), cf );
+				drawViewAxis = drawn.ToMat3() * baseQuat.ToMat3() * drawHullAxis;
+			}
+			if ( cur.finalClamp ) {
+				// the hull-relative clamp of the final axis (ClampFinalAxis), about the drawn base
+				seat.view->ClampFinalAxisPure( drawViewAxis, FinalClampBase( cur ), cur.fovX, cur.fovY );
+			}
+			if ( cur.freePivot && prev.freePivot ) {
+				// the eye swings about the pivot with the whole axis (CalcViewOrigin with no angles)
+				idVec3 pivot;
+				pivot.Lerp( prev.pivotHull, cur.pivotHull, cf );
+				drawViewOrigin = drawHullOrigin + pivot * drawHullAxis + cur.pivotArm * drawViewAxis;
+			} else if ( cur.hasPivot && prev.hasPivot ) {
 				// the eye swings on its arm with the drawn angles
 				idVec3 pivot;
 				pivot.Lerp( prev.pivotHull, cur.pivotHull, cf );
@@ -546,11 +603,30 @@ void sdPresentation::PrepareDraw( float fraction, const usercmd_t* cmd ) {
 			drawViewAxis = camQuat.ToMat3() * drawHullAxis;
 		}
 	}
-	// the joints at the frame's own fraction, as the in-hull camera (they are in the hull's frame)
-	BlendJoints( prev, cur, f );
 	drawProxySpawnId = cur.proxySpawnId;
 	blending = true;
 	blendedDraws++;
+}
+
+/*
+================
+sdPresentation::FinalClampBase
+
+the drawn base of a view's final clamp (ClampFinalAxis): one of the transport's joints as this
+draw blends it (the tick's when no blend is in use), or the transport's drawn axis
+================
+*/
+idMat3 sdPresentation::FinalClampBase( const sample_t& cur ) const {
+	const int j = cur.finalJoint;
+	if ( j != INVALID_JOINT && j >= 0 ) {
+		if ( drawJointsValid && j < drawJoints.Num() ) {
+			return drawJoints[ j ].ToMat3() * drawHullAxis;
+		}
+		if ( j < cur.joints.Num() ) {
+			return cur.joints[ j ].ToMat3() * drawHullAxis;
+		}
+	}
+	return drawHullAxis;
 }
 
 /*
