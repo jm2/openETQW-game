@@ -130,26 +130,24 @@ void sdPresentation::SampleTick( idPlayer* viewPlayer ) {
 	s.camWorldAxis = view->viewaxis;
 	s.thirdPerson = recipe->worldCamera;
 	// stage 5, the damped first-person view: camera = viewAngles x eye (VehicleView.cpp,
-	// CalcViewAxes), so the camera without the angles is what the tick's eye and clamps left
-	// review of #38: only where the class's clamp is the base one and has no rate limit
-	// or hull-relative final clamp (ClampFinalAxis), and never in a seat that needs the
-	// tophat (the pilots: their mouse flies the vehicle)
+	// CalcViewAxes), so the camera without the angles is what the tick's eye and clamps left.
+	// Only where the class has a pure copy of its clamp (HasPureClamp) and, with a
+	// hull-relative final clamp (ClampFinalAxis), a draw can follow it (GetFinalClampJoint), and
+	// never in a seat that needs the tophat (the pilots: their mouse flies the vehicle)
 	const positionViewMode_t& parms = seat.view->GetViewParms();
 	// (rate limits are followed: the pure clamp limits the late turn to the rate over the
-	// elapsed time, and the input a tick took is the rate-limited one; a first-person view's
-	// clampDamped* clamp of its final axis is ClampFinalAxisPure at the draw, a chase view's has
-	// no copy in the orbit)
+	// elapsed time, and the input a tick took is the rate-limited one; the damped first-person
+	// view's clampDamped* clamp of its final axis is ClampFinalAxisPure at the draw)
 	const bool damped = parms.clampDampedYaw.flags.enabled || parms.clampDampedPitch.flags.enabled;
-	s.lateLook = recipe->lateLook && seat.view->HasPureClamp() && !parms.tophatRequired && !( s.thirdPerson && damped );
+	s.finalClamp = !s.thirdPerson && damped && seat.view->GetFinalClampJoint( s.finalJoint );
+	s.lateLook = recipe->lateLook && seat.view->HasPureClamp() && !parms.tophatRequired && ( !damped || s.finalClamp );
 	seat.view->GetClampAxis( s.ownerAxis );
 	// the axis the tick's view returned: the next tick's clamp turns its input by it (freepivot)
 	if ( !seat.view->GetLastReturnedAxis( s.lastAxis ) ) {
 		s.lastAxis = s.camWorldAxis;
 	}
-	// the final clamp: its base and the field of view ClampFinalAxis leaves room for (the tick's,
-	// the one the next tick's clamp will see)
-	s.finalClamp = !s.thirdPerson && damped;
-	s.finalWorld = seat.view->GetFinalClampBase( s.finalJoint );
+	// the field of view ClampFinalAxis leaves room for (the tick's, the one the next tick's clamp
+	// will see)
 	const renderView_t& fovView = gameLocal.playerView.GetCurrentView();
 	s.fovX = fovView.fov_x;
 	s.fovY = fovView.fov_y;
@@ -563,7 +561,10 @@ void sdPresentation::PrepareDraw( float fraction, const usercmd_t* cmd ) {
 				const float residual = idMath::AngleNormalize180( idMath::AngleNormalize180( cur.tickAngles[ i ] - prev.tickAngles[ i ] ) - input[ i ] );
 				drawn[ i ] = idMath::AngleNormalize180( cur.tickAngles[ i ] - ( 1.0f - f ) * residual + lateTurn[ i ] );
 			}
-			seat.view->ClampViewAnglesPure( drawn, cur.tickAngles, cur.ownerAxis, f * MS2SEC( USERCMD_MSEC ) );
+			// freepivot's angles are in the world and it clamps them in its hull's frame: the drawn
+			// hull's, or a gun held at an extent while the hull turns would be held one tick's turn
+			// off the drawn hull and step at each tick (review)
+			seat.view->ClampViewAnglesPure( drawn, cur.tickAngles, cur.freePivot ? drawHullAxis : cur.ownerAxis, f * MS2SEC( USERCMD_MSEC ) );
 			if ( cur.freePivot && prev.freePivot ) {
 				// freepivot (CalcViewAxes): the angles in the world times its eye axis, with the
 				// drawn hull's up axis
@@ -610,14 +611,11 @@ void sdPresentation::PrepareDraw( float fraction, const usercmd_t* cmd ) {
 ================
 sdPresentation::FinalClampBase
 
-the drawn base of a view's final clamp (ClampFinalAxis): the world, the transport's drawn
-axis, or one of its joints as this draw blends it (the tick's when no blend is in use)
+the drawn base of a view's final clamp (ClampFinalAxis): one of the transport's joints as this
+draw blends it (the tick's when no blend is in use), or the transport's drawn axis
 ================
 */
 idMat3 sdPresentation::FinalClampBase( const sample_t& cur ) const {
-	if ( cur.finalWorld ) {
-		return mat3_identity;
-	}
 	const int j = cur.finalJoint;
 	if ( j != INVALID_JOINT && j >= 0 ) {
 		if ( drawJointsValid && j < drawJoints.Num() ) {

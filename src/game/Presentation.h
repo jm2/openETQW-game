@@ -82,8 +82,7 @@ private:
 		bool				freePivot;		// a freepivot view: its axis is the angles in the world times eyeAxis,
 		idMat3				eyeAxis;		// with the hull's up axis, and the eye swings on pivotArm with it
 		bool				finalClamp;		// a hull-relative clampDamped* clamp of the final axis (ClampFinalAxis)
-		bool				finalWorld;		// its base: the world, the joint finalJoint, or the hull (INVALID_JOINT)
-		jointHandle_t		finalJoint;
+		jointHandle_t		finalJoint;		// its base: this joint of the transport, or the hull (INVALID_JOINT)
 		float				fovX;			// the field of view it leaves room for
 		float				fovY;
 		idVec3				focus;			// a chase view's orbit focus, in the world
