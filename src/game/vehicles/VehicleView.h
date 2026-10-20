@@ -103,6 +103,21 @@ public:
 	virtual bool					LateLookAllowed( const idPlayer* player, const usercmd_t& cmd ) const { return true; }
 	// the constraints a chase view's tick holds its camera axis to (ClampToViewConstraints)
 	virtual void					GetOrbitConstraints( angleClamp_t& pitch, angleClamp_t& yaw ) const { pitch = viewMode.clampPitch; yaw = viewMode.clampYaw; }
+	// the axis ClampViewAnglesPure is given (the transport's physics axis; freepivot clamps in
+	// its render axis)
+	virtual void					GetClampAxis( idMat3& axis ) const;
+	// the change ClampViewAngles makes of the view angles' change before it clamps them, given
+	// the axis the view last returned (freepivot turns it into screen space by that axis's roll)
+	virtual idAngles				LateLookTurn( const idAngles& delta, const idMat3& lastAxis ) const { return delta; }
+	// a free-pivot view: its axis is the view angles in the world with the transport's up axis,
+	// and its eye swings about the pivot on this arm with that axis (CalculateViewPos)
+	virtual bool					GetFreePivotArm( idVec3& arm ) const { return false; }
+	// where ClampFinalAxis (the hull-relative clampDamped* clamp) takes its base axis from: the
+	// world (true), or else the transport's joint `joint`, or its axis for INVALID_JOINT
+	virtual bool					GetFinalClampBase( jointHandle_t& joint ) const { joint = INVALID_JOINT; return false; }
+	// ClampFinalAxis for a draw: the same clamp of the final axis to the clampDamped* extents
+	// less half the given field of view, without its write to the damped axis; true if it clamped
+	bool							ClampFinalAxisPure( idMat3& axis, const idMat3& baseAxis, float fovX, float fovY ) const;
 
 private:
 	static sdVehicleViewFactory	viewFactory;
@@ -123,6 +138,8 @@ public:
 	virtual const idAngles			GetRequiredViewAngles( const idVec3& aimPosition ) const;
 
 	virtual bool					GetLastReturnedAxis( idMat3& axis ) const { axis = lastReturnedAxis; return true; }
+	// OpenETQW (M5 step 14, stage 5): ClampFinalAxis's base is GetDampingAxis, the eye joint
+	virtual bool					GetFinalClampBase( jointHandle_t& joint ) const { joint = eyeJoint; return false; }
 
 protected:
 	virtual void					GetDampingPos( idVec3& pos ) const;
@@ -158,6 +175,8 @@ public:
 		followYaw = viewMode.followYaw;
 		return true;
 	}
+	// its damping axis, ClampFinalAxis's base, is the transport's
+	virtual bool					GetFinalClampBase( jointHandle_t& joint ) const { joint = INVALID_JOINT; return false; }
 	virtual const char*			GetTypeName() const { return TypeName(); }
 	static const char*			TypeName() { return "pivot"; }
 
@@ -181,13 +200,24 @@ public:
 
 	virtual void				CalculateViewPos( idPlayer* player, idVec3& origin, idMat3& axis, bool fullUpdate );
 	virtual void				ClampViewAngles( idAngles& viewAngles, const idAngles& oldAngles ) const;
-	virtual bool				HasPureClamp( void ) const { return false; }	// OpenETQW: stage 5
+	// OpenETQW (M5 step 14, stage 5), the late look: ClampViewAnglesPure is ClampViewAngles after
+	// its screen-space turn (LateLookTurn, which the caller applies) and without the fresh entry,
+	// in the render axis GetClampAxis gives. The eye swings with the whole axis (GetFreePivotArm),
+	// not by the angles on a pivot arm, and ClampFinalAxis's base is the world
+	virtual void				ClampViewAnglesPure( idAngles& viewAngles, const idAngles& oldViewAngles, const idMat3& ownerAxis, float elapsedSec ) const;
+	virtual void				GetClampAxis( idMat3& axis ) const;
+	virtual idAngles			LateLookTurn( const idAngles& delta, const idMat3& lastAxis ) const;
+	virtual bool				GetFreePivotArm( idVec3& arm ) const { arm = eyeOffset * eyeBaseAxis; return true; }
+	virtual bool				GetPivotArm( idVec3& arm, bool& followPitch, bool& followYaw ) const { return false; }
+	virtual bool				GetFinalClampBase( jointHandle_t& joint ) const { joint = INVALID_JOINT; return true; }
 
 protected:
 	virtual void				GetDampingAxis( idMat3& axis ) const;
 
 	virtual void				CalcViewAxes( const idMat3& axisIn, idMat3& axisOut, const idAngles& angles );
 	virtual void				CalcNewViewAngles( idAngles& angles ) const;
+	// OpenETQW: ClampViewAngles's clamps after its fresh entry, for the tick and (pure) for a draw
+	void						ClampInOwnerSpace( idAngles& viewAngles, const idAngles& oldAngles, const idMat3& ownerAxis, bool pure, float elapsedSec ) const;
 };
 
 class sdDampedVehicleView_Player : public sdDampedVehicleView {

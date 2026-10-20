@@ -197,6 +197,15 @@ void sdVehicleView::ClampViewAnglesPure( idAngles& viewAngles, const idAngles& o
 
 /*
 ================
+sdVehicleView::GetClampAxis
+================
+*/
+void sdVehicleView::GetClampAxis( idMat3& axis ) const {
+	axis = position->GetTransport()->GetPhysics()->GetAxis();
+}
+
+/*
+================
 sdVehicleView::DoFreshEntryAngles
 ================
 */
@@ -324,15 +333,29 @@ void sdVehicleView::ClampFinalAxis( idMat3& axis, const idMat3& baseAxis, idMat3
 	// need the fovs of the final rendering screen to do it
 	const renderView_t& view = gameLocal.playerView.GetCurrentView();
 
+	idMat3 dampedAxisTransform = axis * dampedAxis.Transpose();
+	// OpenETQW (M5 step 14, stage 5): the clamp itself is ClampFinalAxisPure, which a draw calls too
+	if ( ClampFinalAxisPure( axis, baseAxis, view.fov_x, view.fov_y ) ) {
+		// now we have the final clamped axis, we can reverse engineer what the damped axis
+		// should have been to achieve that... hopefully..
+		dampedAxis = dampedAxisTransform.TransposeMultiply( axis );
+	}
+}
+
+/*
+================
+sdVehicleView::ClampFinalAxisPure
+================
+*/
+bool sdVehicleView::ClampFinalAxisPure( idMat3& axis, const idMat3& baseAxis, float fovX, float fovY ) const {
 	// calculate the clamps necessary to prevent the edge of the view exceeding the maximum
 	angleClamp_t pitchClamp = viewMode.clampDampedPitch;
 	angleClamp_t yawClamp = viewMode.clampDampedYaw;
-	pitchClamp.extents[ 0 ] += view.fov_y * 0.5f;
-	pitchClamp.extents[ 1 ] -= view.fov_y * 0.5f;
-	yawClamp.extents[ 0 ] += view.fov_x * 0.5f;
-	yawClamp.extents[ 1 ] -= view.fov_x * 0.5f;
+	pitchClamp.extents[ 0 ] += fovY * 0.5f;
+	pitchClamp.extents[ 1 ] -= fovY * 0.5f;
+	yawClamp.extents[ 0 ] += fovX * 0.5f;
+	yawClamp.extents[ 1 ] -= fovX * 0.5f;
 
-	idMat3 dampedAxisTransform = axis * dampedAxis.Transpose();
 	idMat3 localAxis = axis * baseAxis.Transpose();
 	idAngles localAngles = localAxis.ToAngles();
 
@@ -341,11 +364,9 @@ void sdVehicleView::ClampFinalAxis( idMat3& axis, const idMat3& baseAxis, idMat3
 		|| !sdVehiclePosition::ClampAngle( localAngles, tempAngles, yawClamp, 1, 0.00001f ) ) {
 
 		axis = localAngles.ToMat3() * baseAxis;
-
-		// now we have the final clamped axis, we can reverse engineer what the damped axis
-		// should have been to achieve that... hopefully..
-		dampedAxis = dampedAxisTransform.TransposeMultiply( axis );
+		return true;
 	}
+	return false;
 }
 
 /*
@@ -694,23 +715,49 @@ sdDampedVehicleView_FreePivot::ClampViewAngles
 void sdDampedVehicleView_FreePivot::ClampViewAngles( idAngles& viewAngles, const idAngles& oldViewAngles ) const {
 	if ( !freshEntry ) {
 		// convert angle delta into one in screen space
-		idAngles oldFinalViewAngles = lastReturnedAxis.ToAngles();
-
-		idMat2 rotMat;
-		rotMat.Rotation( DEG2RAD( oldFinalViewAngles.roll ) );
-		idAngles deltaAngles = ( viewAngles - oldViewAngles ).Normalize180();
-		idVec2 deltaVec( deltaAngles.yaw, deltaAngles.pitch );
-		deltaVec *= rotMat;
-
-		deltaAngles.yaw = deltaVec[ 0 ];
-		deltaAngles.pitch = deltaVec[ 1 ];
-
-		viewAngles = oldViewAngles + deltaAngles;
+		viewAngles = oldViewAngles + LateLookTurn( ( viewAngles - oldViewAngles ).Normalize180(), lastReturnedAxis );
 	}
 
 	idAngles oldAngles = oldViewAngles;
 	DoFreshEntryAngles( viewAngles, oldAngles );
 
+	// move angles back into "clamping space" using the damping axis to find a transform
+	idMat3 ownerAxis = position->GetTransport()->GetRenderEntity()->axis;
+	ClampInOwnerSpace( viewAngles, oldAngles, ownerAxis, false, 0.0f );
+}
+
+/*
+================
+sdDampedVehicleView_FreePivot::LateLookTurn
+
+OpenETQW (M5 step 14, stage 5): ClampViewAngles's turn of the angle change into screen space,
+by the roll of the axis the view last returned; the tick and the late look share it
+================
+*/
+idAngles sdDampedVehicleView_FreePivot::LateLookTurn( const idAngles& delta, const idMat3& lastAxis ) const {
+	idAngles oldFinalViewAngles = lastAxis.ToAngles();
+
+	idMat2 rotMat;
+	rotMat.Rotation( DEG2RAD( oldFinalViewAngles.roll ) );
+	idAngles deltaAngles = delta;
+	idVec2 deltaVec( deltaAngles.yaw, deltaAngles.pitch );
+	deltaVec *= rotMat;
+
+	deltaAngles.yaw = deltaVec[ 0 ];
+	deltaAngles.pitch = deltaVec[ 1 ];
+	return deltaAngles;
+}
+
+/*
+================
+sdDampedVehicleView_FreePivot::ClampInOwnerSpace
+
+OpenETQW (M5 step 14, stage 5): ClampViewAngles's clamps after the fresh entry, the flip clamp
+and then the view's own clamps in the owner's space. pure: rate limits over elapsedSec, for a
+draw (ClampAnglePure); else the tick's sdVehiclePosition::ClampAngle
+================
+*/
+void sdDampedVehicleView_FreePivot::ClampInOwnerSpace( idAngles& viewAngles, const idAngles& oldAngles, const idMat3& ownerAxis, bool pure, float elapsedSec ) const {
 	// do a clamp to prevent it going crazy when the player looks all the way up or all the way down
 	angleClamp_t flipClamp;
 	flipClamp.extents.x = -80.0f;
@@ -718,10 +765,12 @@ void sdDampedVehicleView_FreePivot::ClampViewAngles( idAngles& viewAngles, const
 	flipClamp.flags.enabled = true;
 	flipClamp.flags.limitRate = false;
 
-	sdVehiclePosition::ClampAngle( viewAngles, oldAngles, flipClamp, 0 );
+	if ( pure ) {
+		ClampAnglePure( viewAngles, oldAngles, flipClamp, 0, elapsedSec );
+	} else {
+		sdVehiclePosition::ClampAngle( viewAngles, oldAngles, flipClamp, 0 );
+	}
 
-	// move angles back into "clamping space" using the damping axis to find a transform
-	idMat3 ownerAxis = position->GetTransport()->GetRenderEntity()->axis;
 	idMat3 dampingAxis;
 	GetDampingAxis( dampingAxis );
 
@@ -733,12 +782,35 @@ void sdDampedVehicleView_FreePivot::ClampViewAngles( idAngles& viewAngles, const
 	ownerSpaceAngles.Normalize180();
 	ownerSpaceOldAngles.Normalize180();
 
-	sdVehiclePosition::ClampAngle( ownerSpaceAngles, ownerSpaceOldAngles, viewMode.clampPitch, 0 );
-	sdVehiclePosition::ClampAngle( ownerSpaceAngles, ownerSpaceOldAngles, viewMode.clampYaw, 1 );
+	if ( pure ) {
+		ClampAnglePure( ownerSpaceAngles, ownerSpaceOldAngles, viewMode.clampPitch, 0, elapsedSec );
+		ClampAnglePure( ownerSpaceAngles, ownerSpaceOldAngles, viewMode.clampYaw, 1, elapsedSec );
+	} else {
+		sdVehiclePosition::ClampAngle( ownerSpaceAngles, ownerSpaceOldAngles, viewMode.clampPitch, 0 );
+		sdVehiclePosition::ClampAngle( ownerSpaceAngles, ownerSpaceOldAngles, viewMode.clampYaw, 1 );
+	}
 
 	// now transform the clamped angle back into clamping space
 	viewAngles = ( dampingSpaceToClampSpace.TransposeMultiply( ownerSpaceAngles.ToForward() ) ).ToAngles();
 	viewAngles.Normalize180();
+}
+
+/*
+================
+sdDampedVehicleView_FreePivot::ClampViewAnglesPure
+================
+*/
+void sdDampedVehicleView_FreePivot::ClampViewAnglesPure( idAngles& viewAngles, const idAngles& oldViewAngles, const idMat3& ownerAxis, float elapsedSec ) const {
+	ClampInOwnerSpace( viewAngles, oldViewAngles, ownerAxis, true, elapsedSec );
+}
+
+/*
+================
+sdDampedVehicleView_FreePivot::GetClampAxis
+================
+*/
+void sdDampedVehicleView_FreePivot::GetClampAxis( idMat3& axis ) const {
+	axis = position->GetTransport()->GetRenderEntity()->axis;
 }
 
 /*
