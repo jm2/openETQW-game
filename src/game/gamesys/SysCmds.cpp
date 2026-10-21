@@ -17,6 +17,7 @@ static char THIS_FILE[] = __FILE__;
 #include "../Moveable.h"
 #include "../vehicles/Walker.h"
 #include "../Player.h"
+#include "../ContentMask.h"
 
 #include "../botai/Bot.h"
 #include "../botai/BotThread.h"
@@ -1275,6 +1276,287 @@ void Cmd_PlaceVehicle_f( const idCmdArgs &args ) {
 	vehicle->SetOrigin( origin );
 	vehicle->ActivatePhysics();
 	gameLocal.Printf( "PLACE_VEHICLE: %s to (%.1f %.1f %.1f)\n", vehicle->name.c_str(), origin.x, origin.y, origin.z );
+}
+
+
+/*
+==================
+Cmd_M2Parity_f
+
+OpenETQW test diagnostic (a cheat): the M2 render-world parity scenes. The same
+command runs on a listen host, whose game uses the client's real render world, and on
+a dedicated server, whose game uses idRenderWorldHeadless through
+sdRenderWorldHeadlessLocal. meson m2-render-world-parity compares the M2_PARITY lines.
+
+The scenes report what the render world answered, not a pass. The test encodes the
+current relationship (queue §3 item 8, ledger 013); when a fix changes it, the test
+fails so the expectation and the ledger are updated with it.
+
+	m2Parity probe
+	m2Parity prone <client>
+	m2Parity proneTrace <client>
+	m2Parity radiuspush <client>
+	m2Parity exit <client> <vehicle entity name or entityDef> <x> <y> <z> <yaw>
+==================
+*/
+static idPlayer* M2ParityPlayer( int clientNum ) {
+	if ( clientNum < 0 || clientNum >= MAX_CLIENTS || gameLocal.entities[ clientNum ] == NULL ) {
+		return NULL;
+	}
+	return gameLocal.entities[ clientNum ]->Cast< idPlayer >();
+}
+
+static void M2ParityProbe( void ) {
+	const idBounds& worldBounds = gameLocal.clip.GetWorldBounds();
+	// well outside every collision model and every .procb area node
+	const idVec3 outside( worldBounds[ 1 ].x + 4096.0f, worldBounds[ 1 ].y + 4096.0f, worldBounds[ 1 ].z + 4096.0f );
+	gameLocal.Printf( "M2_PARITY: scene=probe server=%d client=%d numAreas=%d pointInside=%d pointOutside=%d worldBounds=(%.2f %.2f %.2f)-(%.2f %.2f %.2f)\n",
+		gameLocal.isServer ? 1 : 0, gameLocal.isClient ? 1 : 0,
+		gameRenderWorld->NumAreas(),
+		gameRenderWorld->PointInArea( worldBounds.GetCenter() ),
+		gameRenderWorld->PointInArea( outside ),
+		worldBounds[ 0 ].x, worldBounds[ 0 ].y, worldBounds[ 0 ].z,
+		worldBounds[ 1 ].x, worldBounds[ 1 ].y, worldBounds[ 1 ].z );
+}
+
+static void M2ParityProne( idPlayer* player ) {
+	// EnterProne makes the combat model, which is the render-model clip model a prone player
+	// is hit through. The scene is split: this command sets it up, the test lets a few ticks
+	// link the physics clip models, and m2Parity proneTrace measures it.
+	//
+	// The bot can spawn above the terrain (the spawn origin is not the floor), and
+	// idPhysics_Player would fall out from under the scene. Settle onto the first solid
+	// surface below first, so prone and radiuspush measure the same place on every host.
+	idVec3 settleOrigin = player->GetPhysics()->GetOrigin();
+	trace_t groundTrace;
+	if ( gameLocal.clip.TracePoint( groundTrace, settleOrigin, settleOrigin - idVec3( 0.0f, 0.0f, 8192.0f ), MASK_PLAYERSOLID, player ) ) {
+		settleOrigin = groundTrace.endpos + idVec3( 0.0f, 0.0f, 1.0f );
+	}
+	player->SetOrigin( settleOrigin );
+	player->GetPlayerPhysics().ResetProne();
+	player->GetPlayerPhysics().SetFrozen( false );
+	player->GetPhysics()->SetLinearVelocity( vec3_origin );
+	player->GetPlayerPhysics().EnterProne();
+	player->GetPlayerPhysics().SetFrozen( true );
+	// SetFrozen is a network/broadcast flag, not a physics freeze: idPhysics_Player still
+	// integrates gravity. The scene needs the bot to stay put until proneTrace, so remove
+	// gravity here and restore it in the other scenes (m2Parity radiuspush/exit).
+	player->GetPhysics()->SetGravity( vec3_origin );
+	player->UpdateVisuals();
+	player->Present();
+
+	const idVec3 origin = player->GetPhysics()->GetOrigin();
+	gameLocal.Printf( "M2_PARITY: scene=proneSetup client=%d prone=%d combatModel=%d origin=(%.2f %.2f %.2f)\n",
+		player->entityNumber, player->GetPlayerPhysics().IsProne() ? 1 : 0,
+		player->GetCombatModel() != NULL ? 1 : 0, origin.x, origin.y, origin.z );
+}
+
+static void M2ParityProneTrace( idPlayer* player ) {
+	idClipModel* combatModel = player->GetCombatModel();
+	idBounds combatBounds;
+	combatBounds.Clear();
+	int handle = -1;
+	if ( combatModel != NULL ) {
+		handle = combatModel->GetRenderEntity();
+		combatBounds = combatModel->GetAbsBounds();
+	}
+	const bool combatBoundsReal = ( combatModel != NULL && !combatBounds.IsCleared()
+		&& combatBounds.GetSize().LengthSqr() > 1.0f );
+	// aim through the player's body, which exists on both hosts. Today both render worlds'
+	// ModelTrace are stubs and answer false; that is the answer being measured, not an aim
+	// point, and the test encodes it so a fix changes the test with it.
+	idBounds bodyBounds = player->GetPhysics()->GetAbsBounds();
+	if ( bodyBounds.IsCleared() ) {
+		bodyBounds = idBounds( player->GetPhysics()->GetOrigin() );
+	}
+	const idVec3 center = bodyBounds.GetCenter();
+	// pick a horizontal approach that no world geometry blocks, so the only thing on the
+	// line is the player (a spawn room is not always open on +X)
+	idVec3 approach( 128.0f, 0.0f, 0.0f );
+	static const idVec3 approaches[4] = { idVec3( 128.0f, 0.0f, 0.0f ), idVec3( -128.0f, 0.0f, 0.0f ),
+		idVec3( 0.0f, 128.0f, 0.0f ), idVec3( 0.0f, -128.0f, 0.0f ) };
+	for ( int i = 0; i < 4; i++ ) {
+		trace_t clearTrace;
+		if ( !gameLocal.clip.TracePoint( clearTrace, center, center + approaches[ i ], MASK_PLAYERSOLID, player ) ) {
+			approach = approaches[ i ];
+			break;
+		}
+	}
+	const idVec3 start = center + approach;
+	const idVec3 end = center;
+
+	modelTrace_t modelTrace;
+	memset( &modelTrace, 0, sizeof( modelTrace ) );
+	modelTrace.fraction = 1.0f;
+	const bool modelHit = ( combatModel != NULL )
+		&& gameRenderWorld->ModelTrace( modelTrace, handle, start, end, 4.0f );
+
+	trace_t clipTrace;
+	memset( &clipTrace, 0, sizeof( clipTrace ) );
+	clipTrace.fraction = 1.0f;
+	const bool clipHit = gameLocal.clip.TracePoint( clipTrace, start, end, MASK_SHOT_RENDERMODEL, NULL );
+
+	gameLocal.Printf( "M2_PARITY: scene=prone client=%d prone=%d frozen=%d combatModel=%d handle=%d boundsClear=%d boundsSize=(%.2f %.2f %.2f) bodyCenter=(%.2f %.2f %.2f) modelHit=%d modelFraction=%.4f clipHit=%d clipFraction=%.4f clipEntity=%d\n",
+		player->entityNumber, player->GetPlayerPhysics().IsProne() ? 1 : 0,
+		player->GetPlayerPhysics().IsFrozen() ? 1 : 0,
+		combatModel != NULL ? 1 : 0, handle, combatBoundsReal ? 0 : 1,
+		combatBounds.GetSize().x, combatBounds.GetSize().y, combatBounds.GetSize().z,
+		center.x, center.y, center.z,
+		modelHit ? 1 : 0, modelTrace.fraction,
+		clipHit ? 1 : 0, clipTrace.fraction,
+		( clipHit && clipTrace.c.entityNum >= 0 ) ? clipTrace.c.entityNum : -1 );
+}
+
+static void M2ParityRadiusPush( idPlayer* player ) {
+	// Find a wall in the collision world (identical on both hosts) with a clear point
+	// behind it, inside one push radius of the reference point. The scene is a push across
+	// that wall; RadiusPush asks the render world's FastWorldTrace whether the wall blocks
+	// it. FastWorldTrace is a stub in both worlds today (it answers false), so the scene
+	// measures that answer; a real implementation must change the test with it.
+	const idVec3 reference = player->GetPhysics()->GetOrigin() + idVec3( 0.0f, 0.0f, 40.0f );
+	const float radius = 512.0f;
+	idVec3 behind( 0.0f, 0.0f, 0.0f );
+	float wallDistance = 0.0f;
+	bool wallFound = false;
+
+	for ( int scanYaw = 0; scanYaw < 360 && !wallFound; scanYaw += 10 ) {
+		const idVec3 dir = idAngles( 0.0f, (float)scanYaw, 0.0f ).ToForward();
+		trace_t wallTrace;
+		if ( !gameLocal.clip.TracePoint( wallTrace, reference, reference + dir * 1024.0f, MASK_PLAYERSOLID, player ) ) {
+			continue;
+		}
+		if ( wallTrace.fraction >= 1.0f ) {
+			continue;
+		}
+		const idVec3 candidate = wallTrace.endpos + dir * 96.0f;
+		if ( ( candidate - reference ).LengthSqr() > radius * radius ) {
+			continue;
+		}
+		if ( gameLocal.clip.Contents( candidate, NULL, mat3_identity, MASK_PLAYERSOLID, NULL ) != 0 ) {
+			continue;
+		}
+		behind = candidate;
+		wallDistance = ( wallTrace.endpos - reference ).Length();
+		wallFound = true;
+	}
+
+	player->GetPlayerPhysics().ResetProne();
+	player->GetPlayerPhysics().SetFrozen( false );
+	player->GetPhysics()->SetGravity( gameLocal.GetGravity() );
+	player->GetPhysics()->SetLinearVelocity( vec3_origin );
+	int listed = 0;
+	bool selfListed = false;
+	idEntity* touchList[ MAX_GENTITIES ];
+	idBounds touchBounds( reference );
+	touchBounds.ExpandSelf( radius );
+	if ( wallFound ) {
+		player->SetOrigin( behind );
+		player->GetPhysics()->SetLinearVelocity( vec3_origin );
+		listed = gameLocal.clip.EntitiesTouchingBounds( touchBounds, -1, touchList, MAX_GENTITIES );
+		for ( int i = 0; i < listed; i++ ) {
+			if ( touchList[ i ] == player ) {
+				selfListed = true;
+				break;
+			}
+		}
+		gameLocal.RadiusPush( reference, radius, NULL, 1000.0f, NULL, NULL, 0, false );
+	}
+	const idVec3 center = player->GetPhysics()->GetAbsBounds().GetCenter();
+	const float centerDistance = ( center - reference ).Length();
+	const idVec3 velocity = player->GetPhysics()->GetLinearVelocity();
+
+	gameLocal.Printf( "M2_PARITY: scene=radiuspush client=%d wallFound=%d wallDistance=%.2f reference=(%.2f %.2f %.2f) behind=(%.2f %.2f %.2f) listed=%d selfListed=%d doPush=%d centerDistance=%.2f pushed=%d speed=%.4f velocity=(%.4f %.4f %.4f)\n",
+		player->entityNumber, wallFound ? 1 : 0, wallDistance,
+		reference.x, reference.y, reference.z, behind.x, behind.y, behind.z,
+		listed, selfListed ? 1 : 0, player->DoRadiusPush() ? 1 : 0, centerDistance,
+		velocity.LengthSqr() > 1.0f ? 1 : 0, velocity.Length(), velocity.x, velocity.y, velocity.z );
+}
+
+static void M2ParityExit( idPlayer* player, sdTransport* vehicle, const idVec3& reference, float yaw ) {
+	// Put the vehicle just outside the collision world's bounds at the reference point's
+	// height: every exit joint is outside all .procb areas on a listen host, while the
+	// headless world answers 0 for every point. A real exit request (force=false, as
+	// OnUsed makes it) then either finds no joint or takes the first one.
+	player->GetPlayerPhysics().ResetProne();
+	player->GetPlayerPhysics().SetFrozen( false );
+	player->GetPhysics()->SetGravity( gameLocal.GetGravity() );
+	player->SetOrigin( reference );
+	player->SetViewAngles( idAngles( 0.0f, yaw, 0.0f ) );
+
+	const idBounds& worldBounds = gameLocal.clip.GetWorldBounds();
+	const idVec3 vehicleOrigin( worldBounds[ 1 ].x + 4096.0f, reference.y, reference.z );
+	vehicle->GetPhysics()->SetLinearVelocity( vec3_origin );
+	vehicle->GetPhysics()->SetAngularVelocity( vec3_origin );
+	vehicle->SetAxis( idAngles( 0.0f, yaw, 0.0f ).ToMat3() );
+	vehicle->SetOrigin( vehicleOrigin );
+	vehicle->ActivatePhysics();
+
+	vehicle->FindPositionForPlayer( player );
+	const bool entered = ( player->GetProxyEntity() == vehicle );
+	bool exitAccepted = false;
+	if ( entered && vehicle->GetUsableInterface() != NULL ) {
+		exitAccepted = vehicle->GetUsableInterface()->OnExit( player, false );
+	}
+	const bool stillInVehicle = ( player->GetProxyEntity() == vehicle );
+
+	gameLocal.Printf( "M2_PARITY: scene=exit client=%d vehicle=%s entered=%d exitAccepted=%d stillInVehicle=%d vehicleArea=%d numAreas=%d worldMaxX=%.2f vehicleOrigin=(%.2f %.2f %.2f)\n",
+		player->entityNumber, vehicle->name.c_str(), entered ? 1 : 0, exitAccepted ? 1 : 0,
+		stillInVehicle ? 1 : 0, gameRenderWorld->PointInArea( vehicleOrigin ),
+		gameRenderWorld->NumAreas(), worldBounds[ 1 ].x,
+		vehicleOrigin.x, vehicleOrigin.y, vehicleOrigin.z );
+}
+
+void Cmd_M2Parity_f( const idCmdArgs &args ) {
+	if ( args.Argc() < 2 ) {
+		gameLocal.Printf( "usage: m2Parity probe | prone <client> | proneTrace <client> | radiuspush <client> | exit <client> <vehicle> <x> <y> <z> <yaw>\n" );
+		return;
+	}
+
+	const char* scene = args.Argv( 1 );
+	if ( !idStr::Icmp( scene, "probe" ) ) {
+		M2ParityProbe();
+		return;
+	}
+
+	if ( args.Argc() < 3 ) {
+		gameLocal.Printf( "M2_PARITY: scene=%s error=missing-client\n", scene );
+		return;
+	}
+	idPlayer* player = M2ParityPlayer( atoi( args.Argv( 2 ) ) );
+	if ( player == NULL ) {
+		gameLocal.Printf( "M2_PARITY: scene=%s client=%s error=not-a-player\n", scene, args.Argv( 2 ) );
+		return;
+	}
+
+	if ( !idStr::Icmp( scene, "radiuspush" ) ) {
+		M2ParityRadiusPush( player );
+		return;
+	}
+	if ( !idStr::Icmp( scene, "prone" ) ) {
+		M2ParityProne( player );
+		return;
+	}
+	if ( !idStr::Icmp( scene, "proneTrace" ) ) {
+		M2ParityProneTrace( player );
+		return;
+	}
+
+	if ( !idStr::Icmp( scene, "exit" ) ) {
+		if ( args.Argc() < 8 ) {
+			gameLocal.Printf( "M2_PARITY: scene=exit client=%d error=missing-arguments\n", player->entityNumber );
+			return;
+		}
+		sdTransport* vehicle = FindTestVehicle( args.Argv( 3 ) );
+		if ( vehicle == NULL ) {
+			gameLocal.Printf( "M2_PARITY: scene=exit client=%d error=no-vehicle-%s\n", player->entityNumber, args.Argv( 3 ) );
+			return;
+		}
+		const idVec3 exitReference( atof( args.Argv( 4 ) ), atof( args.Argv( 5 ) ), atof( args.Argv( 6 ) ) );
+		M2ParityExit( player, vehicle, exitReference, atof( args.Argv( 7 ) ) );
+		return;
+	}
+
+	gameLocal.Printf( "M2_PARITY: scene=%s error=unknown-scene\n", scene );
 }
 
 /*
@@ -3933,6 +4215,7 @@ void idGameLocal::InitConsoleCommands( void ) {
 	cmdSystem->AddCommand( "resetVehicle",				Cmd_ResetVehicle_f,				CMD_FL_GAME|CMD_FL_CHEAT,	"OpenETQW test diagnostic: 'resetVehicle <vehicle> mark' remembers a vehicle's pose, 'resetVehicle <vehicle>' puts it back there at rest" );
 	cmdSystem->AddCommand( "rockVehicle",				Cmd_RockVehicle_f,				CMD_FL_GAME|CMD_FL_CHEAT,	"OpenETQW test diagnostic: 'rockVehicle <vehicle> <deg/s>' sets a vehicle's pitch rate, so a parked one rocks on its suspension" );
 	cmdSystem->AddCommand( "placeVehicle",				Cmd_PlaceVehicle_f,				CMD_FL_GAME|CMD_FL_CHEAT,	"OpenETQW test diagnostic: 'placeVehicle <vehicle> <x> <y> <z> <yaw>' puts a vehicle there, level and at rest" );
+	cmdSystem->AddCommand( "m2Parity",					Cmd_M2Parity_f,					CMD_FL_GAME|CMD_FL_CHEAT,	"OpenETQW test diagnostic: M2 render-world parity scenes: probe | prone <client> | proneTrace <client> | radiuspush <client> | exit <client> <vehicle> <x> <y> <z> <yaw>" );
 	cmdSystem->AddCommand( "swapVehicleSeat",			Cmd_SwapVehicleSeat_f,			CMD_FL_GAME|CMD_FL_CHEAT,		"swaps vehicle seat for player" );
 	cmdSystem->AddCommand( "cycleVehicleCamera",		Cmd_CycleVehicleCamera_f,		CMD_FL_GAME,		"cycles a player's vehicle camera to the seat's next view" );
 	cmdSystem->AddCommand( "deployStatus",				Cmd_DeployStatus_f,				CMD_FL_GAME,		"prints deployable status" );
@@ -3956,6 +4239,7 @@ void idGameLocal::ShutdownConsoleCommands( void ) {
 	cmdSystem->RemoveCommand( "resetVehicle" );
 	cmdSystem->RemoveCommand( "rockVehicle" );
 	cmdSystem->RemoveCommand( "placeVehicle" );
+	cmdSystem->RemoveCommand( "m2Parity" );
 	cmdSystem->RemoveCommand( "swapVehicleSeat" );
 	cmdSystem->RemoveCommand( "cycleVehicleCamera" );
 	cmdSystem->RemoveCommand( "deployStatus" );
