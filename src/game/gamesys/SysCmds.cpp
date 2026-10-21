@@ -1250,6 +1250,35 @@ void Cmd_RockVehicle_f( const idCmdArgs &args ) {
 
 /*
 ==================
+Cmd_PlaceVehicle_f
+
+OpenETQW test diagnostic (a cheat): 'placeVehicle <vehicle> <x> <y> <z> <yaw>' puts a
+transport there, level and at rest, riders and all (as resetVehicle does). meson seat-poses
+puts the jetpack on open ground before each flight (issue #151): where it is entered, walls
+can sit closer than one drive leg, and the flight stalls against them.
+==================
+*/
+void Cmd_PlaceVehicle_f( const idCmdArgs &args ) {
+	if ( args.Argc() < 6 ) {
+		gameLocal.Printf( "usage: placeVehicle <vehicle entity name or entityDef> <x> <y> <z> <yaw>\n" );
+		return;
+	}
+	sdTransport* vehicle = FindTestVehicle( args.Argv( 1 ) );
+	if ( vehicle == NULL ) {
+		gameLocal.Printf( "PLACE_VEHICLE: no vehicle '%s'\n", args.Argv( 1 ) );
+		return;
+	}
+	const idVec3 origin( atof( args.Argv( 2 ) ), atof( args.Argv( 3 ) ), atof( args.Argv( 4 ) ) );
+	vehicle->GetPhysics()->SetLinearVelocity( vec3_origin );
+	vehicle->GetPhysics()->SetAngularVelocity( vec3_origin );
+	vehicle->SetAxis( idAngles( 0.0f, atof( args.Argv( 5 ) ), 0.0f ).ToMat3() );
+	vehicle->SetOrigin( origin );
+	vehicle->ActivatePhysics();
+	gameLocal.Printf( "PLACE_VEHICLE: %s to (%.1f %.1f %.1f)\n", vehicle->name.c_str(), origin.x, origin.y, origin.z );
+}
+
+/*
+==================
 Cmd_ExitVehicle_f
 ==================
 */
@@ -3903,6 +3932,7 @@ void idGameLocal::InitConsoleCommands( void ) {
 	cmdSystem->AddCommand( "exitVehicle",				Cmd_ExitVehicle_f,				CMD_FL_GAME|CMD_FL_CHEAT,		"ejects player from vehicle" );
 	cmdSystem->AddCommand( "resetVehicle",				Cmd_ResetVehicle_f,				CMD_FL_GAME|CMD_FL_CHEAT,	"OpenETQW test diagnostic: 'resetVehicle <vehicle> mark' remembers a vehicle's pose, 'resetVehicle <vehicle>' puts it back there at rest" );
 	cmdSystem->AddCommand( "rockVehicle",				Cmd_RockVehicle_f,				CMD_FL_GAME|CMD_FL_CHEAT,	"OpenETQW test diagnostic: 'rockVehicle <vehicle> <deg/s>' sets a vehicle's pitch rate, so a parked one rocks on its suspension" );
+	cmdSystem->AddCommand( "placeVehicle",				Cmd_PlaceVehicle_f,				CMD_FL_GAME|CMD_FL_CHEAT,	"OpenETQW test diagnostic: 'placeVehicle <vehicle> <x> <y> <z> <yaw>' puts a vehicle there, level and at rest" );
 	cmdSystem->AddCommand( "swapVehicleSeat",			Cmd_SwapVehicleSeat_f,			CMD_FL_GAME|CMD_FL_CHEAT,		"swaps vehicle seat for player" );
 	cmdSystem->AddCommand( "cycleVehicleCamera",		Cmd_CycleVehicleCamera_f,		CMD_FL_GAME,		"cycles a player's vehicle camera to the seat's next view" );
 	cmdSystem->AddCommand( "deployStatus",				Cmd_DeployStatus_f,				CMD_FL_GAME,		"prints deployable status" );
@@ -3925,6 +3955,7 @@ void idGameLocal::ShutdownConsoleCommands( void ) {
 	cmdSystem->RemoveCommand( "exitVehicle" );
 	cmdSystem->RemoveCommand( "resetVehicle" );
 	cmdSystem->RemoveCommand( "rockVehicle" );
+	cmdSystem->RemoveCommand( "placeVehicle" );
 	cmdSystem->RemoveCommand( "swapVehicleSeat" );
 	cmdSystem->RemoveCommand( "cycleVehicleCamera" );
 	cmdSystem->RemoveCommand( "deployStatus" );
