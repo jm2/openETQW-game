@@ -2245,6 +2245,7 @@ void idGameLocal::Init( void ) {
 	cmdSystem->AddCommand( "printVehicleScripts",	idPrintGameDecls_f< DECLTYPE_VEHICLESCRIPT >,	CMD_FL_SYSTEM | CMD_FL_GAME, "prints a vehicle script",	idArgCompletionGameDecl_f< DECLTYPE_VEHICLESCRIPT > );
 
 	cmdSystem->AddCommand( "testGUI",				idGameLocal::TestGUI_f,							CMD_FL_SYSTEM | CMD_FL_GAME, "Replace the main menu with a test gui.", idArgCompletionGameDecl_f< DECLTYPE_GUI > );
+	cmdSystem->AddCommand( "testHudReload",		idGameLocal::TestHudReload_f,					CMD_FL_SYSTEM | CMD_FL_GAME, "Reload the player HUD in place from a gui (test).", idArgCompletionGameDecl_f< DECLTYPE_GUI > );
 
 	sdDeclGUI::InitDefines();
 

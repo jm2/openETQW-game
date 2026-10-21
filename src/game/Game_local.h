@@ -1722,6 +1722,7 @@ public:
 	static int				InsertTask( sdUIList* list, const sdPlayerTask* task, bool highlightActive );
 
 	static void				TestGUI_f( const idCmdArgs& args );
+	static void				TestHudReload_f( const idCmdArgs& args );
 	static void				ListClientEntities_f( const idCmdArgs& args );
 
 	void					SetupMapMetaData( const char* mapName );
