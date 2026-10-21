@@ -1175,23 +1175,27 @@ struct resetVehicleMark_t {
 };
 static resetVehicleMark_t resetVehicleMarks[ MAX_GENTITIES ];
 
+// a live transport by entity name, or the first live one of an entityDef ("vehicle_badger")
+static sdTransport* FindTestVehicle( const char* name ) {
+	idEntity* ent = gameLocal.FindEntity( name );
+	if ( ent != NULL ) {
+		return ent->Cast< sdTransport >();
+	}
+	for ( ent = gameLocal.spawnedEntities.Next(); ent != NULL; ent = ent->spawnNode.Next() ) {
+		sdTransport* trans = ent->Cast< sdTransport >();
+		if ( trans != NULL && trans->GetHealth() > 0 && !idStr::Icmp( trans->spawnArgs.GetString( "classname" ), name ) ) {
+			return trans;
+		}
+	}
+	return NULL;
+}
+
 void Cmd_ResetVehicle_f( const idCmdArgs &args ) {
 	if ( args.Argc() < 2 ) {
 		gameLocal.Printf( "usage: resetVehicle <vehicle entity name or entityDef> [mark]\n" );
 		return;
 	}
-	sdTransport* vehicle = NULL;
-	idEntity* ent = gameLocal.FindEntity( args.Argv( 1 ) );
-	if ( ent != NULL ) {
-		vehicle = ent->Cast< sdTransport >();
-	} else {
-		for ( ent = gameLocal.spawnedEntities.Next(); ent != NULL && vehicle == NULL; ent = ent->spawnNode.Next() ) {
-			sdTransport* trans = ent->Cast< sdTransport >();
-			if ( trans != NULL && trans->GetHealth() > 0 && !idStr::Icmp( trans->spawnArgs.GetString( "classname" ), args.Argv( 1 ) ) ) {
-				vehicle = trans;
-			}
-		}
-	}
+	sdTransport* vehicle = FindTestVehicle( args.Argv( 1 ) );
 	if ( vehicle == NULL ) {
 		gameLocal.Printf( "RESET_VEHICLE: no vehicle '%s'\n", args.Argv( 1 ) );
 		return;
@@ -1215,6 +1219,33 @@ void Cmd_ResetVehicle_f( const idCmdArgs &args ) {
 	vehicle->SetOrigin( mark.origin );
 	vehicle->ActivatePhysics();
 	gameLocal.Printf( "RESET_VEHICLE: %s to (%.1f %.1f %.1f)\n", vehicle->name.c_str(), mark.origin.x, mark.origin.y, mark.origin.z );
+}
+
+/*
+==================
+Cmd_RockVehicle_f
+
+OpenETQW test diagnostic (a cheat): 'rockVehicle <vehicle> <degrees a second>' sets a
+transport's angular velocity to that pitch rate about its own left axis and wakes its
+physics, so a parked vehicle rocks on its suspension and settles: the same hull rotation on
+every call from the same rest pose (resetVehicle), with nobody driving. meson seat-poses' L7
+(issue #154) rocks the badger under a gun held at its pitch limit.
+==================
+*/
+void Cmd_RockVehicle_f( const idCmdArgs &args ) {
+	if ( args.Argc() < 3 ) {
+		gameLocal.Printf( "usage: rockVehicle <vehicle entity name or entityDef> <pitch degrees a second>\n" );
+		return;
+	}
+	sdTransport* vehicle = FindTestVehicle( args.Argv( 1 ) );
+	if ( vehicle == NULL ) {
+		gameLocal.Printf( "ROCK_VEHICLE: no vehicle '%s'\n", args.Argv( 1 ) );
+		return;
+	}
+	const float rate = atof( args.Argv( 2 ) );
+	vehicle->GetPhysics()->SetAngularVelocity( vehicle->GetPhysics()->GetAxis()[ 1 ] * DEG2RAD( rate ) );
+	vehicle->ActivatePhysics();
+	gameLocal.Printf( "ROCK_VEHICLE: %s at %.1f deg/s\n", vehicle->name.c_str(), rate );
 }
 
 /*
@@ -3871,6 +3902,7 @@ void idGameLocal::InitConsoleCommands( void ) {
 	cmdSystem->AddCommand( "enterVehicle",				Cmd_EnterVehicle_f,				CMD_FL_GAME|CMD_FL_CHEAT,		"places player in vehicle" );
 	cmdSystem->AddCommand( "exitVehicle",				Cmd_ExitVehicle_f,				CMD_FL_GAME|CMD_FL_CHEAT,		"ejects player from vehicle" );
 	cmdSystem->AddCommand( "resetVehicle",				Cmd_ResetVehicle_f,				CMD_FL_GAME|CMD_FL_CHEAT,	"OpenETQW test diagnostic: 'resetVehicle <vehicle> mark' remembers a vehicle's pose, 'resetVehicle <vehicle>' puts it back there at rest" );
+	cmdSystem->AddCommand( "rockVehicle",				Cmd_RockVehicle_f,				CMD_FL_GAME|CMD_FL_CHEAT,	"OpenETQW test diagnostic: 'rockVehicle <vehicle> <deg/s>' sets a vehicle's pitch rate, so a parked one rocks on its suspension" );
 	cmdSystem->AddCommand( "swapVehicleSeat",			Cmd_SwapVehicleSeat_f,			CMD_FL_GAME|CMD_FL_CHEAT,		"swaps vehicle seat for player" );
 	cmdSystem->AddCommand( "cycleVehicleCamera",		Cmd_CycleVehicleCamera_f,		CMD_FL_GAME,		"cycles a player's vehicle camera to the seat's next view" );
 	cmdSystem->AddCommand( "deployStatus",				Cmd_DeployStatus_f,				CMD_FL_GAME,		"prints deployable status" );
@@ -3892,6 +3924,7 @@ void idGameLocal::ShutdownConsoleCommands( void ) {
 	cmdSystem->RemoveCommand( "enterVehicle" );
 	cmdSystem->RemoveCommand( "exitVehicle" );
 	cmdSystem->RemoveCommand( "resetVehicle" );
+	cmdSystem->RemoveCommand( "rockVehicle" );
 	cmdSystem->RemoveCommand( "swapVehicleSeat" );
 	cmdSystem->RemoveCommand( "cycleVehicleCamera" );
 	cmdSystem->RemoveCommand( "deployStatus" );
