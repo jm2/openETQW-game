@@ -1050,6 +1050,53 @@ void idGameLocal::TestGUI_f( const idCmdArgs& args ) {
 }
 
 /*
+============
+idGameLocal::TestHudReload_f
+
+Reload the player HUD in place, the way OnReloadGUI does.  A load error then
+stops the session and MapShutdown frees the HUD module, and with it the GUI
+instance whose Load is still on the stack (game #51).
+============
+*/
+void idGameLocal::TestHudReload_f( const idCmdArgs& args ) {
+	if( args.Argc() != 2 ) {
+		gameLocal.Printf( "usage: testHudReload <gui>\n" );
+		return;
+	}
+
+	sdPlayerHud* hud = gameLocal.localPlayerProperties.GetPlayerHud();
+	if( hud == NULL ) {
+		gameLocal.Warning( "testHudReload: no player HUD" );
+		return;
+	}
+
+	sdUserInterfaceLocal* ui = gameLocal.GetUserInterface( hud->GetGuiHandle() );
+	if( ui == NULL ) {
+		gameLocal.Warning( "testHudReload: the player HUD has no GUI" );
+		return;
+	}
+
+	const idStr previousName( ui->GetName() );
+	const bool active = ui->IsActive();
+	if( active ) {
+		ui->Deactivate( true );
+	}
+
+	ui->Clear();
+	const bool loaded = ui->Load( args.Argv( 1 ) );
+
+	bool restored = false;
+	if( !loaded && previousName.Length() ) {
+		ui->Clear();
+		restored = ui->Load( previousName.c_str() );
+	}
+	if( active && ( loaded || restored ) ) {
+		ui->Activate();
+	}
+	gameLocal.Printf( "testHudReload: result loaded=%d restored=%d active=%d\n", loaded ? 1 : 0, restored ? 1 : 0, ui->IsActive() ? 1 : 0 );
+}
+
+/*
 ================
 idGameLocal::LoadUserInterface
 ================

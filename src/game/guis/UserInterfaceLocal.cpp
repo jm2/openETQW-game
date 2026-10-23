@@ -630,6 +630,13 @@ bool sdUserInterfaceLocal::Load( const char* name ) {
 		return false;
 	}
 
+	// common->Error stops the session before it throws.  If this GUI belongs to
+	// a HUD module, the map shutdown that follows frees this instance while Load
+	// is still on the stack (game #51).  The catch below therefore uses only
+	// this copy of the name, locals and static helpers: never `this` or a caller
+	// pointer that could point into it.
+	const idStr loadName( name );
+
 	guiDecl = gameLocal.declGUIType[ name ];
 	if ( guiDecl == NULL ) {
 		gameLocal.Warning( "sdUserInterfaceLocal::Load Invalid GUI '%s'", name );
@@ -732,13 +739,16 @@ bool sdUserInterfaceLocal::Load( const char* name ) {
 			GetWindow( i )->OnCreate();
 		}
 	} catch ( idException& exception ) {
-		PrintStackTrace();
-		PopTrace();
+		// If the error dropped the map, this instance may already be gone and
+		// its destructor cleared parseStack.  Use only gameLocal, the name copy
+		// and the exception on that path; the trace helpers are for a load that
+		// failed without shutting anything down.
 		if ( gameLocal.MapShutdownCount() != shutdownsBeforeLoad ) {
-			gameLocal.Printf( "sdUserInterfaceLocal::Load: '%s' failed and the error dropped the map; passing it on\n", name );
+			gameLocal.Printf( "sdUserInterfaceLocal::Load: '%s' failed and the error dropped the map; passing it on\n", loadName.c_str() );
 			throw;
 		}
-		gameLocal.Warning( "sdUserInterfaceLocal::Load failed on '%s': %s", name, exception.error );
+		sdUserInterfaceLocal::PrintStackTrace();
+		gameLocal.Warning( "sdUserInterfaceLocal::Load failed on '%s': %s", loadName.c_str(), exception.error );
 		return false;
 	}
 
