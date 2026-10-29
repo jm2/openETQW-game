@@ -100,6 +100,19 @@ jobs:
       - name: No GPL-family code in the game repository
         run: python tools/ci/check_no_gpl.py
 
+      - name: No private detail in tracked files
+        run: python tools/ci/check_no_pii.py
+
+      - name: No private detail added by this pull request (files and commit messages)
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --quiet origin "${BASE_SHA}" "${HEAD_SHA}"
+          python tools/ci/check_no_pii.py --diff "${BASE_SHA}" --head "${HEAD_SHA}"
+
       - name: Script event handlers match their event definitions
         run: python tools/ci/check_event_handlers.py
 

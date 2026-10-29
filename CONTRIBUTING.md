@@ -16,6 +16,7 @@ get CI back: both stay private until the owner decides to publish.
    - `python3 tools/ci/check_spdx.py` (SPDX tags and the provenance allowlist)
    - `python3 tools/ci/check_no_gpl.py` (no GPL-family license markers)
    - `python3 tools/ci/selftest.py` (the gates still fail on what they exist to catch)
+   - `python3 tools/ci/check_no_pii.py --diff origin/main` (nothing the branch adds, commit messages included, names a private host, user, LAN address, e-mail or home path; § What never goes in)
    - `python3 tools/ci/check_event_handlers.py` (script event handlers match their event definitions, and every `events.script` declaration matches its native definition)
    - `python3 tools/ci/check_presentation_contract.py` (the seat presentation, `src/game/Presentation.*`, changes no game state and is used only from its hooks; M5 step 14)
    - `actionlint` (workflow lint)
@@ -76,9 +77,16 @@ repositories are private; add `--no-verify` to pin a SHA without fetching).
   SDK EULA (`LicenseRef-ETQW-SDK`), modified or not; correcting a wrong label to SDK, as
   on 2026-09-24 for `src/compiledscript`, is fine. New files carry
   `SPDX-License-Identifier: MIT`.
+- Private detail about the people and machines behind the work (owner, 2026-10-29; the
+  repositories are to go public). Name a machine by its platform ("the Linux x64 host"),
+  never by host name. No LAN addresses, user names, home paths or personal e-mail
+  addresses, in files, commit messages, PR and issue text, comments or release notes.
+  `tools/ci/check_no_pii.py` enforces the file and commit part; it is the same check as
+  the engine repository's, and a new private name goes into `tools/ci/pii_terms.sha256` as
+  a digest (`--add-term NAME`), never as text.
 
 ## Records
 Record deliberate deviations from retail 1.5 in `openETQW/docs/compat-ledger.md` and file
 origins in `openETQW/docs/provenance.md`. Keep `openETQW/STATUS.md` honest about what was
 verified: each claim carries its evidence level (`inspected` < `configured` < `compiled` <
-`unit-tested` < `launched` < `map-loaded` < `match-tested`), host, OS, architecture and commit.
+`unit-tested` < `launched` < `map-loaded` < `match-tested`), platform (OS, architecture, GPU class) and commit.
