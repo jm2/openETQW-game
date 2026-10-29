@@ -6,7 +6,8 @@ The game module for [OpenETQW](https://github.com/jm2/openETQW), a native 64-bit
 game from your own retail copy.
 
 This repository holds the game code that the engine loads: id Software's ET:QW 1.5 SDK
-code, which keeps the SDK's licence, plus the new files written for OpenETQW. The engine,
+code, which keeps the SDK's licence, with changes from jmarshall's reconstruction and new
+files written for OpenETQW. The engine,
 the build helpers and the tests are in [`openETQW`](https://github.com/jm2/openETQW); start
 with its readme.
 
@@ -43,13 +44,15 @@ before configuring the engine.
 python3 tools/ci/check_spdx.py            # licence tags and the provenance allowlist
 python3 tools/ci/check_no_gpl.py          # no GPL code in this repository
 python3 tools/ci/check_event_handlers.py  # script event handlers match their definitions
+python3 tools/ci/check_presentation_contract.py  # the vehicle presentation contract holds
 python3 tools/ci/check_no_pii.py          # no private detail in tracked files
 python3 tools/ci/selftest.py              # the checks above still catch what they exist to catch
 actionlint                                # workflow lint
 ```
 
 Add `--include-untracked` to `check_spdx.py` and `check_no_gpl.py` to check new files before
-you commit them. The runtime tests for the game (maps, bots, matches, network play) are in
+you commit them. New files carry an `SPDX-License-Identifier: MIT` line; the imported SDK
+files carry no tag, and their class is recorded in `tools/ci/spdx_allowlist.txt` instead. The runtime tests for the game (maps, bots, matches, network play) are in
 the engine repository.
 
 ## Layout
@@ -57,10 +60,12 @@ the engine repository.
 - `src/game/`: the game module.
 - `src/idlib/`: the SDK idLib, built as a static library for the game module and the engine.
 - `src/framework/`, `src/decllib/`, `src/bse/`, `src/sdnet/`, `src/renderer/`, `src/sound/`,
-  `src/sys/`, `src/libs/`, `src/cm/`, `src/common/`: SDK interface headers and a few sources
-  the engine builds with.
-- `src/compiledscript/scripts/`: the game scripts. They are not part of the build;
-  `events.script` is the reference for `check_event_handlers.py`.
+  `src/sys/`, `src/libs/`, `src/cm/`, `src/common/`: SDK interface headers and a few sources.
+  The engine copies the headers it needs, plus `src/decllib/DeclType.cpp` and
+  `src/idlib/BitMsg.cpp`, when it configures.
+- `src/compiledscript/`: the compiled-script runtime from the reconstruction, and the game
+  scripts in `scripts/`. None of it is part of the build. `scripts/events.script` is the
+  same as retail 1.5's and is the reference for `check_event_handlers.py`, so keep it.
 - `legal/`: the SDK EULA.
 - `tools/ci/`: licence checks, CI helpers and the engine commit this repository is tested
   against (`engine.ref`).
@@ -77,7 +82,8 @@ the engine repository.
 - **No GPL code** goes in this repository, because it can't be combined with the SDK code.
   `tools/ci/check_no_gpl.py` checks for it.
 - **Early history.** OpenETQW began as a fork of jmarshall's ET:QW source reconstruction,
-  and this repository's history starts with his commits.
+  and this repository's history starts with his commits. Code that came from his
+  reconstruction keeps his authorship.
 
 The engine's [`docs/provenance.md`](https://github.com/jm2/openETQW/blob/main/docs/provenance.md)
 records where each file came from.
