@@ -1092,7 +1092,4 @@ LicenseRef-ETQW-SDK src/sys/sys_public.h
 LicenseRef-ETQW-SDK src/sys/sys_render.h
 
 # --- MIT ---
-MIT src/compiledscript/.gitignore
-MIT src/compiledscript/CMakeLists.txt
 MIT src/compiledscript/README.md
-MIT src/compiledscript/tools/CompiledScriptCodegen.cpp
