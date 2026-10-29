@@ -2,7 +2,7 @@
 #
 # openETQW-game commit validation (openQ4-game commit-validation parity):
 #   * static checks: Python syntax, SPDX/provenance headers, no GPL-family
-#     code, CI gate self-test, engine pin format, workflow lint;
+#     code, no private detail, CI gate self-test, engine pin format, workflow lint;
 #   * the cross-platform build matrix of idLib + game_<arch>, each module
 #     validated by tools/ci/check_game_module.py (file name game_<arch>.{so,
 #     dylib,dll}, 64-bit container for the right CPU, GetGameAPI as the only
@@ -77,6 +77,8 @@ jobs:
         uses: actions/checkout@v7
         with:
           persist-credentials: false
+          # full history: check_no_pii.py --diff needs the merge base
+          fetch-depth: 0
 
       - name: Setup Python
         uses: actions/setup-python@v7
@@ -108,10 +110,8 @@ jobs:
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: |
-          set -euo pipefail
-          git fetch --no-tags --quiet origin "${BASE_SHA}" "${HEAD_SHA}"
-          python tools/ci/check_no_pii.py --diff "${BASE_SHA}" --head "${HEAD_SHA}"
+        # --head, not a checkout: the later steps keep testing the merge commit
+        run: python tools/ci/check_no_pii.py --diff "${BASE_SHA}" --head "${HEAD_SHA}"
 
       - name: Script event handlers match their event definitions
         run: python tools/ci/check_event_handlers.py
