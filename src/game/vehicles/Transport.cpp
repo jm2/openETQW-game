@@ -4007,6 +4007,7 @@ void sdTransport::WriteNetworkState( networkStateMode_t mode, const sdEntityStat
 			newData.positionWeapons[ i ] = positionManager.PositionForId( i )->GetWeaponIndex();
 		}
 
+		newData.teleporting				= IsTeleporting();
 		newData.modelDisabled			= vehicleFlags.modelDisabled;
 		newData.deathThroes				= vehicleFlags.deathThroes;
 		newData.careenStartTime			= careenStartTime;
