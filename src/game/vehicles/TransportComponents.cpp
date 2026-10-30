@@ -4058,7 +4058,9 @@ void sdVehicleRigidBodyPseudoHover::Init( const sdDeclVehiclePart& part, sdTrans
 	parent = _parent;
 	grounded = false;
 	parkMode = false;
+	foundPark = false;
 	lockedPark = false;
+	lastParkUpdateTime = 0;
 
 	hoverHeight = part.data.GetFloat( "height", "60" );
 	parkHeight = part.data.GetFloat( "height_park", "30" );
