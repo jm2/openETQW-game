@@ -51,6 +51,11 @@ typedef enum {
 	#define BUILD_OS_ID					0
 	#define	CPUSTRING					"x86"
 	#define CPU_EASYARGS				1
+#elif defined(_M_ARM64)
+	#define	BUILD_STRING				"win-arm64"
+	#define BUILD_OS_ID					0
+	#define	CPUSTRING					"arm64"
+	#define CPU_EASYARGS				0
 #else
 	#define	BUILD_STRING				"win-x64"
 	#define BUILD_OS_ID					0
