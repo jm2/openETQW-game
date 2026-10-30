@@ -119,6 +119,9 @@ jobs:
       - name: The seat presentation keeps its contract with tick state (M5 step 14)
         run: python tools/ci/check_presentation_contract.py
 
+      - name: Windows targets name their own architecture in the version banner
+        run: python tools/ci/check_build_string.py
+
       - name: CI gate self-test (the gates still fail on new gaps)
         run: python tools/ci/selftest.py
 
