@@ -124,7 +124,9 @@ void sdPoolAlloc<type,blockSize>::Free( type *t ) {
 	if( t == NULL ) {
 		return;
 	}
-	element_t *element = (element_t *)( ( (unsigned char *) t ) - ( (UINT_PTR) &((element_t *)0)->t ) );
+	// offsetof instead of the '&((element_t *)0)->t' idiom, which is a member access through a
+	// null pointer (undefined behaviour, reported by UBSan), as in Heap.h
+	element_t *element = (element_t *)( ( (unsigned char *) t ) - offsetof( element_t, t ) );
 	//element_t *element;
 	//element = ( element_t * )( ( (unsigned char *)t ) - offsetof( element_t, t ) );
 	element->next = free;
