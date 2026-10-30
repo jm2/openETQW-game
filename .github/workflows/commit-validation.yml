@@ -122,6 +122,9 @@ jobs:
       - name: Windows targets name their own architecture in the version banner
         run: python tools/ci/check_build_string.py
 
+      - name: Sanitizer settings stay as engine decision 0005 allows
+        run: python tools/ci/check_sanitizer_scope.py
+
       - name: CI gate self-test (the gates still fail on new gaps)
         run: python tools/ci/selftest.py
 

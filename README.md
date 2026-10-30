@@ -47,6 +47,7 @@ python3 tools/ci/check_build_string.py    # each Windows target names its own ar
 python3 tools/ci/check_event_handlers.py  # script event handlers match their definitions
 python3 tools/ci/check_presentation_contract.py  # the vehicle presentation contract holds
 python3 tools/ci/check_no_pii.py          # no private detail in tracked files
+python3 tools/ci/check_sanitizer_scope.py # only the vptr exclusions engine decision 0005 allows
 python3 tools/ci/selftest.py              # the checks above still catch what they exist to catch
 actionlint                                # workflow lint
 ```
