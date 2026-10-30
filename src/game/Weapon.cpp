@@ -268,6 +268,11 @@ idWeapon::idWeapon() {
 
 	playerWeaponNum			= NULL_WEAP;
 
+	// SetOwner (player spawn) reads both in UpdateVisibility before the weapon def
+	// is applied; the SDK never set worldModelDisabled outside its script events
+	modelDisabled			= false;
+	worldModelDisabled		= false;
+
 	getGrenadeFuseStartFunc = NULL;
 	ironSightsEnabledFunc	= NULL;
 
