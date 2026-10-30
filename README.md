@@ -43,6 +43,7 @@ before configuring the engine.
 ```sh
 python3 tools/ci/check_spdx.py            # licence tags and the provenance allowlist
 python3 tools/ci/check_no_gpl.py          # no GPL code in this repository
+python3 tools/ci/check_build_string.py    # each Windows target names its own architecture
 python3 tools/ci/check_event_handlers.py  # script event handlers match their definitions
 python3 tools/ci/check_presentation_contract.py  # the vehicle presentation contract holds
 python3 tools/ci/check_no_pii.py          # no private detail in tracked files
