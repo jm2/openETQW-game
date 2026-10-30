@@ -10,6 +10,7 @@ result.  A block the tool cannot find, or a compiler it cannot run, fails too.
 """
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -49,7 +50,8 @@ def main():
     if block is None:
         print(f"FAIL: no `#if !defined(_WIN64)` block found in {HEADER}")
         return 1
-    cc = os.environ.get("CC") or shutil.which("cc") or shutil.which("gcc") or shutil.which("clang")
+    # CC may hold a launcher and its compiler ("ccache gcc"); it must take gcc/clang flags
+    cc = shlex.split(os.environ.get("CC", "")) or [c for c in (shutil.which(n) for n in ("cc", "gcc", "clang")) if c][:1]
     if not cc:
         print("FAIL: no C compiler found to run the preprocessor (set CC)")
         return 1
@@ -58,8 +60,13 @@ def main():
         src = Path(tmp) / "block.h"
         src.write_text(block + "\nBS=BUILD_STRING\nCS=CPUSTRING\n", encoding="utf-8")
         for name, (defs, want) in TARGETS.items():
-            cmd = [cc, "-E", "-P", "-undef"] + [f"-D{d}" for d in defs] + [str(src)]
-            out = subprocess.run(cmd, capture_output=True, text=True)
+            cmd = cc + ["-E", "-P", "-undef"] + [f"-D{d}" for d in defs] + [str(src)]
+            try:
+                out = subprocess.run(cmd, capture_output=True, text=True)
+            except OSError as exc:
+                print(f"FAIL {name}: cannot run {cmd[0]}: {exc}")
+                failed += 1
+                continue
             if out.returncode != 0:
                 print(f"FAIL {name}: preprocessor exited {out.returncode}: {out.stderr.strip()}")
                 failed += 1
