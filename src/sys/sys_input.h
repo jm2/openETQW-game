@@ -163,6 +163,14 @@ public:
 	virtual int				ReturnInputEvent( const int n, int& action, int& value ) = 0;
 	virtual void			EndInputEvents() = 0;
 
+	// The pointer's position in the game window, 0..1 across its client area, while the
+	// platform tracks an absolute pointer (an uncaptured window); false otherwise. Menus
+	// place their cursor here, so it stays under the system pointer (#382).
+	virtual bool			GetPointerPosition( float& x, float& y ) const { x = 0.0f; y = 0.0f; return false; }
+	// Whether a menu cursor (an interactive GUI with GUI_SHOWCURSOR) was drawn in the last
+	// frame. The platform leaves the mouse uncaptured while it is (#382).
+	virtual void			SetMenuCursor( bool active ) { (void)active; }
+
 	static void				AllocateMouseButtons();
 	static mouseButton_t	StringToMouseButton( const char* str );
 	static const wchar_t*	MouseButtonToString( const mouseButton_t button, bool localized );

@@ -1319,6 +1319,10 @@ idGameLocal::GuiFrameEvents
 ============
 */
 void idGameLocal::GuiFrameEvents( bool outOfSequence ) {
+	// the platform leaves the mouse uncaptured while a menu cursor shows (#382)
+	if ( !outOfSequence ) {
+		sys->Mouse().SetMenuCursor( sdUserInterfaceLocal::TakeMenuCursorDrawn() );
+	}
 	uiManager->Update( outOfSequence );
 }
 

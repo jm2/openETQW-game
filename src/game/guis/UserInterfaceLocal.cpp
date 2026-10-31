@@ -18,6 +18,20 @@ static char THIS_FILE[] = __FILE__;
 
 #include "../../sys/sys_local.h"
 
+// set when an interactive GUI draws its cursor; read once a frame (#382)
+static bool menuCursorDrawn = false;
+
+/*
+============
+sdUserInterfaceLocal::TakeMenuCursorDrawn
+============
+*/
+bool sdUserInterfaceLocal::TakeMenuCursorDrawn( void ) {
+	const bool drawn = menuCursorDrawn;
+	menuCursorDrawn = false;
+	return drawn;
+}
+
 using namespace sdProperties;
 
 idCVar sdUserInterfaceLocal::g_debugGUIEvents( "g_debugGUIEvents", "0", CVAR_GAME | CVAR_INTEGER, "Show the results of events" );
@@ -782,6 +796,9 @@ void sdUserInterfaceLocal::Draw() {
 
 		if ( TestGUIFlag( GUI_SHOWCURSOR ) ) {
 			deviceContext->DrawMaterial( cursorPos.GetValue().x, cursorPos.GetValue().y, cursorSize.GetValue().x, cursorSize.GetValue().y, cursorMaterial, cursorColor );
+			if ( IsInteractive() ) {
+				menuCursorDrawn = true;
+			}
 		}
 	} else if ( screenSaverMaterial != NULL && allowScreenSaver ) {
 		deviceContext->DrawMaterial( 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, screenSaverMaterial, colorWhite );
@@ -1009,7 +1026,16 @@ bool sdUserInterfaceLocal::PostEvent( const sdSysEvent* event ) {
 	}
 
 	// save these off for the events
-	if ( !flags.ignoreLocalCursorUpdates && event->IsMouseEvent() ) {
+	float pointerX, pointerY;
+	if ( !flags.ignoreLocalCursorUpdates && event->IsMouseEvent() && TestGUIFlag( GUI_SHOWCURSOR ) && TestGUIFlag( GUI_FULLSCREEN ) &&
+		!TestGUIFlag( GUI_USE_MOUSE_PITCH ) && sys->Mouse().GetPointerPosition( pointerX, pointerY ) ) {
+		// an uncaptured window: the menu cursor sits under the system pointer (#382),
+		// across the GUI's whole screen, as the window shows it
+		idVec2 pos( pointerX * screenDimensions.GetValue().x, pointerY * screenDimensions.GetValue().y );
+		pos.x = idMath::ClampFloat( 0.0f, screenDimensions.GetValue().x, pos.x );
+		pos.y = idMath::ClampFloat( 0.0f, screenDimensions.GetValue().y, pos.y );
+		cursorPos = pos;
+	} else if ( !flags.ignoreLocalCursorUpdates && event->IsMouseEvent() ) {
 		idVec2 pos = cursorPos;
 		idVec2 scaledDelta( event->GetXCoord(), event->GetYCoord() );
 		scaledDelta *= inputScale;
