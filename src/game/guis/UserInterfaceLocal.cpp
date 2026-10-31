@@ -18,6 +18,23 @@ static char THIS_FILE[] = __FILE__;
 
 #include "../../sys/sys_local.h"
 
+// set when any GUI draws, and when a fullscreen menu draws its cursor; read once a frame (#382)
+static bool guiDrawn = false;
+static bool menuCursorDrawn = false;
+
+/*
+============
+sdUserInterfaceLocal::TakeMenuCursorDrawn
+============
+*/
+bool sdUserInterfaceLocal::TakeMenuCursorDrawn( bool& cursorDrawn ) {
+	const bool drawn = guiDrawn;
+	cursorDrawn = menuCursorDrawn;
+	guiDrawn = false;
+	menuCursorDrawn = false;
+	return drawn;
+}
+
 using namespace sdProperties;
 
 idCVar sdUserInterfaceLocal::g_debugGUIEvents( "g_debugGUIEvents", "0", CVAR_GAME | CVAR_INTEGER, "Show the results of events" );
@@ -771,6 +788,7 @@ void sdUserInterfaceLocal::Draw() {
 	if ( !desktop ) {
 		return;
 	}
+	guiDrawn = true;
 	
 	deviceContext->SetRegisters( shaderParms.Begin() );
 	bool allowScreenSaver = TestGUIFlag( GUI_SCREENSAVER ) && !TestGUIFlag( GUI_FULLSCREEN );
@@ -782,6 +800,11 @@ void sdUserInterfaceLocal::Draw() {
 
 		if ( TestGUIFlag( GUI_SHOWCURSOR ) ) {
 			deviceContext->DrawMaterial( cursorPos.GetValue().x, cursorPos.GetValue().y, cursorSize.GetValue().x, cursorSize.GetValue().y, cursorMaterial, cursorColor );
+			// only a fullscreen menu that places its cursor from the pointer (PostEvent); the
+			// in-game menus that steer with mouse pitch keep the mouse captured
+			if ( IsInteractive() && TestGUIFlag( GUI_FULLSCREEN ) && !TestGUIFlag( GUI_USE_MOUSE_PITCH ) ) {
+				menuCursorDrawn = true;
+			}
 		}
 	} else if ( screenSaverMaterial != NULL && allowScreenSaver ) {
 		deviceContext->DrawMaterial( 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, screenSaverMaterial, colorWhite );
@@ -1009,7 +1032,16 @@ bool sdUserInterfaceLocal::PostEvent( const sdSysEvent* event ) {
 	}
 
 	// save these off for the events
-	if ( !flags.ignoreLocalCursorUpdates && event->IsMouseEvent() ) {
+	float pointerX, pointerY;
+	if ( !flags.ignoreLocalCursorUpdates && event->IsMouseEvent() && TestGUIFlag( GUI_SHOWCURSOR ) && TestGUIFlag( GUI_FULLSCREEN ) &&
+		!TestGUIFlag( GUI_USE_MOUSE_PITCH ) && sys->Mouse().GetPointerPosition( pointerX, pointerY ) ) {
+		// an uncaptured window: the menu cursor sits under the system pointer (#382),
+		// across the GUI's whole screen, as the window shows it
+		idVec2 pos( pointerX * screenDimensions.GetValue().x, pointerY * screenDimensions.GetValue().y );
+		pos.x = idMath::ClampFloat( 0.0f, screenDimensions.GetValue().x, pos.x );
+		pos.y = idMath::ClampFloat( 0.0f, screenDimensions.GetValue().y, pos.y );
+		cursorPos = pos;
+	} else if ( !flags.ignoreLocalCursorUpdates && event->IsMouseEvent() ) {
 		idVec2 pos = cursorPos;
 		idVec2 scaledDelta( event->GetXCoord(), event->GetYCoord() );
 		scaledDelta *= inputScale;
@@ -1090,6 +1122,13 @@ bool sdUserInterfaceLocal::PostEvent( const sdSysEvent* event ) {
 		if ( ( keyNum != K_INVALID && ( keyNum < K_F1 || keyNum > K_F15 ) ) || ( event->IsControllerButtonEvent() ) ) {
 			retVal = true;
 		}
+	}
+
+	// a fullscreen menu that shows its cursor keeps the mouse's motion: with the mouse
+	// uncaptured in menus (#382), motion that no window takes would otherwise reach the
+	// user command and turn the player's view behind the menu
+	if ( event->IsMouseEvent() && TestGUIFlag( GUI_SHOWCURSOR ) && TestGUIFlag( GUI_FULLSCREEN ) && !TestGUIFlag( GUI_USE_MOUSE_PITCH ) ) {
+		retVal = true;
 	}
 
 	if( TestGUIFlag( GUI_TOOLTIPS ) && event->IsMouseEvent() ) {
