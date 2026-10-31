@@ -285,8 +285,9 @@ public:
 	static void							InitEvaluators( void );
 	static uiFunction_t*				FindFunction( const char* name );
 	static void							Shutdown( void );
-	// a menu cursor was drawn since the last call (idMouse::SetMenuCursor, #382)
-	static bool							TakeMenuCursorDrawn( void );
+	// false when no GUI drew since the last call (a frame that ran no tick); otherwise
+	// cursorDrawn says whether a fullscreen menu drew its cursor (idMouse::SetMenuCursor, #382)
+	static bool							TakeMenuCursorDrawn( bool& cursorDrawn );
 
 	void								CreateEvents( const sdDeclGUI* guiDecl, idTokenCache& tokenCache );
 	void								EnumerateEvents( const char* name, const idList<unsigned short>& flags, idList< sdUIEventInfo >& events, const idTokenCache& tokenCache );

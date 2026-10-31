@@ -18,7 +18,8 @@ static char THIS_FILE[] = __FILE__;
 
 #include "../../sys/sys_local.h"
 
-// set when an interactive GUI draws its cursor; read once a frame (#382)
+// set when any GUI draws, and when a fullscreen menu draws its cursor; read once a frame (#382)
+static bool guiDrawn = false;
 static bool menuCursorDrawn = false;
 
 /*
@@ -26,8 +27,10 @@ static bool menuCursorDrawn = false;
 sdUserInterfaceLocal::TakeMenuCursorDrawn
 ============
 */
-bool sdUserInterfaceLocal::TakeMenuCursorDrawn( void ) {
-	const bool drawn = menuCursorDrawn;
+bool sdUserInterfaceLocal::TakeMenuCursorDrawn( bool& cursorDrawn ) {
+	const bool drawn = guiDrawn;
+	cursorDrawn = menuCursorDrawn;
+	guiDrawn = false;
 	menuCursorDrawn = false;
 	return drawn;
 }
@@ -785,6 +788,7 @@ void sdUserInterfaceLocal::Draw() {
 	if ( !desktop ) {
 		return;
 	}
+	guiDrawn = true;
 	
 	deviceContext->SetRegisters( shaderParms.Begin() );
 	bool allowScreenSaver = TestGUIFlag( GUI_SCREENSAVER ) && !TestGUIFlag( GUI_FULLSCREEN );
@@ -796,7 +800,9 @@ void sdUserInterfaceLocal::Draw() {
 
 		if ( TestGUIFlag( GUI_SHOWCURSOR ) ) {
 			deviceContext->DrawMaterial( cursorPos.GetValue().x, cursorPos.GetValue().y, cursorSize.GetValue().x, cursorSize.GetValue().y, cursorMaterial, cursorColor );
-			if ( IsInteractive() ) {
+			// only a fullscreen menu that places its cursor from the pointer (PostEvent); the
+			// in-game menus that steer with mouse pitch keep the mouse captured
+			if ( IsInteractive() && TestGUIFlag( GUI_FULLSCREEN ) && !TestGUIFlag( GUI_USE_MOUSE_PITCH ) ) {
 				menuCursorDrawn = true;
 			}
 		}

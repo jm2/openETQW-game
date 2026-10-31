@@ -1320,8 +1320,10 @@ idGameLocal::GuiFrameEvents
 */
 void idGameLocal::GuiFrameEvents( bool outOfSequence ) {
 	// the platform leaves the mouse uncaptured while a menu cursor shows (#382)
-	if ( !outOfSequence ) {
-		sys->Mouse().SetMenuCursor( sdUserInterfaceLocal::TakeMenuCursorDrawn() );
+	// a pass that drew nothing (com_unlockFPS 0, no tick) leaves the state as it was
+	bool cursorDrawn;
+	if ( !outOfSequence && sdUserInterfaceLocal::TakeMenuCursorDrawn( cursorDrawn ) ) {
+		sys->Mouse().SetMenuCursor( cursorDrawn );
 	}
 	uiManager->Update( outOfSequence );
 }
