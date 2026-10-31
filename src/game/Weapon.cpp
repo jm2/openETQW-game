@@ -260,6 +260,7 @@ idWeapon::idWeapon() {
 	weaponItem				= NULL;
 	thread					= NULL;
 	onActivateFunc			= NULL;
+	onActivateFuncHeld		= NULL;
 	onUsedFunc				= NULL;
 	onWeapNextFunc			= NULL;
 	onWeapPrevFunc			= NULL;
@@ -272,6 +273,7 @@ idWeapon::idWeapon() {
 	// is applied; the SDK never set worldModelDisabled outside its script events
 	modelDisabled			= false;
 	worldModelDisabled		= false;
+	activateAttack			= false;
 
 	getGrenadeFuseStartFunc = NULL;
 	ironSightsEnabledFunc	= NULL;
