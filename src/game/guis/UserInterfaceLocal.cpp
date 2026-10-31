@@ -1124,6 +1124,13 @@ bool sdUserInterfaceLocal::PostEvent( const sdSysEvent* event ) {
 		}
 	}
 
+	// a fullscreen menu that shows its cursor keeps the mouse's motion: with the mouse
+	// uncaptured in menus (#382), motion that no window takes would otherwise reach the
+	// user command and turn the player's view behind the menu
+	if ( event->IsMouseEvent() && TestGUIFlag( GUI_SHOWCURSOR ) && TestGUIFlag( GUI_FULLSCREEN ) && !TestGUIFlag( GUI_USE_MOUSE_PITCH ) ) {
+		retVal = true;
+	}
+
 	if( TestGUIFlag( GUI_TOOLTIPS ) && event->IsMouseEvent() ) {
 		lastMouseMoveTime = GetCurrentTime();
 	}
