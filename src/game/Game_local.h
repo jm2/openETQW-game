@@ -982,6 +982,8 @@ public:
 	virtual void			DrawPureWaitScreen();
 	virtual void			DrawSystemUI();
 	virtual void			GuiFrameEvents( bool outOfSequence );
+	// tells the engine whether the GUI that takes the keys has an edit box focused (engine #394)
+	void					UpdateTextInputFocus();
 
 	virtual void			AddChatLine( const wchar_t* text );
 
