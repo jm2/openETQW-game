@@ -1366,6 +1366,11 @@ void idGameLocal::UpdateTextInputFocus() {
 			sdUserInterfaceLocal* ui = GetUserInterface( localPlayer->ActiveGui() );
 			editFocused = ui != NULL && ui->HasFocusedEdit();
 		}
+		// the end-game scoreboard (sdGameRules::HandleGuiEvent)
+		if ( !editFocused && rules != NULL && rules->IsEndGame() ) {
+			sdUserInterfaceLocal* ui = GetUserInterface( localPlayerProperties.GetScoreBoard() );
+			editFocused = ui != NULL && ui->HasFocusedEdit();
+		}
 	}
 
 	sys->IME().Enable( editFocused );
