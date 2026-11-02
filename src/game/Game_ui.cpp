@@ -1326,6 +1326,49 @@ void idGameLocal::GuiFrameEvents( bool outOfSequence ) {
 		sys->Mouse().SetMenuCursor( cursorDrawn );
 	}
 	uiManager->Update( outOfSequence );
+	UpdateTextInputFocus();
+}
+
+/*
+============
+idGameLocal::UpdateTextInputFocus
+
+The platform keeps its text input (and so any input method) on only while an edit box
+has the focus, so that in play the keys reach the binds (engine #394). Retail told its
+IME the same from sdUIEditW's focus changes, and only for languages with an IME. This
+asks every frame instead, so a GUI closed with an edit box still focused counts as
+closed. The GUIs asked are those HandleGuiEvent gives the keys to.
+============
+*/
+void idGameLocal::UpdateTextInputFocus() {
+	if ( networkSystem->IsDedicated() ) {
+		return;
+	}
+
+	bool editFocused = false;
+	bool mainMenuActive = false;
+	ON_UIVALID( uiMainMenuHandle, ui ) {
+		if ( ui->IsActive() ) {
+			mainMenuActive = true;
+			editFocused = ui->HasFocusedEdit();
+		}
+	}
+
+	// the main menu takes every key while it is up
+	if ( !mainMenuActive ) {
+		sdHudModule* module = localPlayerProperties.GetActiveHudModule();
+		if ( module != NULL ) {
+			sdUserInterfaceLocal* ui = module->GetGui();
+			editFocused = ui != NULL && ui->HasFocusedEdit();
+		}
+		idPlayer* localPlayer = GetLocalPlayer();
+		if ( !editFocused && localPlayer != NULL ) {
+			sdUserInterfaceLocal* ui = GetUserInterface( localPlayer->ActiveGui() );
+			editFocused = ui != NULL && ui->HasFocusedEdit();
+		}
+	}
+
+	sys->IME().Enable( editFocused );
 }
 
 /*

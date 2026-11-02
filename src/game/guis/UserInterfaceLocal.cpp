@@ -17,6 +17,9 @@ static char THIS_FILE[] = __FILE__;
 #include "UIWindow.h"
 
 #include "../../sys/sys_local.h"
+#include "../../framework/KeyInput.h"
+#include "UIEdit.h"
+#include "UIEditW.h"
 
 // set when any GUI draws, and when a fullscreen menu draws its cursor; read once a frame (#382)
 static bool guiDrawn = false;
@@ -1505,6 +1508,18 @@ void sdUserInterfaceLocal::SetFocus( sdUIWindow* focus ) {
 	if( focusedWindow ) {
 		focusedWindow->OnGainFocus();
 	}	
+}
+
+/*
+============
+sdUserInterfaceLocal::HasFocusedEdit
+============
+*/
+bool sdUserInterfaceLocal::HasFocusedEdit() const {
+	if ( !IsActive() || focusedWindow == NULL ) {
+		return false;
+	}
+	return focusedWindow->Cast< sdUIEdit >() != NULL || focusedWindow->Cast< sdUIEditW >() != NULL;
 }
 
 /*

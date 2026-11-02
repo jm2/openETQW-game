@@ -463,6 +463,8 @@ public:
 
 	void								SetFocus( sdUIWindow* focus );
 	bool								IsFocused( const sdUIObject* focus ) const { return focusedWindow == focus; }
+	// an edit box (sdUIEdit or sdUIEditW) has the focus, so typed text is wanted (engine #394)
+	bool								HasFocusedEdit() const;
 
 	void								SetEntity( idEntity* entity )		{ this->entity = entity; }
 	idEntity*							GetEntity() const					{ return entity; }
