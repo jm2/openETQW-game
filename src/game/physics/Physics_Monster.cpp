@@ -438,7 +438,16 @@ idPhysics_Monster::idPhysics_Monster( void ) {
 
 	memset( &current, 0, sizeof( current ) );
 	saved = current;
-	
+
+	// OpenETQW (#427): no ground yet. CheckGround fills groundTrace's contact only
+	// when there are ground contacts, but GetGroundNormal() is read before the first
+	// one (sdWalkerControl::UpdateSlidingFoot, a walker dropped in at map start): it
+	// returned uninitialised memory, so whether the walker's foot effects played, and
+	// the game's event count, depended on the heap.
+	memset( &groundTrace, 0, sizeof( groundTrace ) );
+	groundTrace.fraction = 1.0f;
+	groundTrace.c.entityNum = ENTITYNUM_NONE;
+
 	delta.Zero();
 	maxStepHeight = 18.0f;
 	useVelocityMove = false;
