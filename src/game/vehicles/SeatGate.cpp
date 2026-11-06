@@ -63,9 +63,10 @@ static const seatRecipe_t seatRecipes[] = {
 
 // what the 'default' item of g_unlock_vehicleSeats stands for; ends with NULL
 // D10 (on by default): every transport seat whose view class has a built-in recipe, by
-// class, so a seat drawn on every frame is exactly one sdPresentation can draw. The
-// jetpack (icarus) stays at the tick rate until it is chosen for the default too; mounted
-// guns and walkers have no recipe. Keep tests/test_seat_gate.py DEFAULT_LIST in step.
+// class. Walkers are transports, so the goliath's seats are included. A listed view whose
+// thirdPerson flag does not match its recipe is still not presented (see seatRecipes). The
+// jetpack (icarus) has a recipe but stays at the tick rate unless listed; mounted guns have
+// no recipe. Keep tests/test_seat_gate.py DEFAULT_LIST in step.
 static const char* const seatDefaultList[] = {
 	"*:*:standard",
 	"*:*:smooth",
@@ -548,8 +549,8 @@ bool sdSeatGate::LeadForClass( const char* vehicleScript, float& lead, char& pre
 sdSeatGate::FindRecipe
 
 The built-in recipes, then (for transports only) the view classes g_seatGateTestRecipe
-names, as test-only recipes. No recipe covers the jetpack, so no list item, a '*'
-included, can allow it.
+names, as test-only recipes. The jetpack has only its built-in recipe (icarus): a test
+recipe never covers it.
 ================
 */
 const seatRecipe_t* sdSeatGate::FindRecipe( seatProxyKind_t kind, const char* viewType ) {
