@@ -26,10 +26,9 @@ extern idCVar g_simHash;
 
 	Tables
 
-	Both are empty in step 13: no seat has a presentation yet, so none can be
-	allowed. A seat's view class gets a recipe when step 14 can present it, and a
-	seat joins the default list when it meets docs/vehicle-responsiveness.md 3.3
-	(D10: on by default).
+	Both were empty in step 13. A seat's view class gets a recipe when step 14 can
+	present it; the default list holds the transport classes with a recipe (D10: on
+	by default; the owner's decision of 2026-11-06).
 
 ===============================================================================
 */
@@ -63,7 +62,17 @@ static const seatRecipe_t seatRecipes[] = {
 };
 
 // what the 'default' item of g_unlock_vehicleSeats stands for; ends with NULL
+// D10 (on by default): every transport seat whose view class has a built-in recipe, by
+// class, so a seat drawn on every frame is exactly one sdPresentation can draw. The
+// jetpack (icarus) stays at the tick rate until it is chosen for the default too; mounted
+// guns and walkers have no recipe. Keep tests/test_seat_gate.py DEFAULT_LIST in step.
 static const char* const seatDefaultList[] = {
+	"*:*:standard",
+	"*:*:smooth",
+	"*:*:smooth_free",
+	"*:*:smooth_locked",
+	"*:*:pivot",
+	"*:*:freepivot",
 	NULL,
 };
 
