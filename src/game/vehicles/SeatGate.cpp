@@ -443,8 +443,11 @@ void sdSeatGate::MakeKey( const sdTransport& transport, const sdVehiclePosition&
 leadList_t
 
 g_unlock_vehicleLead as parsed (M5 step 14b); parsed again whenever the string changes.
-The built-in list is empty: a class gets a lead by default only after its measurement
-and the owner's review (docs/hull-lead.md 4)
+The built-in list is the owner's choice of 2026-11-06 from the measurements in
+docs/hull-lead.md 2.1 and 6: L = 1 for the aircraft and the hover tank, whose one-tick
+guesses are near-exact, and L = 0.5 for the ground classes, which keeps retail's mean
+age and halves the overshoot at collisions. The walker and the platypus were never
+measured and get no lead.
 ================
 */
 struct leadItem_t {
@@ -462,7 +465,15 @@ struct leadList_t {
 static leadList_t leadList;
 
 static const leadItem_t builtInLeads[] = {
-	{ "", 0.0f, 0 },	// none yet
+	{ "anansi", 1.0f, 'H' },
+	{ "bumblebee", 1.0f, 'H' },
+	{ "hornet", 1.0f, 'H' },
+	{ "desecrator", 1.0f, 'S' },
+	{ "badger", 0.5f, 'H' },
+	{ "hog", 0.5f, 'H' },
+	{ "husky", 0.5f, 'H' },
+	{ "trojan", 0.5f, 'H' },
+	{ "titan", 0.5f, 'H' },
 };
 
 // docs/hull-lead.md 2.1: the hybrid (the physics step in the air, the samples on the
