@@ -447,7 +447,9 @@ The built-in list is the owner's choice of 2026-11-06 from the measurements in
 docs/hull-lead.md 2.1 and 6: L = 1 for the aircraft and the hover tank, whose one-tick
 guesses are near-exact, and L = 0.5 for the ground classes, which keeps retail's mean
 age and halves the overshoot at collisions. The walker and the platypus were never
-measured and get no lead.
+measured and get no lead. The titan's
+L comes from the scripted replay only; it is drawn in its first-person gunner seats (its
+driver's first view is third-person, which takes no lead).
 ================
 */
 struct leadItem_t {
@@ -540,7 +542,9 @@ sdSeatGate::LeadForClass
 */
 bool sdSeatGate::LeadForClass( const char* vehicleScript, float& lead, char& predictor ) {
 	const leadList_t& list = ParsedLeadList();
-	for ( int i = 0; i < list.items.Num(); i++ ) {
+	// the last matching item wins, so an item after 'default' overrides the built-in lead
+	// ("default,badger:1" leads the badger by a tick, "default,badger:0" turns it off)
+	for ( int i = list.items.Num() - 1; i >= 0; i-- ) {
 		const leadItem_t& item = list.items[ i ];
 		if ( GlobMatch( item.pattern.c_str(), item.pattern.Length(), vehicleScript, idStr::Length( vehicleScript ) ) ) {
 			lead = item.lead;
